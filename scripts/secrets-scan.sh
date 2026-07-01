@@ -37,11 +37,12 @@ scan "GitHub token"         'gh[pousr]_[0-9A-Za-z]{36,}'
 scan "Google OAuth secret"  'GOCSPX-[0-9A-Za-z_-]{20,}'
 scan "JWT"                  'eyJ[A-Za-z0-9_-]{10,}\.eyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}'
 
-# DB URL with an INLINE password. Disallow '<' so doc placeholders like
-# `://user:<pw>@` don't trip it, and skip markdown docs that legitimately show
-# connection-string formats.
+# DB URL with an INLINE password. Excludes '<' and shell interpolation chars
+# ('$', '{', '}') so placeholders/templates like `://user:<pw>@` or
+# `://${USER}:${PW}@` don't trip it, and skips markdown docs which legitimately
+# show connection-string formats.
 scan "DB URL with password" \
-  '(postgres|postgresql|mysql|mongodb|redis|amqp)://[^[:space:]"'\''"'\''/]+:[^[:space:]"'\''"'\''@/<]+@' \
+  '(postgres|postgresql|mysql|mongodb|redis|amqp)://[^[:space:]"'\''"'\''/${}]+:[^[:space:]"'\''"'\''@/<${}]+@' \
   ':!*.md'
 
 # A real .env (not .env.example) must never be tracked.

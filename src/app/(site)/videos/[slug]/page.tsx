@@ -131,7 +131,6 @@ export default async function VideoPage({
         <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-zinc-500">
           <span>{video.viewCount.toLocaleString()} views</span>
           {video.durationSec ? <span>· {formatDuration(video.durationSec)}</span> : null}
-          {video.sourceSite ? <span>· {video.sourceSite}</span> : null}
         </div>
 
         {video.pornstars.length > 0 && (

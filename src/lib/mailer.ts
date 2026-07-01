@@ -6,7 +6,7 @@ const port = parseInt(process.env.SMTP_PORT || "465", 10);
 const user = process.env.SMTP_USER || "";
 const pass = process.env.SMTP_PASS || "";
 const FROM = process.env.MAIL_FROM || `Pisster <${user}>`;
-const ADMIN_NOTIFY = process.env.ADMIN_NOTIFY_EMAIL || "adiluzz@gmail.com";
+const ADMIN_NOTIFY = process.env.ADMIN_NOTIFY_EMAIL || "";
 
 let transporter: nodemailer.Transporter | null = null;
 
@@ -87,6 +87,10 @@ export async function sendAdminNewApplication(opts: {
   siteDomain: string;
   reviewUrl: string;
 }) {
+  if (!ADMIN_NOTIFY) {
+    logger.warn("ADMIN_NOTIFY_EMAIL not set; skipping admin application notice");
+    return false;
+  }
   return sendMail({
     to: ADMIN_NOTIFY,
     subject: `New creator application from ${opts.displayName} on ${opts.siteDomain}`,

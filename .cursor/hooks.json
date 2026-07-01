@@ -1,0 +1,13 @@
+{
+  "version": 1,
+  "hooks": {
+    "beforeShellExecution": [
+      {
+        "command": ".cursor/hooks/scan-secrets-before-push.sh",
+        "matcher": "git\\s+push",
+        "failClosed": true,
+        "timeout": 60
+      }
+    ]
+  }
+}

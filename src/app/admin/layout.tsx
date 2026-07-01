@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { requireAdmin } from "@/lib/session";
+import SignOutButton from "@/components/auth/SignOutButton";
 
 export const dynamic = "force-dynamic";
 
@@ -28,9 +29,7 @@ export default async function AdminLayout({ children }: { children: React.ReactN
                 {n.label}
               </Link>
             ))}
-            <Link href="/api/auth/signout" className="mt-4 block rounded-lg px-3 py-2 text-sm text-zinc-500 hover:text-white">
-              Sign out
-            </Link>
+            <SignOutButton className="mt-4 block w-full rounded-lg px-3 py-2 text-left text-sm text-zinc-500 hover:text-white" />
           </nav>
         </aside>
         <main className="flex-1 p-8">{children}</main>

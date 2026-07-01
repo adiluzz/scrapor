@@ -1,5 +1,6 @@
 import Link from "next/link";
 import SearchBar from "@/components/site/SearchBar";
+import SignOutButton from "@/components/auth/SignOutButton";
 import { getCurrentUser } from "@/lib/session";
 
 export default async function Header({ initialQuery = "" }: { initialQuery?: string }) {
@@ -25,7 +26,7 @@ export default async function Header({ initialQuery = "" }: { initialQuery?: str
           {user ? (
             <>
               <Link href="/dashboard" className="text-zinc-300 hover:text-white">Dashboard</Link>
-              <Link href="/api/auth/signout" className="text-zinc-500 hover:text-white">Sign out</Link>
+              <SignOutButton className="text-zinc-500 hover:text-white" />
             </>
           ) : (
             <>

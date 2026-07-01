@@ -11,7 +11,7 @@ const assistantTool = {
     tool({
       description:
         "Run inline Python code by writing it to a temporary script and executing it. Use this when the user pastes code or asks you to run a Python snippet without an existing file path.",
-      parameters: z.object({
+      inputSchema: z.object({
         code: z.string().min(1).describe("Python code to execute."),
         args: z.array(z.string()).optional().describe("Optional command-line arguments passed to the script."),
         pythonExecutable: z.string().optional().describe("Python executable. Defaults to python3."),

@@ -60,7 +60,7 @@ const assistantTool = {
     tool({
       description:
         "Download a video page URL with yt-dlp and save directly to app DB/downloads so it appears on homepage.",
-      parameters: z.object({
+      inputSchema: z.object({
         videoUrl: z.string(),
         title: z.string().optional(),
         timeoutSeconds: z.number().min(30).max(7200).optional(),

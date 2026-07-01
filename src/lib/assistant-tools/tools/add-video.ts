@@ -9,7 +9,7 @@ const assistantTool = {
   createTool: () =>
     tool({
       description: "Save video to app database and downloads/ so it appears on the homepage. Call after trimVideo.",
-      parameters: z.object({
+      inputSchema: z.object({
         url: z.string(),
         title: z.string(),
         recordingPath: z.string(),

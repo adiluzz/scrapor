@@ -11,7 +11,7 @@ const assistantTool = {
     tool({
       description:
         "Use Crawl4AI to load one URL and extract page content quickly as clean markdown plus optional metadata and links. Best for reading articles, listings, profiles, product pages, search-result pages, and scraping data from a page without manual browser clicks. Provide a clear extractionGoal so the returned content can be focused on the user's requested data; use cssSelector only when a known section/listing container should be isolated.",
-      parameters: z.object({
+      inputSchema: z.object({
         url: z.string().url().describe("The absolute http(s) URL to crawl and extract."),
         extractionGoal: z
           .string()

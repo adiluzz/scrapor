@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
-import { useChat } from "ai/react";
+import { useAssistantChat } from "@/lib/use-assistant-chat";
 
 type ChatAttachment = { url?: string; contentType?: string; name?: string };
 type ChatPart = { type?: string; text?: string; url?: string; mediaType?: string; image?: string };
@@ -206,7 +206,7 @@ export default function AssistantChatPage() {
     error,
     setMessages,
     append,
-  } = useChat({
+  } = useAssistantChat({
     id: chatId,
     initialMessages: initialMessages.map((m) => ({
       id: m.id,
@@ -220,7 +220,6 @@ export default function AssistantChatPage() {
     body: { activeContextId },
     onResponse: () => setLiveLogs((p) => [`Request accepted (${new Date().toLocaleTimeString()})`, ...p].slice(0, 20)),
     onFinish: () => setLiveLogs((p) => [`Response finished (${new Date().toLocaleTimeString()})`, ...p].slice(0, 20)),
-    onToolCall: ({ toolCall }) => setLiveLogs((p) => [`Tool call: ${(toolCall as { toolName?: string })?.toolName || "tool"}`, ...p].slice(0, 20)),
     onError: (err) => {
       console.error("[assistant]", err);
       setLiveLogs((p) => [`Error: ${err.message}`, ...p].slice(0, 20));

@@ -8,7 +8,7 @@ const assistantTool = {
   createTool: () =>
     tool({
       description: "Read prior scraping lessons/notes. Call at the start of every session.",
-      parameters: jsonSchema({ type: "object", properties: {} }),
+      inputSchema: jsonSchema({ type: "object", properties: {} }),
       execute: async () => {
         try {
           const { readFile } = await import("fs/promises");

@@ -11,7 +11,7 @@ const assistantTool = {
     tool({
       description:
         "Completely replace the scraping lessons file with new content. Use to remove bad/outdated lessons and rewrite with only accurate ones. IMPORTANT: call this tool IMMEDIATELY — do NOT print the content as text first. Just call the tool directly with the new content.",
-      parameters: z.object({
+      inputSchema: z.object({
         content: z.string().min(1).describe("The full new content for the lessons file in markdown."),
       }),
       execute: async ({ content }) => {

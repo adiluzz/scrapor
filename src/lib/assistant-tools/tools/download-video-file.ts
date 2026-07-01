@@ -13,7 +13,7 @@ const assistantTool = {
         "Download a video by URL using yt-dlp and save it to library/assistant-recordings/. " +
         "Returns the local file path and yt-dlp metadata (title, duration, thumbnail, description, tags). " +
         "This is step 1 of 2: call saveVideoRecord next to register the video in the app with full metadata.",
-      parameters: z.object({
+      inputSchema: z.object({
         videoUrl: z
           .string()
           .describe("The video page URL (not a direct stream URL). yt-dlp resolves the stream internally."),

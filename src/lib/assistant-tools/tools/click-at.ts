@@ -9,7 +9,7 @@ const assistantTool = {
   createTool: () =>
     tool({
       description: "Click at x,y pixel coordinates",
-      parameters: z.object({ x: z.number(), y: z.number() }),
+      inputSchema: z.object({ x: z.number(), y: z.number() }),
       execute: async ({ x, y }) => browserClickAt(x, y),
     }),
 } satisfies AssistantToolModule;

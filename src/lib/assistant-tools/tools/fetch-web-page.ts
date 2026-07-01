@@ -9,7 +9,7 @@ const assistantTool = {
   createTool: () =>
     tool({
       description: "Fetch a web page and return clean text content.",
-      parameters: z.object({
+      inputSchema: z.object({
         url: z.string(),
         maxChars: z.number().min(500).max(50000).optional(),
       }),

@@ -9,7 +9,7 @@ const assistantTool = {
   createTool: () =>
     tool({
       description: "Run JavaScript in the page. Use 'return' to return a value.",
-      parameters: z.object({ script: z.string() }),
+      inputSchema: z.object({ script: z.string() }),
       execute: async ({ script }) => browserEvaluateJS(script),
     }),
 } satisfies AssistantToolModule;

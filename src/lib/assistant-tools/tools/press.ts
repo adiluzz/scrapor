@@ -9,7 +9,7 @@ const assistantTool = {
   createTool: () =>
     tool({
       description: "Press keyboard key (e.g. Space, f, Escape, Enter)",
-      parameters: z.object({ key: z.string() }),
+      inputSchema: z.object({ key: z.string() }),
       execute: async ({ key }) => browserPress(key),
     }),
 } satisfies AssistantToolModule;

@@ -9,7 +9,7 @@ const assistantTool = {
   createTool: () =>
     tool({
       description: "Click element by CSS selector",
-      parameters: z.object({ selector: z.string() }),
+      inputSchema: z.object({ selector: z.string() }),
       execute: async ({ selector }) => browserClick(selector),
     }),
 } satisfies AssistantToolModule;

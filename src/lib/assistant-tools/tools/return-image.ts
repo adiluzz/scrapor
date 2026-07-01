@@ -10,7 +10,7 @@ const assistantTool = {
     tool({
       description:
         "Return an image to the user by path. Path must be inside library/ and point to png/jpg/jpeg/webp/gif.",
-      parameters: z.object({
+      inputSchema: z.object({
         path: z.string(),
         caption: z.string().optional(),
       }),

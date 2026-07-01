@@ -106,7 +106,7 @@ const assistantTool = {
         "Creates a full database record with all metadata, moves the file to downloads/{videoId}/video.mp4, " +
         "downloads the thumbnail image to downloads/{videoId}/thumbnail.jpg, " +
         "and generates a thumbnail preview clip (thumbnail.mp4). This is step 2 of 2 after downloadVideoFile.",
-      parameters: z.object({
+      inputSchema: z.object({
         localFilePath: z
           .string()
           .describe("Absolute path to the downloaded video file (returned by downloadVideoFile)."),

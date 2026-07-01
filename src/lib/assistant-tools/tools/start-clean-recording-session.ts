@@ -9,7 +9,7 @@ const assistantTool = {
   createTool: () =>
     tool({
       description: "Start browser recording on the video page URL. Call before playing the video.",
-      parameters: z.object({ url: z.string() }),
+      inputSchema: z.object({ url: z.string() }),
       execute: async ({ url }) => browserStartCleanRecordingSession(url),
     }),
 } satisfies AssistantToolModule;

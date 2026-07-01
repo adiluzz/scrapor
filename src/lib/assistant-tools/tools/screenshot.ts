@@ -14,7 +14,7 @@ const assistantTool = {
   createTool: ({ runtimeModelHasVision }) =>
     tool({
       description: "Take screenshot and return saved image path, page text, and clickable element coordinates.",
-      parameters: jsonSchema({ type: "object", properties: {} }),
+      inputSchema: jsonSchema({ type: "object", properties: {} }),
       execute: async () => {
         const url = await browserGetUrl();
         const elementMap = await browserEvaluateJS(`

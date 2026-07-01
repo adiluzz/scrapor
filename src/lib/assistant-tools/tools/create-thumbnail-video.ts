@@ -55,7 +55,7 @@ const assistantTool = {
       description:
         "Create a thumbnail preview video for a video already saved in the app. " +
         "Selects the first 5 s of every 60 s block and saves to downloads/{videoId}/thumbnail.mp4.",
-      parameters: z.object({
+      inputSchema: z.object({
         videoId: z.string().describe("The video's DB id (from the watch page URL)."),
       }),
       execute: async ({ videoId }) => {

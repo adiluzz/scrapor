@@ -10,7 +10,7 @@ const assistantTool = {
     tool({
       description:
         "Read the full content of a named skill. Call this whenever the active skills list mentions a skill you need to follow — read it first before taking any action related to that skill.",
-      parameters: z.object({
+      inputSchema: z.object({
         key: z
           .string()
           .describe(

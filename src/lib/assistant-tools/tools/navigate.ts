@@ -9,7 +9,7 @@ const assistantTool = {
   createTool: () =>
     tool({
       description: "Navigate browser to a URL",
-      parameters: z.object({ url: z.string() }),
+      inputSchema: z.object({ url: z.string() }),
       execute: async ({ url }) => browserNavigate(url),
     }),
 } satisfies AssistantToolModule;

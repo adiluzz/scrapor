@@ -9,7 +9,7 @@ const assistantTool = {
   createTool: () =>
     tool({
       description: "Run a Python script file with optional args and return stdout/stderr.",
-      parameters: z.object({
+      inputSchema: z.object({
         scriptPath: z.string(),
         args: z.array(z.string()).optional(),
         pythonExecutable: z.string().optional(),

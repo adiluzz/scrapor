@@ -9,7 +9,7 @@ const assistantTool = {
   createTool: () =>
     tool({
       description: "Remove ad seconds from beginning of recording. Returns trimmed file path.",
-      parameters: z.object({
+      inputSchema: z.object({
         filePath: z.string(),
         startSeconds: z.number(),
       }),

@@ -1,0 +1,19 @@
+---
+description: Node.js version this project standardizes on for all builds, scripts, and terminals
+alwaysApply: true
+---
+
+# Node.js Version
+
+This project uses **Node.js 24** (the version selected by `nvm use node`).
+
+- Before running any `npm`, `next`, or `node` command, ensure the active Node is 24:
+
+```bash
+nvm use   # reads .nvmrc (24); or: nvm use node
+```
+
+- The version is pinned in `.nvmrc` (`24`) and enforced via `engines.node >= 24`
+  in `package.json`. The Docker images use `node:24-slim`.
+- Do not build or run scripts with older Node (Next.js 16 requires >= 20.9, and
+  we standardize on 24 for parity with production).

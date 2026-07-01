@@ -9,7 +9,7 @@ const assistantTool = {
   createTool: () =>
     tool({
       description: "Get video file duration and resolution using ffprobe.",
-      parameters: z.object({ filePath: z.string() }),
+      inputSchema: z.object({ filePath: z.string() }),
       execute: async ({ filePath }) => {
         try {
           const { stdout } = await execAsync(

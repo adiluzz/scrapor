@@ -9,7 +9,7 @@ const assistantTool = {
   createTool: () =>
     tool({
       description: "Search the web quickly and return top results (title + URL).",
-      parameters: z.object({
+      inputSchema: z.object({
         query: z.string(),
         maxResults: z.number().min(1).max(10).optional(),
       }),

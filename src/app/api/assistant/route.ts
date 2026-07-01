@@ -3,7 +3,7 @@ import { createFilteredAssistantTools } from "@/lib/assistant-tools/registry";
 import { buildContextSelections } from "@/lib/context-store";
 import { isLikelyVisionModel } from "@/lib/model-capabilities";
 import { createOpenAI } from "@ai-sdk/openai";
-import { InvalidToolArgumentsError, NoSuchToolError, streamText } from "ai";
+import { NoSuchToolError, stepCountIs, streamText } from "ai";
 import http from "node:http";
 import https from "node:https";
 
@@ -116,18 +116,18 @@ CRITICAL RULES — never break these:
  * we return repaired args; otherwise we return null so the SDK surfaces the
  * original validation error to the model as a readable tool result.
  */
-function repairToolCallArgs(
-  toolCall: { toolName: string; toolCallId: string; args: string },
-  parameterSchema: (tc: { toolName: string }) => Record<string, unknown>
-): string | null {
+async function repairToolCallArgs(
+  toolCall: { toolName: string; toolCallId: string; input: string },
+  inputSchema: (tc: { toolName: string }) => PromiseLike<Record<string, unknown>>
+): Promise<string | null> {
   let provided: Record<string, unknown>;
   try {
-    provided = JSON.parse(toolCall.args);
+    provided = JSON.parse(toolCall.input);
   } catch {
     return null;
   }
 
-  const schema = parameterSchema(toolCall) as {
+  const schema = (await inputSchema(toolCall)) as {
     properties?: Record<string, unknown>;
     required?: string[];
   };
@@ -157,7 +157,7 @@ function repairToolCallArgs(
 
   const repairedStr = JSON.stringify(repaired);
   // Only return if we actually changed something
-  return repairedStr !== toolCall.args ? repairedStr : null;
+  return repairedStr !== toolCall.input ? repairedStr : null;
 }
 
 function toCoreMessages(
@@ -175,7 +175,7 @@ function toCoreMessages(
       if (m.role === "user") {
         const parts = m.parts || [];
         const contentParts: Array<
-          { type: "text"; text: string } | { type: "image"; image: string; mimeType?: string }
+          { type: "text"; text: string } | { type: "image"; image: string; mediaType?: string }
         > = [];
         const attachments = m.experimental_attachments || [];
 
@@ -185,11 +185,11 @@ function toCoreMessages(
         for (const p of parts) {
           if (p.type === "text" && p.text) contentParts.push({ type: "text", text: p.text });
           else if (includeImages && p.type === "file" && p.url && p.mediaType?.startsWith("image/"))
-            contentParts.push({ type: "image", image: p.url, mimeType: p.mediaType });
+            contentParts.push({ type: "image", image: p.url, mediaType: p.mediaType });
         }
         for (const a of attachments) {
           if (includeImages && a?.url && a?.contentType?.startsWith("image/")) {
-            contentParts.push({ type: "image", image: a.url, mimeType: a.contentType });
+            contentParts.push({ type: "image", image: a.url, mediaType: a.contentType });
           }
         }
         const content =
@@ -285,54 +285,48 @@ export async function POST(req: Request) {
 
     const result = streamText({
       model: ollama(modelId) as any,
-      maxTokens: settings.numPredict,
+      maxOutputTokens: settings.numPredict,
       temperature: settings.temperature,
       system: systemPrompt,
       messages: toCoreMessages(typedMessages, { includeImages: modelHasVision && hasImages }),
-      maxSteps: settings.maxSteps,
-      ...(({
-        onError: (event: { error: unknown }) => {
-          console.error("[assistant] streamText error:", event.error);
-        },
-        experimental_repairToolCall: async ({
-          toolCall,
-          tools: _availableTools,
-          parameterSchema,
-          error,
-        }: {
-          toolCall: { toolName: string; toolCallId: string; args: string };
-          tools: Record<string, unknown>;
-          parameterSchema: (tc: { toolName: string }) => Record<string, unknown>;
-          error: unknown;
-        }) => {
-          console.warn("[assistant] tool call repair triggered", {
-            tool: toolCall.toolName,
-            args: toolCall.args,
-            error: error instanceof Error ? error.message : String(error),
-          });
+      stopWhen: stepCountIs(settings.maxSteps),
+      onError: (event: { error: unknown }) => {
+        console.error("[assistant] streamText error:", event.error);
+      },
+      // Best-effort repair of tool calls whose arguments fail schema validation
+      // (common with local models that mislabel fields).
+      experimental_repairToolCall: (async ({
+        toolCall,
+        inputSchema,
+        error,
+      }: {
+        toolCall: { toolName: string; toolCallId: string; input: string };
+        inputSchema: (tc: { toolName: string }) => PromiseLike<Record<string, unknown>>;
+        error: unknown;
+      }) => {
+        console.warn("[assistant] tool call repair triggered", {
+          tool: toolCall.toolName,
+          input: toolCall.input,
+          error: error instanceof Error ? error.message : String(error),
+        });
 
-          if (NoSuchToolError.isInstance(error)) {
-            // Returning null lets the SDK surface the error to the LLM as a tool result,
-            // so the LLM can recover by using a correct tool name.
-            console.warn("[assistant] NoSuchToolError — tool not in active context:", toolCall.toolName);
-            return null;
-          }
-
-          if (InvalidToolArgumentsError.isInstance(error)) {
-            const repairedArgs = repairToolCallArgs(toolCall, parameterSchema);
-            if (repairedArgs !== null) {
-              console.info("[assistant] repaired tool args via field remapping", {
-                tool: toolCall.toolName,
-                original: toolCall.args,
-                repaired: repairedArgs,
-              });
-              return { ...toolCall, args: repairedArgs };
-            }
-          }
-
+        // Unknown tool name: let the SDK surface it so the model can self-correct.
+        if (NoSuchToolError.isInstance(error)) {
+          console.warn("[assistant] NoSuchToolError — tool not in active context:", toolCall.toolName);
           return null;
-        },
-      }) as any),
+        }
+
+        const repaired = await repairToolCallArgs(toolCall, inputSchema);
+        if (repaired !== null) {
+          console.info("[assistant] repaired tool args via field remapping", {
+            tool: toolCall.toolName,
+            original: toolCall.input,
+            repaired,
+          });
+          return { ...toolCall, input: repaired };
+        }
+        return null;
+      }) as any,
       ...(hasTools
         ? {
             toolChoice: "auto",
@@ -341,13 +335,7 @@ export async function POST(req: Request) {
         : {}),
     });
 
-    return result.toDataStreamResponse({
-      getErrorMessage: (error) => {
-        const msg = error instanceof Error ? error.message : String(error);
-        console.error("[assistant] stream error forwarded to client:", msg);
-        return msg || "Unknown streaming error";
-      },
-    });
+    return result.toTextStreamResponse();
   } catch (e) {
     console.error("[assistant] Error:", e);
     return new Response(

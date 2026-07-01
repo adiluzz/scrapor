@@ -9,7 +9,7 @@ const assistantTool = {
   createTool: () =>
     tool({
       description: "Install Python packages with pip in the local environment.",
-      parameters: z.object({
+      inputSchema: z.object({
         packages: z.array(z.string().min(1)).min(1),
         upgrade: z.boolean().optional(),
         pythonExecutable: z.string().optional(),

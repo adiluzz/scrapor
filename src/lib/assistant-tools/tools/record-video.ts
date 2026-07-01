@@ -9,7 +9,7 @@ const assistantTool = {
   createTool: () =>
     tool({
       description: "Stop recording and save WebM. Call after wait(fullDuration). Returns saved file path.",
-      parameters: z.object({ url: z.string().optional() }),
+      inputSchema: z.object({ url: z.string().optional() }),
       execute: async ({ url }) => browserRecordVideo(url),
     }),
 } satisfies AssistantToolModule;

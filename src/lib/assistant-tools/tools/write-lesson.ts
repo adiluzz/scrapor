@@ -10,7 +10,7 @@ const assistantTool = {
     tool({
       description:
         "Append a short lesson to the lessons file. IMPORTANT: call this tool IMMEDIATELY — do NOT compose or print the lesson as text first. Write 3-10 bullet points maximum per call. If you have multiple lessons, call this tool multiple times.",
-      parameters: z.object({ lesson: z.string().describe("Short lesson content, 3-10 bullet points max.") }),
+      inputSchema: z.object({ lesson: z.string().describe("Short lesson content, 3-10 bullet points max.") }),
       execute: async ({ lesson }) => {
         try {
           const { appendFile } = await import("fs/promises");

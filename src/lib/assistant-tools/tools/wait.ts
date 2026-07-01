@@ -9,7 +9,7 @@ const assistantTool = {
   createTool: () =>
     tool({
       description: "Wait N seconds. Use full video duration before recordVideo.",
-      parameters: z.object({ seconds: z.number().min(0).max(7200) }),
+      inputSchema: z.object({ seconds: z.number().min(0).max(7200) }),
       execute: async ({ seconds }) => browserWait(seconds),
     }),
 } satisfies AssistantToolModule;

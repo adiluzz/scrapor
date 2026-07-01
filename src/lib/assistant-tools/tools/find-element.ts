@@ -9,7 +9,7 @@ const assistantTool = {
   createTool: () =>
     tool({
       description: "Find a visible element by its text content and return its center (x,y) for clickAt(). Prefers buttons and links within the visible viewport.",
-      parameters: z.object({ text: z.string() }),
+      inputSchema: z.object({ text: z.string() }),
       execute: async ({ text }) => {
         const result = await browserEvaluateJS(`
           const needle = ${JSON.stringify(text)}.toLowerCase().trim();

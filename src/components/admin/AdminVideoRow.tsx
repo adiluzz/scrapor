@@ -43,7 +43,7 @@ export default function AdminVideoRow({
           <input value={title} onChange={(e) => setTitle(e.target.value)}
             className="w-full rounded border border-zinc-700 bg-zinc-950 px-2 py-1 text-white" />
         ) : (
-          <a href={`/videos/${video.slug}`} className="text-zinc-200 hover:text-white">{video.title}</a>
+          <a href={`/admin/videos/${video.slug}`} className="text-zinc-200 hover:text-white">{video.title}</a>
         )}
       </td>
       <td className="px-4 py-3 text-zinc-500">{video.sourceSite || "—"}</td>

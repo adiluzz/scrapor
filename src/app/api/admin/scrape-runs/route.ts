@@ -10,6 +10,8 @@ const schema = z.object({
   query: z.string().min(1).max(200),
   sources: z.array(z.string()).min(1),
   minDurationSec: z.number().int().min(0).max(36000).optional(),
+  // Videos to download per source this run. null/omitted = download ALL results.
+  maxPerSite: z.number().int().min(1).max(10000).nullable().optional(),
 });
 
 export async function GET() {
@@ -41,6 +43,7 @@ export async function POST(request: Request) {
       query: parsed.data.query,
       selectedSites: JSON.stringify(sources),
       minDurationSec: parsed.data.minDurationSec ?? 600,
+      maxPerSite: parsed.data.maxPerSite ?? null,
       createdById: g.id,
       status: "QUEUED",
       siteResults: {

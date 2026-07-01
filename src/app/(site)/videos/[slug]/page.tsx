@@ -3,7 +3,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { prisma } from "@/lib/db";
 import { getCurrentSite } from "@/lib/site";
-import { thumbUrl, storyboardUrls } from "@/lib/media";
+import { thumbUrl, loadStoryboardData } from "@/lib/media";
 import { formatDuration } from "@/lib/videos";
 import { getCurrentUser } from "@/lib/session";
 import { listVideos } from "@/lib/queries";
@@ -74,7 +74,7 @@ export default async function VideoPage({
 
   const [poster, storyboard] = await Promise.all([
     thumbUrl(video),
-    storyboardUrls(video),
+    loadStoryboardData(video),
   ]);
 
   let heatmap: number[] = [];

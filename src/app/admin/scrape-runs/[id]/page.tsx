@@ -2,6 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { prisma } from "@/lib/db";
 import { requireAdmin } from "@/lib/session";
+import RunActions from "@/components/admin/RunActions";
 
 export const dynamic = "force-dynamic";
 
@@ -10,6 +11,7 @@ const statusColor: Record<string, string> = {
   RUNNING: "text-yellow-400",
   DONE: "text-emerald-400",
   ERROR: "text-red-400",
+  STOPPED: "text-orange-400",
 };
 
 export default async function RunDetailPage({ params }: { params: Promise<{ id: string }> }) {
@@ -36,6 +38,12 @@ export default async function RunDetailPage({ params }: { params: Promise<{ id: 
           <span className="text-zinc-400">{run.skipped} skipped</span>
           <span className="text-red-400">{run.failed} failed</span>
           <span className="text-zinc-500">min {Math.round(run.minDurationSec / 60)} min</span>
+          <span className="text-zinc-500">
+            {run.maxPerSite ? `${run.maxPerSite}/site` : "all/site"}
+          </span>
+        </div>
+        <div className="mt-4">
+          <RunActions runId={run.id} status={run.status} />
         </div>
       </div>
 

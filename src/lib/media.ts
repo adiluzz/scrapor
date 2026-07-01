@@ -1,6 +1,7 @@
 import { headers } from "next/headers";
-import { isS3Configured } from "@/lib/storage";
+import { isS3Configured, presignGet, s3Keys } from "@/lib/storage";
 import { mintAssetUrl } from "@/lib/cdn";
+import { parseStoryboardVtt, type StoryboardCue } from "@/lib/storyboard";
 
 /** Best-effort client IP from proxy headers (for IP-bound signed URLs). */
 export async function getClientIp(): Promise<string> {
@@ -49,4 +50,27 @@ export async function storyboardUrls(
     };
   }
   return null;
+}
+
+/**
+ * Storyboard scrubber data for the video player: signed sprite URL plus VTT cues
+ * parsed on the server (avoids a cross-origin fetch to cdn.* from the browser).
+ */
+export async function loadStoryboardData(
+  video: VideoMediaFields & { siteId: string }
+): Promise<{ sprite: string; cues: StoryboardCue[] } | null> {
+  if (!isS3Configured() || !video.s3StoryboardKey || !video.s3StoryboardVttKey) {
+    return null;
+  }
+  const ip = await getClientIp();
+  const sprite = mintAssetUrl({ videoId: video.id, file: "storyboard.jpg", clientIp: ip });
+  try {
+    const vttUrl = await presignGet(s3Keys.storyboardVtt(video.siteId, video.id), 120);
+    const res = await fetch(vttUrl, { cache: "no-store" });
+    if (!res.ok) return { sprite, cues: [] };
+    const cues = parseStoryboardVtt(await res.text());
+    return { sprite, cues };
+  } catch {
+    return { sprite, cues: [] };
+  }
 }

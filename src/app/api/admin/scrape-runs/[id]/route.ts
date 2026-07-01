@@ -1,6 +1,9 @@
 import { NextResponse } from "next/server";
+import { z } from "zod";
 import { prisma } from "@/lib/db";
 import { guardAdmin } from "@/lib/admin-guard";
+import { redis, SCRAPE_QUEUE_KEY } from "@/lib/redis";
+import { logger } from "@/lib/logger";
 
 export async function GET(_request: Request, { params }: { params: Promise<{ id: string }> }) {
   const g = await guardAdmin();
@@ -16,4 +19,48 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
   });
   if (!run) return NextResponse.json({ error: "Not found" }, { status: 404 });
   return NextResponse.json({ run });
+}
+
+const actionSchema = z.object({ action: z.enum(["stop", "continue"]) });
+
+export async function POST(request: Request, { params }: { params: Promise<{ id: string }> }) {
+  const g = await guardAdmin();
+  if (g instanceof NextResponse) return g;
+  const { id } = await params;
+
+  const parsed = actionSchema.safeParse(await request.json().catch(() => null));
+  if (!parsed.success) return NextResponse.json({ error: "Invalid action" }, { status: 400 });
+
+  const run = await prisma.scrapeRun.findFirst({ where: { id, siteId: g.siteId } });
+  if (!run) return NextResponse.json({ error: "Not found" }, { status: 404 });
+
+  if (parsed.data.action === "stop") {
+    // Only in-flight runs can be stopped. The worker polls this status and bails
+    // out of its loop; STOPPED runs are never auto-resumed on restart.
+    if (run.status !== "RUNNING" && run.status !== "QUEUED") {
+      return NextResponse.json({ error: `Cannot stop a ${run.status} run` }, { status: 409 });
+    }
+    await prisma.scrapeRun.update({
+      where: { id },
+      data: { status: "STOPPED", finishedAt: new Date() },
+    });
+    logger.info({ runId: id }, "scrape run stopped by admin");
+    return NextResponse.json({ ok: true, status: "STOPPED" });
+  }
+
+  // action === "continue"
+  if (run.status !== "STOPPED") {
+    return NextResponse.json({ error: `Cannot continue a ${run.status} run` }, { status: 409 });
+  }
+  await prisma.scrapeRun.update({
+    where: { id },
+    data: { status: "QUEUED", finishedAt: null },
+  });
+  try {
+    await redis.rpush(SCRAPE_QUEUE_KEY, id);
+  } catch (err) {
+    logger.error({ err: String(err), runId: id }, "failed to re-enqueue continued run");
+  }
+  logger.info({ runId: id }, "scrape run continued by admin");
+  return NextResponse.json({ ok: true, status: "QUEUED" });
 }

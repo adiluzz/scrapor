@@ -9,6 +9,7 @@ export default function NewRunForm() {
   const [query, setQuery] = useState("");
   const [sources, setSources] = useState<string[]>([...SOURCE_SITES]);
   const [minMinutes, setMinMinutes] = useState(10);
+  const [maxPerSite, setMaxPerSite] = useState("5");
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
@@ -21,10 +22,17 @@ export default function NewRunForm() {
     setError(null);
     setLoading(true);
     try {
+      const trimmed = maxPerSite.trim();
+      const parsedMax = trimmed === "" ? null : Math.max(1, parseInt(trimmed, 10) || 0);
       const res = await fetch("/api/admin/scrape-runs", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ query, sources, minDurationSec: minMinutes * 60 }),
+        body: JSON.stringify({
+          query,
+          sources,
+          minDurationSec: minMinutes * 60,
+          maxPerSite: parsedMax,
+        }),
       });
       const data = await res.json();
       if (!res.ok) { setError(data.error || "Failed"); return; }
@@ -67,6 +75,18 @@ export default function NewRunForm() {
           className="w-20 rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-1.5 text-white focus:border-pink-500 focus:outline-none" />
         minutes
       </label>
+
+      <div>
+        <label className="flex items-center gap-2 text-sm text-zinc-400">
+          Videos per site
+          <input type="number" min={1} placeholder="all" value={maxPerSite}
+            onChange={(e) => setMaxPerSite(e.target.value)}
+            className="w-24 rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-1.5 text-white focus:border-pink-500 focus:outline-none" />
+        </label>
+        <p className="mt-1 text-xs text-zinc-600">
+          Leave empty to download <span className="text-zinc-400">all</span> results for the query (paginates every site).
+        </p>
+      </div>
 
       <button disabled={loading || sources.length === 0} type="submit"
         className="rounded-lg bg-pink-600 px-5 py-2.5 font-medium text-white hover:bg-pink-500 disabled:opacity-50">

@@ -10,6 +10,7 @@ const statusColor: Record<string, string> = {
   RUNNING: "text-yellow-400",
   DONE: "text-emerald-400",
   ERROR: "text-red-400",
+  STOPPED: "text-orange-400",
 };
 
 export default async function ScrapeRunsPage() {

@@ -2,7 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { prisma } from "@/lib/db";
 import { requireAdmin } from "@/lib/session";
-import { thumbUrl, storyboardUrls } from "@/lib/media";
+import { thumbUrl, loadStoryboardData } from "@/lib/media";
 import { formatDuration } from "@/lib/videos";
 import VideoPlayer from "@/components/player/VideoPlayer";
 
@@ -33,7 +33,7 @@ export default async function AdminVideoDetail({
   });
   if (!video) notFound();
 
-  const [poster, storyboard] = await Promise.all([thumbUrl(video), storyboardUrls(video)]);
+  const [poster, storyboard] = await Promise.all([thumbUrl(video), loadStoryboardData(video)]);
 
   let heatmap: number[] = [];
   try {

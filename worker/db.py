@@ -246,7 +246,8 @@ def update_video_media(conn, video_id, *, s3_video_key, s3_thumb_key, s3_preview
 def load_run(conn, run_id: str):
     with conn.cursor() as cur:
         cur.execute(
-            'SELECT id,"siteId",query,"selectedSites","minDurationSec" FROM "ScrapeRun" WHERE id=%s',
+            'SELECT id,"siteId",query,"selectedSites","minDurationSec","maxPerSite",status '
+            'FROM "ScrapeRun" WHERE id=%s',
             (run_id,),
         )
         row = cur.fetchone()
@@ -255,7 +256,27 @@ def load_run(conn, run_id: str):
     return {
         "id": row[0], "siteId": row[1], "query": row[2],
         "selectedSites": row[3], "minDurationSec": row[4],
+        "maxPerSite": row[5], "status": row[6],
     }
+
+
+def get_run_status(conn, run_id: str):
+    """Current run status — polled during processing so an admin STOP takes effect."""
+    with conn.cursor() as cur:
+        cur.execute('SELECT status FROM "ScrapeRun" WHERE id=%s', (run_id,))
+        row = cur.fetchone()
+    return row[0] if row else None
+
+
+def list_active_runs(conn):
+    """Run ids that should be (re)processed on worker startup: interrupted RUNNING
+    runs and any still-QUEUED runs. STOPPED/DONE/ERROR are intentionally excluded."""
+    with conn.cursor() as cur:
+        cur.execute(
+            "SELECT id FROM \"ScrapeRun\" WHERE status IN ('RUNNING','QUEUED') "
+            'ORDER BY "createdAt" ASC'
+        )
+        return [r[0] for r in cur.fetchall()]
 
 
 def set_run_status(conn, run_id, status, started=False, finished=False):

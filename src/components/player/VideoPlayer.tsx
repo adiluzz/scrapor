@@ -6,10 +6,9 @@ import "video.js/dist/video-js.css";
 import type Player from "video.js/dist/types/player";
 import Heatmap from "@/components/player/Heatmap";
 import { fetchVastAd, fireImpressions } from "@/lib/vast";
+import type { StoryboardCue } from "@/lib/storyboard";
 
-type Storyboard = { sprite: string; vtt: string } | null;
-
-type Cue = { start: number; end: number; x: number; y: number; w: number; h: number };
+type Storyboard = { sprite: string; cues: StoryboardCue[] } | null;
 
 const BUCKET_SEC = 5;
 const SKIP_FORWARD_SEC = 7;
@@ -23,34 +22,9 @@ function formatTime(sec: number): string {
   return h > 0 ? `${h}:${m.toString().padStart(2, "0")}:${ss}` : `${m}:${ss}`;
 }
 
-async function parseVtt(url: string): Promise<Cue[]> {
-  try {
-    const res = await fetch(url);
-    const text = await res.text();
-    const cues: Cue[] = [];
-    const blocks = text.split(/\n\n+/);
-    for (const block of blocks) {
-      const lines = block.trim().split("\n");
-      const timeLine = lines.find((l) => l.includes("-->"));
-      const imgLine = lines.find((l) => l.includes("#xywh="));
-      if (!timeLine || !imgLine) continue;
-      const [a, b] = timeLine.split("-->").map((s) => s.trim());
-      const toSec = (t: string) => {
-        const p = t.split(":").map(parseFloat);
-        return p.length === 3 ? p[0] * 3600 + p[1] * 60 + p[2] : p[0] * 60 + p[1];
-      };
-      const m = imgLine.match(/#xywh=(\d+),(\d+),(\d+),(\d+)/);
-      if (!m) continue;
-      cues.push({
-        start: toSec(a),
-        end: toSec(b),
-        x: +m[1], y: +m[2], w: +m[3], h: +m[4],
-      });
-    }
-    return cues;
-  } catch {
-    return [];
-  }
+function findCue(cues: StoryboardCue[], time: number): StoryboardCue | null {
+  if (!cues.length) return null;
+  return cues.find((c) => time >= c.start && time < c.end) ?? cues[cues.length - 1];
 }
 
 export default function VideoPlayer({
@@ -69,6 +43,8 @@ export default function VideoPlayer({
   const videoRef = useRef<HTMLDivElement>(null);
   const rootRef = useRef<HTMLDivElement>(null);
   const playerRef = useRef<Player | null>(null);
+  const cuesRef = useRef<StoryboardCue[]>(storyboard?.cues ?? []);
+  const scrubCleanupRef = useRef<(() => void) | null>(null);
   const [status, setStatus] = useState<"idle" | "ad" | "loading" | "playing" | "error">("idle");
   const [controlsVisible, setControlsVisible] = useState(true);
   const [adSkipIn, setAdSkipIn] = useState<number | null>(null);
@@ -77,14 +53,28 @@ export default function VideoPlayer({
   const watchedBuckets = useRef<Set<number>>(new Set());
   const lastFlush = useRef(0);
   const viewCounted = useRef(false);
-  const cuesRef = useRef<Cue[]>([]);
-  const [preview, setPreview] = useState<{ left: number; cue: Cue; time: number } | null>(null);
+  const [preview, setPreview] = useState<{
+    left: number;
+    bottom: number;
+    cue: StoryboardCue;
+    time: number;
+  } | null>(null);
 
-  // Initialize the Video.js player once.
+  useEffect(() => {
+    cuesRef.current = storyboard?.cues ?? [];
+  }, [storyboard]);
+
+  // Warm the sprite sheet so the first hover shows the frame immediately.
+  useEffect(() => {
+    if (!storyboard?.sprite) return;
+    const img = new Image();
+    img.src = storyboard.sprite;
+  }, [storyboard?.sprite]);
+
   useEffect(() => {
     if (playerRef.current || !videoRef.current) return;
     const el = document.createElement("video-js");
-    el.classList.add("vjs-big-play-centered");
+    el.classList.add("vjs-big-play-centered", "vjs-scrubber-preview");
     videoRef.current.appendChild(el);
     const player = videojs(el, {
       controls: true,
@@ -95,21 +85,62 @@ export default function VideoPlayer({
     });
     playerRef.current = player;
 
-    // Tie overlay visibility to Video.js control-bar activity so the heatmap
-    // fades in/out together with the bottom control bar.
     player.on("useractive", () => setControlsVisible(true));
     player.on("userinactive", () => setControlsVisible(false));
     player.on("pause", () => setControlsVisible(true));
 
-    if (storyboard) parseVtt(storyboard.vtt).then((c) => (cuesRef.current = c));
-
     return () => {
+      scrubCleanupRef.current?.();
       flushWatch(true);
       player.dispose();
       playerRef.current = null;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  function attachScrubberPreview() {
+    scrubCleanupRef.current?.();
+    scrubCleanupRef.current = null;
+
+    const player = playerRef.current;
+    const root = rootRef.current;
+    if (!player || !root || !storyboard?.cues.length) return;
+
+    const bind = () => {
+      const seekBar = player.el().querySelector(".vjs-progress-holder") as HTMLElement | null;
+      if (!seekBar) return;
+
+      const onMove = (e: MouseEvent) => {
+        const seekRect = seekBar.getBoundingClientRect();
+        const rootRect = root.getBoundingClientRect();
+        if (seekRect.width <= 0) return;
+
+        const pct = Math.min(1, Math.max(0, (e.clientX - seekRect.left) / seekRect.width));
+        const dur = player.duration();
+        if (!dur || !Number.isFinite(dur)) return;
+
+        const time = pct * dur;
+        const cue = findCue(cuesRef.current, time);
+        if (!cue) return;
+
+        const half = cue.w / 2;
+        const left = Math.min(rootRect.width - half, Math.max(half, e.clientX - rootRect.left));
+        const bottom = rootRect.bottom - seekRect.top + 12;
+        setPreview({ left, bottom, cue, time });
+      };
+      const onLeave = () => setPreview(null);
+
+      seekBar.addEventListener("mousemove", onMove);
+      seekBar.addEventListener("mouseleave", onLeave);
+      scrubCleanupRef.current = () => {
+        seekBar.removeEventListener("mousemove", onMove);
+        seekBar.removeEventListener("mouseleave", onLeave);
+      };
+    };
+
+    if (player.readyState() >= 1) bind();
+    else player.one("loadedmetadata", bind);
+  }
 
   function flushWatch(useBeacon = false) {
     const buckets = Array.from(watchedBuckets.current);
@@ -151,31 +182,7 @@ export default function VideoPlayer({
       player.one("loadedmetadata", () => player.currentTime(initialPositionSec));
     }
 
-    // Storyboard scrubber preview.
-    if (storyboard) {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const seekBar = (player as any).controlBar?.progressControl?.seekBar?.el?.() as HTMLElement | undefined;
-      if (seekBar) {
-        seekBar.addEventListener("mousemove", (e: MouseEvent) => {
-          const rect = seekBar.getBoundingClientRect();
-          const root = rootRef.current?.getBoundingClientRect();
-          if (!root) return;
-          const pct = Math.min(1, Math.max(0, (e.clientX - rect.left) / rect.width));
-          const dur = player.duration() || 0;
-          const time = pct * dur;
-          const cue =
-            cuesRef.current.find((c) => time >= c.start && time < c.end) ||
-            cuesRef.current[cuesRef.current.length - 1];
-          if (!cue) return;
-          // Position relative to the outer container (the preview is absolutely
-          // positioned there), and clamp so it never overflows the player edges.
-          const half = cue.w / 2;
-          const left = Math.min(root.width - half, Math.max(half, e.clientX - root.left));
-          setPreview({ left, cue, time });
-        });
-        seekBar.addEventListener("mouseleave", () => setPreview(null));
-      }
-    }
+    attachScrubberPreview();
   }
 
   useEffect(() => {
@@ -186,7 +193,6 @@ export default function VideoPlayer({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Arrow-key seeking: → skips forward, ← skips back.
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       const player = playerRef.current;
@@ -274,6 +280,13 @@ export default function VideoPlayer({
 
   return (
     <div ref={rootRef} className="relative">
+      <style jsx global>{`
+        .vjs-scrubber-preview .vjs-mouse-display,
+        .vjs-scrubber-preview .vjs-time-tooltip {
+          display: none !important;
+        }
+      `}</style>
+
       {heatmap.length > 0 && status === "playing" && (
         <div
           className={`pointer-events-none absolute inset-x-0 bottom-10 z-10 px-1 transition-opacity duration-300 ${
@@ -288,7 +301,6 @@ export default function VideoPlayer({
         <div ref={videoRef} />
       </div>
 
-      {/* Ad overlay — always mounted so the ref is stable; shown only in ad mode. */}
       <div className={`absolute inset-0 z-20 flex flex-col bg-black ${status === "ad" ? "" : "hidden"}`}>
         <video ref={adVideoRef} className="h-full w-full" playsInline />
         <div className="absolute bottom-4 right-4">
@@ -310,7 +322,6 @@ export default function VideoPlayer({
         </span>
       </div>
 
-      {/* Play gate overlay (before ad/stream). */}
       {(status === "idle" || status === "loading" || status === "error") && (
         <button
           onClick={start}
@@ -330,22 +341,23 @@ export default function VideoPlayer({
         </button>
       )}
 
-      {/* Storyboard scrubber preview */}
       {preview && storyboard && (
         <div
-          className="pointer-events-none absolute bottom-14 z-30 -translate-x-1/2"
-          style={{ left: preview.left }}
+          className="pointer-events-none absolute z-40 -translate-x-1/2"
+          style={{ left: preview.left, bottom: preview.bottom }}
         >
           <div
-            className="overflow-hidden rounded border border-zinc-600 shadow-xl"
+            className="overflow-hidden rounded border border-zinc-500 bg-black shadow-2xl"
             style={{
               width: preview.cue.w,
               height: preview.cue.h,
               backgroundImage: `url(${storyboard.sprite})`,
+              backgroundSize: "auto",
+              backgroundRepeat: "no-repeat",
               backgroundPosition: `-${preview.cue.x}px -${preview.cue.y}px`,
             }}
           />
-          <div className="mt-1 text-center text-[11px] font-medium text-white [text-shadow:0_1px_2px_rgba(0,0,0,0.9)]">
+          <div className="mx-auto mt-1 w-fit rounded bg-black/85 px-2 py-0.5 text-center text-[11px] font-medium text-white">
             {formatTime(preview.time)}
           </div>
         </div>

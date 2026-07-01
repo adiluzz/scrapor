@@ -4,16 +4,10 @@ Backfill the canonical `dedupeKey` for existing videos so the scraper's dedup
 also catches videos scraped before this column existed — including soft-deleted
 ones (we intentionally do not filter on isDeleted).
 
-Run inside the worker container (it has DATABASE_URL + psycopg + the db module):
-    docker compose exec worker python scripts/backfill-dedupe-keys.py
+Run inside the worker container:
+    docker compose exec worker python worker/backfill_dedupe_keys.py
 """
-import os
-import sys
-
-ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-sys.path.insert(0, os.path.join(ROOT, "worker"))
-
-import db  # noqa: E402
+import db
 
 
 def main():

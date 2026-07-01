@@ -196,9 +196,12 @@ def _find_thumb(node):
 
 
 def _html_search(source, query, count, skip, min_duration, *,
-                 domain, base, page_url, link_re, max_pages=4):
+                 domain, base, page_url, link_re, per_page=36):
+    """HTML search with pagination. Fetches enough result pages to satisfy
+    `count + skip`, then returns the slice [skip:skip+count]."""
     from urllib.parse import quote_plus, urljoin, urlparse
     need = count + skip
+    max_pages = _pages(need, per_page)
     try:
         from bs4 import BeautifulSoup
     except Exception as e:  # noqa: BLE001
@@ -216,6 +219,7 @@ def _html_search(source, query, count, skip, min_duration, *,
                     break
                 continue
             soup = BeautifulSoup(html, "html.parser")
+            added = 0
             for a in soup.find_all("a", href=True):
                 full = urljoin(base, a["href"])
                 parsed = urlparse(full)
@@ -234,8 +238,11 @@ def _html_search(source, query, count, skip, min_duration, *,
                          or a.get_text(" ", strip=True) or "").strip()
                 out.append(_norm(clean, title or "Unknown", dur or None,
                                  thumbnail=_find_thumb(a)))
+                added += 1
                 if len(out) >= need:
                     break
+            if added == 0:
+                break
     except Exception as e:  # noqa: BLE001
         print(f"[site_searchers] {source} html failed: {e!r}", file=sys.stderr, flush=True)
     return out[skip:skip + count]
@@ -286,8 +293,16 @@ def search_xnxx(query, count, skip=0, min_duration=600):
         from xnxx_api.modules.search_filters import Length
         client = xnxx_api.Client()
         res = await client.search(query, length=Length.X_10min_plus)
+        try:
+            total_p = int(_sget(res, "total_pages", 1) or 1)
+        except Exception:
+            total_p = 1
+        pages = min(_pages(need, 28), total_p)
         vids = _sget(res, "videos")
-        agen = vids() if callable(vids) else vids
+        if callable(vids):
+            agen = vids(pages=pages)
+        else:
+            agen = vids
         if inspect.iscoroutine(agen):
             agen = await agen
 
@@ -424,7 +439,8 @@ def search_eporner(query, count, skip=0, min_duration=600):
             )
 
         out, page = [], 1
-        while len(out) < need and page <= 6:
+        max_page = _pages(need, per_page)
+        while len(out) < need and page <= max_page:
             agen = client.search_videos(
                 query=query, sorting_gay=Gay.exclude_gay_content,
                 sorting_order=Order.longest,

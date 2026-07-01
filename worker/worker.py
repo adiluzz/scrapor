@@ -78,14 +78,11 @@ def _log_video_fail(stage: str, video, run, source_site, reason, **extra):
     _event("warning", "video_failed", stage=stage, reason=str(reason)[:500], **_video_ctx(video, run, source_site), **extra)
 
 
-# Fallback per-site cap when a run has no explicit maxPerSite AND no "all" intent.
-# (Runs now carry their own maxPerSite; None on the run means "download ALL".)
-MAX_PER_SITE = int(os.environ.get("SCRAPE_MAX_PER_SITE", "25"))
 # How many videos to download+save concurrently.
 DOWNLOAD_CONCURRENCY = int(os.environ.get("SCRAPE_DOWNLOAD_CONCURRENCY", "5"))
 # Page size when paginating a source for a run.
 PAGE_BATCH = int(os.environ.get("SCRAPE_PAGE_BATCH", "50"))
-# Safety upper bound for "download all" so a run can't loop forever.
+# Safety upper bound when maxPerSite is null (download ALL) so a run can't loop forever.
 ALL_CAP = int(os.environ.get("SCRAPE_ALL_MAX", "100000"))
 QUEUE_KEY = "scrape:queue"
 CREATOR_QUEUE_KEY = "creator:queue"
@@ -350,8 +347,8 @@ def _process_source(conn, run, source, min_dur, max_per_site, seen, totals) -> s
 
     db.set_run_site(conn, run_id, source, status="RUNNING")
     s = {"found": 0, "new_videos": 0, "skipped": 0, "failed": 0}
-    target = max_per_site if max_per_site else ALL_CAP
-    collected = 0
+    download_all = max_per_site is None
+    collected = 0  # search-result slots consumed (toward cap or ALL_CAP safety)
     skip = 0
     stopped = False
 
@@ -364,11 +361,20 @@ def _process_source(conn, run, source, min_dur, max_per_site, seen, totals) -> s
             s["failed"] += 1; totals["fail"] += 1
 
     try:
-        while collected < target and not stopped:
+        while not stopped:
             if _run_stopped(conn, run_id):
                 stopped = True
                 break
-            batch_n = min(PAGE_BATCH, target - collected)
+            if download_all:
+                if collected >= ALL_CAP:
+                    _event("warning", "source_all_cap", runId=run_id, sourceSite=source,
+                           cap=ALL_CAP, collected=collected)
+                    break
+                batch_n = PAGE_BATCH
+            else:
+                if collected >= max_per_site:
+                    break
+                batch_n = min(PAGE_BATCH, max_per_site - collected)
             results = searcher(run["query"], batch_n, skip, min_dur)
             if not results:
                 break
@@ -405,8 +411,9 @@ def _process_source(conn, run, source, min_dur, max_per_site, seen, totals) -> s
                             stopped = True
 
             db.set_run_site(conn, run_id, source, status="RUNNING", **s)
-            collected += len(results)
             skip += len(results)
+            collected += len(results)
+            # Fewer hits than requested => source pagination exhausted.
             if len(results) < batch_n:
                 break
             time.sleep(1)

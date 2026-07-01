@@ -4,6 +4,7 @@ import os
 import re
 import secrets
 import unicodedata
+from urllib.parse import urlencode, urlsplit, urlunsplit, parse_qsl
 
 import psycopg
 
@@ -11,6 +12,26 @@ import psycopg
 def _cuid() -> str:
     # Any unique string works for a Prisma String @id.
     return "c" + secrets.token_hex(12)
+
+
+# libpq (used by psycopg) only understands a fixed set of URI query params.
+# Prisma's DATABASE_URL adds its own (schema, connection_limit, pgbouncer, ...)
+# which libpq rejects with `invalid URI query parameter`. Keep only libpq-valid
+# ones so the same DATABASE_URL works for both Prisma (web) and psycopg (worker).
+_LIBPQ_QUERY_KEYS = {
+    "sslmode", "sslcert", "sslkey", "sslrootcert", "sslpassword",
+    "connect_timeout", "application_name", "options", "target_session_attrs",
+    "gssencmode", "channel_binding",
+}
+
+
+def _normalize_dsn(dsn: str) -> str:
+    parts = urlsplit(dsn)
+    if not parts.query:
+        return dsn
+    kept = [(k, v) for k, v in parse_qsl(parts.query, keep_blank_values=True)
+            if k in _LIBPQ_QUERY_KEYS]
+    return urlunsplit(parts._replace(query=urlencode(kept)))
 
 
 def slugify(text: str) -> str:
@@ -21,7 +42,7 @@ def slugify(text: str) -> str:
 
 
 def connect():
-    dsn = os.environ["DATABASE_URL"]
+    dsn = _normalize_dsn(os.environ["DATABASE_URL"])
     return psycopg.connect(dsn, autocommit=True)
 
 

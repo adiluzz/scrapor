@@ -21,6 +21,13 @@ server {
         proxy_set_header X-Forwarded-Proto $fwd_proto;
         proxy_set_header Upgrade $http_upgrade;
         proxy_set_header Connection "upgrade";
+
+        # Creator video uploads POST straight to the app. Stream them through
+        # (no buffering, no size cap here) and give them a long timeout.
+        client_max_body_size 0;
+        proxy_request_buffering off;
+        proxy_read_timeout 3600s;
+        proxy_send_timeout 3600s;
     }
 }
 

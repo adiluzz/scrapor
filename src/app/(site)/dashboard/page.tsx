@@ -42,9 +42,23 @@ export default async function DashboardPage() {
             ) : (
               <ul className="divide-y divide-zinc-800 rounded-xl border border-zinc-800">
                 {profile!.videos.map((v) => (
-                  <li key={v.id} className="px-4 py-3 text-sm text-zinc-300">
-                    <Link href={`/videos/${v.slug}`} className="hover:text-white">{v.title}</Link>
-                    <span className="ml-2 text-zinc-600">· {v.viewCount} views</span>
+                  <li key={v.id} className="flex items-center gap-2 px-4 py-3 text-sm text-zinc-300">
+                    {v.status === "READY" ? (
+                      <Link href={`/videos/${v.slug}`} className="hover:text-white">{v.title}</Link>
+                    ) : (
+                      <span className="text-zinc-400">{v.title}</span>
+                    )}
+                    {v.status === "PENDING" || v.status === "PROCESSING" ? (
+                      <span className="rounded bg-yellow-500/15 px-2 py-0.5 text-xs font-medium text-yellow-400">
+                        Processing…
+                      </span>
+                    ) : v.status === "FAILED" ? (
+                      <span className="rounded bg-red-500/15 px-2 py-0.5 text-xs font-medium text-red-400">
+                        Failed
+                      </span>
+                    ) : (
+                      <span className="text-zinc-600">· {v.viewCount} views</span>
+                    )}
                   </li>
                 ))}
               </ul>

@@ -48,6 +48,7 @@ export function buildWhere(
   const where: Prisma.VideoWhereInput = {
     siteId,
     isDeleted: false,
+    status: "READY", // hide creator uploads still being processed (or failed)
     ...extra,
   };
   if (params.q) {

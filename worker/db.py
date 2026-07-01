@@ -105,6 +105,41 @@ def create_video(conn, *, site_id, source_url, title, description, duration_sec,
     return vid, slug
 
 
+def load_video(conn, video_id: str):
+    """Load the fields the creator-upload pipeline needs."""
+    with conn.cursor() as cur:
+        cur.execute(
+            'SELECT id,"siteId","durationSec",status FROM "Video" WHERE id=%s',
+            (video_id,),
+        )
+        row = cur.fetchone()
+    if not row:
+        return None
+    return {"id": row[0], "siteId": row[1], "durationSec": row[2], "status": row[3]}
+
+
+def set_video_status(conn, video_id: str, status: str):
+    with conn.cursor() as cur:
+        cur.execute(
+            'UPDATE "Video" SET status=%s,"updatedAt"=now() WHERE id=%s',
+            (status, video_id),
+        )
+
+
+def update_video_media(conn, video_id, *, s3_video_key, s3_thumb_key, s3_preview_key,
+                       s3_storyboard_key, s3_storyboard_vtt_key, duration_sec, status):
+    """Write generated S3 keys + duration and flip status (READY/FAILED)."""
+    with conn.cursor() as cur:
+        cur.execute(
+            'UPDATE "Video" SET "s3VideoKey"=%s,"s3ThumbKey"=%s,"s3PreviewKey"=%s,'
+            '"s3StoryboardKey"=%s,"s3StoryboardVttKey"=%s,'
+            '"durationSec"=COALESCE("durationSec",%s),status=%s,"updatedAt"=now() '
+            'WHERE id=%s',
+            (s3_video_key, s3_thumb_key, s3_preview_key, s3_storyboard_key,
+             s3_storyboard_vtt_key, duration_sec, status, video_id),
+        )
+
+
 def load_run(conn, run_id: str):
     with conn.cursor() as cur:
         cur.execute(

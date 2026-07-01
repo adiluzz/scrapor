@@ -1,15 +1,18 @@
 #!/usr/bin/env python3
 """
-Queue-consuming scrape worker.
+Queue-consuming media worker.
 
-Consumes ScrapeRun ids from Redis (list `scrape:queue`, pushed by the app),
-searches the admin-selected source sites, dedups by sourceUrl (globally, incl.
-soft-deleted), downloads new videos, generates preview/thumbnail/storyboard,
-uploads everything to S3, links pornstars/tags, and updates per-site + run totals.
+Consumes two Redis queues:
+  • `scrape:queue`  — ScrapeRun ids: searches admin-selected sources, dedups by
+    sourceUrl, downloads new videos, generates preview/thumbnail/storyboard,
+    uploads to S3, links pornstars/tags, updates per-site + run totals.
+  • `creator:queue` — Video ids for creator uploads the web app streamed to the
+    shared `uploads` volume: normalize to MP4, generate the same media assets,
+    upload to S3 under the video id, then flip the video to READY.
 
 Run modes:
   python worker/worker.py                 # long-running queue consumer (container)
-  python worker/worker.py --run <runId>   # process one existing run and exit
+  python worker/worker.py --run <runId>   # process one existing scrape run and exit
 """
 
 import argparse
@@ -44,6 +47,9 @@ def _j(msg):
 
 MAX_PER_SITE = int(os.environ.get("SCRAPE_MAX_PER_SITE", "25"))
 QUEUE_KEY = "scrape:queue"
+CREATOR_QUEUE_KEY = "creator:queue"
+# Shared volume the web app writes creator uploads to (see docker-compose).
+UPLOAD_DIR = os.environ.get("UPLOAD_DIR", os.path.join(ROOT, "uploads"))
 
 
 # ── Downloaders ───────────────────────────────────────────────────────
@@ -149,6 +155,76 @@ def _process_one(conn, run, source_site, video) -> str:
         shutil.rmtree(tmp_dir, ignore_errors=True)
 
 
+def process_creator_upload(conn, video_id: str):
+    """
+    Process a creator upload that the web app streamed to the shared volume:
+    normalize to MP4, generate preview/thumbnail/storyboard, upload to S3 under
+    the video id (matching the CDN key scheme), then mark the video READY.
+    """
+    v = db.load_video(conn, video_id)
+    if not v:
+        log.warning(_j(f"creator video {video_id} not found"))
+        return
+    src = os.path.join(UPLOAD_DIR, video_id, "source")
+    if not os.path.exists(src):
+        log.warning(_j(f"creator upload source missing for {video_id}"))
+        db.set_video_status(conn, video_id, "FAILED")
+        return
+
+    site_id = v["siteId"]
+    db.set_video_status(conn, video_id, "PROCESSING")
+    log.info(_j(f"creator upload {video_id} processing"))
+    tmp_dir = tempfile.mkdtemp(prefix="upload_")
+    try:
+        video_path = os.path.join(tmp_dir, "video.mp4")
+        if not media.transcode_to_mp4(src, video_path):
+            # Fallback: keep the original bytes if transcode failed but the file
+            # is likely already a playable mp4.
+            shutil.copy(src, video_path)
+        duration = v.get("durationSec") or media.probe_duration(video_path)
+
+        preview = os.path.join(tmp_dir, "preview.mp4")
+        thumb = os.path.join(tmp_dir, "thumbnail.jpg")
+        sprite = os.path.join(tmp_dir, "storyboard.jpg")
+        vtt = os.path.join(tmp_dir, "storyboard.vtt")
+        media.make_preview(video_path, preview)
+        media.make_thumbnail(video_path, thumb, "")
+        media.make_storyboard(video_path, sprite, vtt, duration)
+
+        keys = dict(v=None, t=None, p=None, sb=None, vtt=None)
+        if storage.configured():
+            keys["v"] = storage.upload(video_path, storage.key_video(site_id, video_id), "video/mp4")
+            if os.path.exists(thumb):
+                keys["t"] = storage.upload(thumb, storage.key_thumb(site_id, video_id), "image/jpeg")
+            if os.path.exists(preview):
+                keys["p"] = storage.upload(preview, storage.key_preview(site_id, video_id), "video/mp4")
+            if os.path.exists(sprite):
+                keys["sb"] = storage.upload(sprite, storage.key_storyboard(site_id, video_id), "image/jpeg")
+            if os.path.exists(vtt):
+                keys["vtt"] = storage.upload(vtt, storage.key_storyboard_vtt(site_id, video_id), "text/vtt")
+        else:
+            # Dev fallback: keep files under downloads/{id}/ for local API routes.
+            local = os.path.join(ROOT, "downloads", video_id)
+            os.makedirs(local, exist_ok=True)
+            for s, name in [(video_path, "video.mp4"), (preview, "thumbnail.mp4"), (thumb, "thumbnail.jpg")]:
+                if os.path.exists(s):
+                    shutil.copy(s, os.path.join(local, name))
+
+        db.update_video_media(
+            conn, video_id,
+            s3_video_key=keys["v"], s3_thumb_key=keys["t"], s3_preview_key=keys["p"],
+            s3_storyboard_key=keys["sb"], s3_storyboard_vtt_key=keys["vtt"],
+            duration_sec=duration, status="READY",
+        )
+        log.info(_j(f"creator video {video_id} ready"))
+    except Exception as e:
+        log.warning(_j(f"creator upload {video_id} failed: {e}"))
+        db.set_video_status(conn, video_id, "FAILED")
+    finally:
+        shutil.rmtree(tmp_dir, ignore_errors=True)
+        shutil.rmtree(os.path.join(UPLOAD_DIR, video_id), ignore_errors=True)
+
+
 def process_run(conn, run_id: str):
     run = db.load_run(conn, run_id)
     if not run:
@@ -215,11 +291,15 @@ def main():
     log.info(_j("worker started, waiting for jobs"))
     while True:
         try:
-            item = r.blpop(QUEUE_KEY, timeout=5)
+            item = r.blpop([QUEUE_KEY, CREATOR_QUEUE_KEY], timeout=5)
             if not item:
                 continue
-            run_id = item[1].decode() if isinstance(item[1], bytes) else item[1]
-            process_run(conn, run_id)
+            queue = item[0].decode() if isinstance(item[0], bytes) else item[0]
+            job_id = item[1].decode() if isinstance(item[1], bytes) else item[1]
+            if queue == CREATOR_QUEUE_KEY:
+                process_creator_upload(conn, job_id)
+            else:
+                process_run(conn, job_id)
         except Exception as e:
             log.error(_j(f"worker loop error: {e}"))
             time.sleep(3)

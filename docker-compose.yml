@@ -10,6 +10,10 @@ services:
       postgres: { condition: service_healthy }
       redis: { condition: service_started }
     expose: ["3000"]
+    volumes:
+      # Creator uploads are streamed here; the worker reads them from the same
+      # volume to transcode + generate media.
+      - uploads:/app/uploads
     logging: { driver: json-file, options: { max-size: "10m", max-file: "3" } }
 
   # ── DB migrations (one-shot; runs the full toolchain image) ────────
@@ -31,6 +35,7 @@ services:
       redis: { condition: service_started }
     volumes:
       - downloads:/app/downloads
+      - uploads:/app/uploads
     logging: { driver: json-file, options: { max-size: "10m", max-file: "3" } }
 
   # ── Internal edge: app router + protecting CDN edge ────────────────
@@ -120,4 +125,5 @@ volumes:
   redisdata:
   esdata:
   downloads:
+  uploads:
   nginx-cache:

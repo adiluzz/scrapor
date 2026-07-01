@@ -21,6 +21,13 @@ if (process.env.NODE_ENV !== "production") globalForRedis.redis = redis;
 export const SCRAPE_QUEUE_KEY = "scrape:queue";
 
 /**
+ * Redis key for the creator-upload processing queue (list used as FIFO).
+ * Carries Video ids; the worker transcodes the uploaded source and generates
+ * thumbnail/preview/storyboard, uploads to S3, then marks the video READY.
+ */
+export const CREATOR_QUEUE_KEY = "creator:queue";
+
+/**
  * Fixed-window rate limiter. Returns true when the action is allowed.
  * Fails open (allows) if Redis is unavailable so auth never hard-breaks.
  */

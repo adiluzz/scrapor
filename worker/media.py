@@ -24,6 +24,24 @@ def probe_duration(video_path: str) -> int:
         return 0
 
 
+def transcode_to_mp4(src: str, dest: str, timeout=7200) -> bool:
+    """
+    Normalize an arbitrary uploaded file (mov/webm/avi/mp4/...) into a
+    web-friendly, streamable MP4 (H.264 + AAC, faststart). Returns True on
+    success. Callers should fall back to the raw source if this fails.
+    """
+    cmd = ["ffmpeg", "-y", "-i", src,
+           "-c:v", "libx264", "-preset", "veryfast", "-crf", "23",
+           "-pix_fmt", "yuv420p",
+           "-c:a", "aac", "-b:a", "128k",
+           "-movflags", "+faststart", dest]
+    try:
+        r = subprocess.run(cmd, capture_output=True, timeout=timeout)
+        return r.returncode == 0 and os.path.exists(dest) and os.path.getsize(dest) > 10_000
+    except Exception:
+        return False
+
+
 def make_preview(video_path: str, dest: str, timeout=1800) -> bool:
     """Muted hover-preview clip: first 5s of every minute, downscaled."""
     if os.path.exists(dest) and os.path.getsize(dest) > 10_000:

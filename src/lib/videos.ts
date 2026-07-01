@@ -75,6 +75,7 @@ export async function upsertVideoWithMedia(input: {
   sourceUploadDate?: Date | null;
   scrapeRunId?: string | null;
   creatorId?: string | null;
+  status?: "PENDING" | "PROCESSING" | "READY" | "FAILED";
   s3VideoKey?: string | null;
   s3ThumbKey?: string | null;
   s3PreviewKey?: string | null;
@@ -94,6 +95,7 @@ export async function upsertVideoWithMedia(input: {
     sourceUploadDate: input.sourceUploadDate ?? null,
     scrapeRunId: input.scrapeRunId ?? null,
     creatorId: input.creatorId ?? null,
+    ...(input.status ? { status: input.status } : {}),
     s3VideoKey: input.s3VideoKey ?? null,
     s3ThumbKey: input.s3ThumbKey ?? null,
     s3PreviewKey: input.s3PreviewKey ?? null,

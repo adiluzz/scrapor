@@ -12,7 +12,8 @@ WORKDIR /app
 RUN apt-get update && apt-get install -y --no-install-recommends openssl ca-certificates && rm -rf /var/lib/apt/lists/*
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
-RUN npx prisma generate && npm run build
+# Next.js expects public/; ensure it exists even when the repo has no static assets yet.
+RUN mkdir -p public && npx prisma generate && npm run build
 
 # ── runner (Next standalone) ─────────────────────────────────────────
 FROM node:24-slim AS runner

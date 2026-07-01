@@ -43,6 +43,7 @@ env/
 downloads/
 videos/
 library/
+uploads/
 .ollama-local/
 
 # ── Recordings & screenshots (runtime artifacts) ──────────────────────

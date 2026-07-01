@@ -50,6 +50,13 @@ model User {
 // Videos + taxonomy
 // ─────────────────────────────────────────────────────────────
 
+enum VideoStatus {
+  PENDING // uploaded/queued, media not yet generated
+  PROCESSING // worker is generating thumbnail/preview/storyboard
+  READY // fully processed and publicly listable
+  FAILED // processing failed; hidden from public listings
+}
+
 model Video {
   id                 String          @id @default(cuid())
   slug               String
@@ -59,6 +66,7 @@ model Video {
   sourceUrl          String          @unique // GLOBAL dedup key (incl. soft-deleted)
   sourceSite         String? // "PornHub", "XVideos", ...
   description        String?
+  status             VideoStatus     @default(READY) // creator uploads start PENDING
   durationSec        Int? // for duration filter
   s3VideoKey         String?
   s3ThumbKey         String? // static jpg

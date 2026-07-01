@@ -1,15 +1,21 @@
 # Pisster — Deployment Runbook
 
 Single-server deployment via Docker Compose. Everything runs on the server
-except AWS S3 (video storage). The server already runs its own **host nginx**
-for other projects — that nginx terminates TLS and reverse-proxies the Pisster
-domains to the stack's internal nginx (bound to `127.0.0.1:8080`), so nothing in
-the stack ever binds to ports 80/443.
+except AWS S3 (video storage). This server's public edge is an **existing
+dockerized Caddy** (the `chiro` stack) that already owns ports 80/443 and does
+**automatic HTTPS**. Caddy reverse-proxies the Pisster domains, over a shared
+Docker network, to the stack's internal edge nginx — so nothing in the Pisster
+stack binds to 80/443 and there is **no host nginx / no certbot** to manage.
 
 ```
-Browser ──443──▶ HOST nginx (TLS/certbot) ──▶ 127.0.0.1:8080 internal nginx ──▶ web:3000
-                                                        └──▶ CDN edge (secure_link → S3 presign)
+Browser ──443──▶ Caddy (dockerized, auto-TLS) ──▶ pisster-edge nginx ──▶ web:3000
+                                                          └──▶ CDN edge (secure_link → S3 presign)
 ```
+
+> **Alternative — host nginx:** if your server uses a host-level nginx instead
+> of Caddy, the repo also ships `docs/host-nginx/pisster.conf` plus a certbot
+> flow (see the note at the end of §6). This runbook documents the Caddy path,
+> which is what this server uses.
 
 ---
 
@@ -17,8 +23,10 @@ Browser ──443──▶ HOST nginx (TLS/certbot) ──▶ 127.0.0.1:8080 int
 
 - A Linux server you can SSH into with a sudo user, running:
   - **Docker** + the **Docker Compose plugin** (`docker compose version`)
-  - **nginx** (the existing host nginx)
-  - **certbot** with the nginx plugin (`sudo apt install certbot python3-certbot-nginx`)
+  - An **existing dockerized Caddy** edge that owns host `:80`/`:443` and does
+    automatic HTTPS (verify: `docker ps` shows a `caddy` container publishing
+    `0.0.0.0:80` and `0.0.0.0:443`, and note its Docker network name —
+    e.g. `chiro_default`). No host nginx or certbot is needed.
 - A domain (e.g. `pisster.com`) with DNS control.
 - An AWS account with a **private** S3 bucket ("Block all public access" ON) and
   an IAM user holding `s3:GetObject`, `s3:PutObject`, `s3:DeleteObject` on it.
@@ -97,8 +105,9 @@ Edit `.env` and set at minimum:
 - `AWS_REGION`, `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `S3_BUCKET`
 - `SMTP_USER=office@pisster.com`, `SMTP_PASS=<app password>`, `MAIL_FROM`, `ADMIN_NOTIFY_EMAIL`
 - `PRIMARY_DOMAIN=pisster.com`, `ADMIN_SUBDOMAIN=admin`
-- `EDGE_HTTP_PORT=8080` — localhost port the internal nginx binds to. **Change it
-  if 8080 is already taken** on this server (then use the same value in step 6).
+- `EDGE_HTTP_PORT=8080` — localhost-only port the internal nginx publishes for
+  debugging (`curl` from the host). Caddy reaches the edge over the shared Docker
+  network (`pisster-edge:80`), not this port. Change it only if 8080 is taken.
 - (optional) `VAST_TAG_URL=<your ad network preroll tag>` — leave blank to disable ads.
 
 `.env` is gitignored and must never be committed.
@@ -119,6 +128,10 @@ server IP.
 ---
 
 ## 4. Bring the stack up
+
+The compose file joins the edge `nginx` to Caddy's **external** network
+(`chiro_default`), so that network must already exist — it does whenever the
+Caddy/chiro stack is up (`docker network ls | grep chiro_default`).
 
 ```bash
 docker compose up -d --build
@@ -154,74 +167,72 @@ docker compose run --rm \
 
 ---
 
-## 6. Host nginx + SSL certificate
+## 6. Public routing + TLS via the dockerized Caddy edge
 
-TLS + routing live on the **host nginx**. A ready-made vhost is at
-`docs/host-nginx/pisster.conf`. It has a `:443` block that references
-Let's Encrypt cert files — which don't exist yet — so we obtain certs **first**
-with a tiny bootstrap vhost, then swap in the real one. This avoids the
-"nginx won't start because the cert is missing / cert can't be issued because
-nginx won't start" deadlock.
+The public edge is the existing **Caddy** container. It already owns `:80`/`:443`
+and does automatic HTTPS, so all we do is: (a) put the Pisster edge nginx on
+Caddy's Docker network, and (b) add one site block to Caddy's Caddyfile pointing
+at it. Caddy then obtains + auto-renews the certs — no certbot, no host nginx.
 
-> Debian/Ubuntu use `/etc/nginx/sites-available` + `sites-enabled`. On
-> RHEL/Amazon Linux, drop the `.conf` into `/etc/nginx/conf.d/` instead and skip
-> the symlink step.
+`docker-compose.yml` already attaches the `nginx` service to an **external**
+network named `chiro_default` with the alias **`pisster-edge`**. If your Caddy's
+network has a different name, change `chiro_default` in `docker-compose.yml`
+(both under the `nginx` service and the top-level `networks:` block) to match.
 
-### 6a. Bootstrap HTTP vhost (serves the ACME challenge)
+Find Caddy's details (network + where its Caddyfile is bind-mounted):
 
 ```bash
-sudo mkdir -p /var/www/html
-sudo tee /etc/nginx/sites-available/pisster-bootstrap.conf >/dev/null <<'EOF'
-server {
-    listen 80;
-    listen [::]:80;
-    server_name pisster.com www.pisster.com admin.pisster.com cdn.pisster.com;
-    location /.well-known/acme-challenge/ { root /var/www/html; }
-    location / { return 200 'pisster bootstrap ok'; }
+docker inspect chiro-caddy-1 --format '{{range $k,$v := .NetworkSettings.Networks}}{{$k}} {{end}}'
+docker inspect chiro-caddy-1 --format '{{json .Mounts}}' | python3 -m json.tool
+```
+
+### 6a. Join the edge nginx to Caddy's network
+
+Bringing the stack up (§4) with the current compose already puts `nginx` on
+`chiro_default`. Confirm it's on both networks:
+
+```bash
+docker inspect pisster-nginx-1 \
+  --format '{{range $k,$v := .NetworkSettings.Networks}}{{$k}} {{end}}'
+# expect: <project>_default chiro_default
+```
+
+### 6b. Add the Pisster site block to Caddy
+
+Append the block from `docs/host-caddy/pisster.Caddyfile` to Caddy's Caddyfile
+(bind-mounted on the host, e.g. `/opt/chiro/Caddyfile`):
+
+```caddyfile
+pisster.com, www.pisster.com, admin.pisster.com, cdn.pisster.com {
+	reverse_proxy pisster-edge:80
 }
-EOF
-sudo ln -s /etc/nginx/sites-available/pisster-bootstrap.conf /etc/nginx/sites-enabled/
-sudo nginx -t && sudo systemctl reload nginx
 ```
 
-### 6b. Issue the certificate (one cert, all four hostnames)
-
-```bash
-sudo certbot certonly --webroot -w /var/www/html \
-  -d pisster.com -d www.pisster.com -d admin.pisster.com -d cdn.pisster.com \
-  --email you@example.com --agree-tos --no-eff-email
-```
-
-This writes `/etc/letsencrypt/live/pisster.com/{fullchain,privkey}.pem`.
-
-### 6c. Swap in the real vhost
-
-```bash
-sudo rm /etc/nginx/sites-enabled/pisster-bootstrap.conf
-sudo cp docs/host-nginx/pisster.conf /etc/nginx/sites-available/pisster.conf
-sudo ln -s /etc/nginx/sites-available/pisster.conf /etc/nginx/sites-enabled/
-sudo nginx -t && sudo systemctl reload nginx
-```
-
-The real vhost reverse-proxies `pisster.com`, `www`, `admin.`, and `cdn.` to
-`127.0.0.1:${EDGE_HTTP_PORT}` and forwards `Host`, `X-Forwarded-For`, and
-`X-Forwarded-Proto`. **These headers are required:** the internal nginx uses
+Caddy preserves the original `Host` header and sets `X-Forwarded-For` /
+`X-Forwarded-Proto` by default. **These are required:** the internal nginx uses
 `X-Forwarded-For` (via `real_ip`) to recover the true client IP so the IP-bound
 `secure_link` CDN signatures validate, and the app uses `X-Forwarded-Proto` to
 emit correct `https://` canonical/sitemap URLs.
 
-> If you changed `EDGE_HTTP_PORT` in `.env`, update the `upstream pisster_edge`
-> port in the vhost to match.
-
-### 6d. Auto-renewal
-
-Certbot installs a renewal timer. The real vhost keeps the
-`/.well-known/acme-challenge/` → `/var/www/html` location, so webroot renewals
-keep working. Verify:
+### 6c. Validate + reload Caddy (zero downtime)
 
 ```bash
-sudo certbot renew --dry-run
+docker exec chiro-caddy-1 caddy validate --config /etc/caddy/Caddyfile
+docker exec chiro-caddy-1 caddy reload   --config /etc/caddy/Caddyfile
 ```
+
+Caddy issues the Let's Encrypt cert on the first request to each hostname
+(needs the DNS from §3 + reachable 80/443, which Caddy owns). Renewal is
+automatic — nothing else to configure.
+
+> **Host-nginx alternative:** if this server used a host nginx instead of Caddy,
+> use `docs/host-nginx/pisster.conf` with a certbot webroot flow: create a
+> bootstrap `:80` vhost serving `/.well-known/acme-challenge/` from
+> `/var/www/html`, run `certbot certonly --webroot -w /var/www/html -d pisster.com
+> -d www.pisster.com -d admin.pisster.com -d cdn.pisster.com`, then install
+> `pisster.conf` (Debian: `sites-available`+`sites-enabled`; RHEL/Amazon Linux:
+> `/etc/nginx/conf.d/`). On Amazon Linux 2023, certbot isn't packaged — install
+> it via `python3 -m venv /opt/certbot && /opt/certbot/bin/pip install certbot`.
 
 ---
 
@@ -250,10 +261,11 @@ sudo certbot renew --dry-run
   ```
 - **Logs:** `docker compose logs -f web worker nginx`
 - **Restart one service:** `docker compose restart web`
-- **New domain / site:** add the four DNS records, re-run certbot with the new
-  `-d` names, add a `Site` row (`seed.mjs` with a different `SITE_DOMAIN`), and
-  create an admin for it. The same `web` process serves all domains; middleware
-  scopes every query by the request host's Site.
+- **New domain / site:** add the DNS records, add the new hostnames to the Caddy
+  site block (or a new block) and `caddy reload` — Caddy auto-issues the cert —
+  then add a `Site` row (`seed.mjs` with a different `SITE_DOMAIN`) and create an
+  admin for it. The same `web` process serves all domains; middleware scopes
+  every query by the request host's Site.
 - **Soft-deleting a video** instantly revokes CDN access (the authorize check
   rejects `isDeleted` rows).
 - **Rotate the deploy key:** delete it under repo → Settings → Deploy keys,

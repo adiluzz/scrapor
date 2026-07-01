@@ -1,0 +1,22 @@
+# ============================================================================
+# Pisster site block for an EXISTING dockerized Caddy edge.
+#
+# This server's public edge is a Caddy container that already owns host :80/:443
+# and does automatic HTTPS. Append this block to that Caddy's Caddyfile
+# (e.g. /opt/chiro/Caddyfile) and reload Caddy — no certbot, no host nginx.
+#
+# Caddy will:
+#   - obtain + auto-renew one Let's Encrypt cert covering all four names,
+#   - preserve the original Host header (needed for the internal nginx's
+#     host-based routing: public site vs admin.* vs cdn.*),
+#   - set X-Forwarded-For / X-Forwarded-Proto (needed for IP-bound CDN
+#     secure_link signatures and correct https:// canonical/sitemap URLs).
+#
+# `pisster-edge` is the Docker network alias of the Pisster edge nginx on the
+# shared `chiro_default` network (see docker-compose.yml). The Caddy container
+# must be attached to that same network to resolve the name.
+# ============================================================================
+
+pisster.com, www.pisster.com, admin.pisster.com, cdn.pisster.com {
+	reverse_proxy pisster-edge:80
+}

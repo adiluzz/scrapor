@@ -22,6 +22,6 @@ export async function POST(_request: Request, { params }: { params: Promise<{ id
     vastTagUrl: vastTagUrl || null,
     skipSeconds: parseInt(process.env.AD_SKIP_SECONDS || "5", 10),
     minViewSeconds: parseInt(process.env.AD_MIN_VIEW_SECONDS || "5", 10),
-    timeoutMs: parseInt(process.env.AD_TIMEOUT_MS || "4000", 10),
+    timeoutMs: parseInt(process.env.AD_TIMEOUT_MS || "8000", 10),
   });
 }

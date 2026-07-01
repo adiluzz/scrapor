@@ -5,7 +5,7 @@ import videojs from "video.js";
 import "video.js/dist/video-js.css";
 import type Player from "video.js/dist/types/player";
 import Heatmap from "@/components/player/Heatmap";
-import { fetchVastAd, fireImpressions } from "@/lib/vast";
+import { fireImpressions, type VastAd } from "@/lib/vast";
 import type { StoryboardCue } from "@/lib/storyboard";
 
 type Storyboard = { sprite: string; cues: StoryboardCue[] } | null;
@@ -85,6 +85,20 @@ export default function VideoPlayer({
       fluid: true,
       poster,
       playsinline: true,
+      bigPlayButton: false,
+      textTrackSettings: false,
+      controlBar: {
+        children: [
+          "playToggle",
+          "volumePanel",
+          "currentTimeDisplay",
+          "timeDivider",
+          "durationDisplay",
+          "progressControl",
+          "pictureInPictureToggle",
+          "fullscreenToggle",
+        ],
+      },
     });
     playerRef.current = player;
 
@@ -235,8 +249,21 @@ export default function VideoPlayer({
     }
   }
 
-  async function runAd(adSessionId: string, vastTagUrl: string, cfg: { skipSeconds: number; timeoutMs: number }) {
-    const ad = await fetchVastAd(vastTagUrl, cfg.timeoutMs);
+  async function runAd(adSessionId: string, cfg: { skipSeconds: number; timeoutMs: number }) {
+    let ad: VastAd | null = null;
+    try {
+      const res = await fetch(`/api/videos/${videoId}/vast`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ adSessionId }),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        ad = data.ad ?? null;
+      }
+    } catch {
+      ad = null;
+    }
     if (!ad) return grantAndPlay(adSessionId, "noad");
 
     setStatus("ad");
@@ -282,8 +309,8 @@ export default function VideoPlayer({
       }
       const res = await fetch(`/api/videos/${videoId}/ad-session`, { method: "POST" });
       const data = await res.json();
-      if (data.adRequired && data.vastTagUrl) {
-        await runAd(data.adSessionId, data.vastTagUrl, data);
+      if (data.adRequired) {
+        await runAd(data.adSessionId, data);
       } else {
         await grantAndPlay(data.adSessionId, "noad");
       }
@@ -293,10 +320,10 @@ export default function VideoPlayer({
   }
 
   return (
-    <div ref={rootRef} className="relative">
-      <style jsx global>{`
-        .vjs-scrubber-preview .vjs-mouse-display,
-        .vjs-scrubber-preview .vjs-time-tooltip {
+    <div ref={rootRef} className="relative video-player-root">
+      <style>{`
+        .video-player-root .vjs-scrubber-preview .vjs-mouse-display,
+        .video-player-root .vjs-scrubber-preview .vjs-time-tooltip {
           display: none !important;
         }
       `}</style>

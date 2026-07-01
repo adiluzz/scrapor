@@ -5,6 +5,7 @@ import { prisma } from "@/lib/db";
 import { getCurrentSite } from "@/lib/site";
 import { thumbUrl, storyboardUrls } from "@/lib/media";
 import { formatDuration } from "@/lib/videos";
+import { getCurrentUser } from "@/lib/session";
 import { listVideos } from "@/lib/queries";
 import VideoPlayer from "@/components/player/VideoPlayer";
 import VideoGrid from "@/components/site/VideoGrid";
@@ -12,9 +13,11 @@ import JsonLd from "@/components/site/JsonLd";
 
 export const dynamic = "force-dynamic";
 
-async function getVideo(siteId: string, slug: string) {
+async function getVideo(siteId: string, slug: string, includeHidden = false) {
   return prisma.video.findFirst({
-    where: { siteId, slug, isDeleted: false, status: "READY" },
+    // Public visitors only see live, READY videos. Admins can preview any
+    // video (soft-deleted or still processing) via the admin panel link.
+    where: { siteId, slug, ...(includeHidden ? {} : { isDeleted: false, status: "READY" }) },
     include: {
       pornstars: { include: { pornstar: true } },
       tags: { include: { tag: true } },
@@ -57,7 +60,15 @@ export default async function VideoPage({
 }) {
   const { slug } = await params;
   const site = await getCurrentSite();
-  const video = await getVideo(site.id, slug);
+  let video = await getVideo(site.id, slug);
+  let adminPreview = false;
+  if (!video) {
+    const user = await getCurrentUser();
+    if (user?.role === "ADMIN") {
+      video = await getVideo(site.id, slug, true);
+      adminPreview = Boolean(video);
+    }
+  }
   if (!video) notFound();
 
   const [poster, storyboard] = await Promise.all([
@@ -99,6 +110,13 @@ export default async function VideoPage({
       />
 
       <div className="mx-auto w-full max-w-5xl">
+        {adminPreview && (
+          <div className="mb-3 rounded-lg border border-amber-500/40 bg-amber-500/10 px-4 py-2 text-sm text-amber-300">
+            Admin preview — this video is{" "}
+            {video.isDeleted ? "deleted" : video.status !== "READY" ? "still processing" : "hidden"} and not
+            visible to the public.
+          </div>
+        )}
         <div className="overflow-hidden rounded-xl bg-black">
           <VideoPlayer
             videoId={video.id}

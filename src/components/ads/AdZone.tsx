@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect } from "react";
+import { EXO_INS_CLASS, serveExoAds } from "@/lib/exo-click";
 
 /**
  * ExoClick display ad slot (banner / native).
@@ -8,21 +9,14 @@ import { useEffect } from "react";
  * ExoClick serves ads into an <ins> element identified by a per-account CSS
  * class plus the zone id. The account class below is derived from this
  * publisher's hash (6a97888e — same as the site-verification meta tag).
- * If ExoClick's zone snippet shows a different `<ins class="...">`, update this.
+ * If ExoClick's zone snippet shows a different `<ins class="...">`, update
+ * EXO_INS_CLASS in src/lib/exo-click.ts.
  *
  * The provider script (a.magsrv.com/ad-provider.js) is loaded once in the site
  * layout. `AdProvider.push({ serve: {} })` renders every not-yet-served <ins>
  * on the page; we call it on mount so it also works after client-side (SPA)
  * navigation. It is safe to call repeatedly.
  */
-const EXO_INS_CLASS = "eas6a97888e2";
-
-declare global {
-  interface Window {
-    AdProvider?: Array<Record<string, unknown>>;
-  }
-}
-
 export default function AdZone({
   zoneId,
   className = "",
@@ -36,12 +30,7 @@ export default function AdZone({
 }) {
   useEffect(() => {
     if (!zoneId) return;
-    try {
-      window.AdProvider = window.AdProvider || [];
-      window.AdProvider.push({ serve: {} });
-    } catch {
-      /* ignore */
-    }
+    serveExoAds();
   }, [zoneId]);
 
   // Nothing configured → render nothing (no empty gaps in the layout).

@@ -11,6 +11,7 @@ import VideoPlayer from "@/components/player/VideoPlayer";
 import VideoGrid from "@/components/site/VideoGrid";
 import JsonLd from "@/components/site/JsonLd";
 import AdZone from "@/components/ads/AdZone";
+import ExoFullscreenOverlay from "@/components/ads/ExoFullscreenOverlay";
 
 export const dynamic = "force-dynamic";
 
@@ -97,7 +98,10 @@ export default async function VideoPage({
   );
 
   return (
-    <div className="space-y-6">
+    <div className="relative space-y-6">
+      {!adminPreview && (
+        <ExoFullscreenOverlay zoneId={process.env.EXO_ZONE_VIDEO_FULLSCREEN} />
+      )}
       <JsonLd
         data={{
           "@context": "https://schema.org",

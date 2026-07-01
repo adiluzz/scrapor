@@ -1,6 +1,7 @@
 import Link from "next/link";
+import CookieSettings from "@/components/site/CookieSettings";
 
-export default function Footer() {
+export default function Footer({ siteName = "Pisster" }: { siteName?: string }) {
   return (
     <footer className="mt-16 border-t border-zinc-800 bg-zinc-950">
       <div className="mx-auto max-w-7xl px-4 py-8 text-sm text-zinc-500">
@@ -10,6 +11,7 @@ export default function Footer() {
           <Link href="/creators" className="hover:text-zinc-300">Creators</Link>
           <Link href="/terms" className="hover:text-zinc-300">Terms</Link>
           <Link href="/privacy" className="hover:text-zinc-300">Privacy</Link>
+          <CookieSettings siteName={siteName} />
           <Link href="/2257" className="hover:text-zinc-300">2257 Statement</Link>
           <Link href="/dmca" className="hover:text-zinc-300">DMCA</Link>
         </div>

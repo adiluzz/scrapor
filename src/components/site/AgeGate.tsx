@@ -1,8 +1,9 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { AGE_VERIFIED_COOKIE, AGE_VERIFIED_EVENT } from "@/lib/consent";
 
-const COOKIE = "age_verified";
+const COOKIE = AGE_VERIFIED_COOKIE;
 
 /**
  * 18+ age verification gate. Rendered by the public site layout only when the
@@ -21,6 +22,7 @@ export default function AgeGate({ siteName = "this site" }: { siteName?: string 
 
   function enter() {
     document.cookie = `${COOKIE}=1; path=/; max-age=31536000; SameSite=Lax`;
+    window.dispatchEvent(new CustomEvent(AGE_VERIFIED_EVENT));
     setOpen(false);
   }
 

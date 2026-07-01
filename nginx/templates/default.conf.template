@@ -1,5 +1,8 @@
 # Rendered by the nginx image's envsubst at container start.
 # Variables: ${PRIMARY_DOMAIN}, ${ADMIN_SUBDOMAIN}, ${CDN_SIGNING_SECRET}
+#
+# This runs BEHIND the host nginx (which terminates TLS). It receives plain
+# HTTP on :80 (published to 127.0.0.1:${EDGE_HTTP_PORT}) and routes by Host.
 
 upstream web_upstream { server web:3000; keepalive 32; }
 
@@ -8,9 +11,6 @@ server {
     listen 80;
     server_name ${PRIMARY_DOMAIN} ${ADMIN_SUBDOMAIN}.${PRIMARY_DOMAIN} www.${PRIMARY_DOMAIN};
 
-    # Certbot HTTP-01 challenge
-    location /.well-known/acme-challenge/ { root /var/www/certbot; }
-
     location / {
         proxy_pass http://web_upstream;
         proxy_http_version 1.1;
@@ -18,7 +18,7 @@ server {
         proxy_set_header X-Forwarded-Host $host;
         proxy_set_header X-Real-IP $remote_addr;
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_set_header X-Forwarded-Proto $fwd_proto;
         proxy_set_header Upgrade $http_upgrade;
         proxy_set_header Connection "upgrade";
     }

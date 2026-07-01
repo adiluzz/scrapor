@@ -45,8 +45,13 @@ Point these A records at the server IP:
 docker compose up -d --build
 ```
 
-Services: `nginx`, `web`, `worker`, `postgres`, `redis`, `elasticsearch`,
-`logstash`, `kibana`, `filebeat`, `certbot`.
+Services: `nginx` (internal edge), `web`, `worker`, `postgres`, `redis`,
+`elasticsearch`, `logstash`, `kibana`, `filebeat`.
+
+The stack's `nginx` is **internal**: it binds only to `127.0.0.1:${EDGE_HTTP_PORT}`
+(default `8080`) and does the app routing + protecting-CDN edge. Your existing
+**host nginx** terminates TLS and reverse-proxies the Pisster domains to it
+(see step 5). Nothing in the stack listens on 80/443, so there's no conflict.
 
 ## 4. Run migrations + seed
 
@@ -61,19 +66,33 @@ docker compose exec \
   web node scripts/seed.mjs
 ```
 
-## 5. TLS (Let's Encrypt)
+## 5. Host nginx + TLS (existing server nginx)
 
-Issue certs once (webroot is already wired into nginx + certbot):
+The server already runs nginx for other projects, so TLS + routing happen there.
+A ready-made vhost is provided at `docs/host-nginx/pisster.conf`.
 
 ```bash
-docker compose run --rm certbot certonly --webroot -w /var/www/certbot \
-  -d pisster.com -d www.pisster.com -d admin.pisster.com -d cdn.pisster.com \
-  --email you@example.com --agree-tos --no-eff-email
-docker compose exec nginx nginx -s reload
+# 1) Install the vhost
+sudo cp docs/host-nginx/pisster.conf /etc/nginx/sites-available/pisster.conf
+sudo ln -s /etc/nginx/sites-available/pisster.conf /etc/nginx/sites-enabled/
+
+# 2) Issue certs for every Pisster hostname (host certbot)
+sudo certbot --nginx -d pisster.com -d www.pisster.com \
+     -d admin.pisster.com -d cdn.pisster.com
+
+# 3) Test + reload
+sudo nginx -t && sudo systemctl reload nginx
 ```
 
-Then add HTTPS `server` blocks referencing `/etc/letsencrypt/live/...` (or extend
-`nginx/templates/default.conf.template`). The `certbot` service auto-renews.
+It reverse-proxies `pisster.com`, `www`, `admin.`, and `cdn.` to
+`127.0.0.1:${EDGE_HTTP_PORT}` and forwards `Host` + `X-Forwarded-For` +
+`X-Forwarded-Proto`. Those headers are **required**: the internal nginx uses
+`X-Forwarded-For` (via `real_ip`) to recover the true client IP so the IP-bound
+`secure_link` CDN signatures validate, and the app uses `X-Forwarded-Proto` to
+emit correct `https://` canonical/sitemap URLs.
+
+> If another vhost on this nginx uses a catch-all `default_server` on 443, make
+> sure these four `server_name`s resolve to this block (they will, by name match).
 
 ## 6. Verify
 
@@ -84,7 +103,8 @@ Then add HTTPS `server` blocks referencing `/etc/letsencrypt/live/...` (or exten
    per-source breakdown + totals.
 4. Open a video — the player runs the (optional) ad preroll, then streams via the
    signed, IP-bound, ad-gated CDN URL.
-5. Kibana at `http://<server>:5601` shows app/worker/nginx logs.
+5. Kibana (bound to `127.0.0.1:5601`, no auth) shows app/worker/nginx logs —
+   reach it via an SSH tunnel: `ssh -L 5601:127.0.0.1:5601 user@server`.
 
 ## Operations
 

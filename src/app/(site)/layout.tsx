@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import Script from "next/script";
 import { getCurrentSite } from "@/lib/site";
 import Header from "@/components/site/Header";
 import Footer from "@/components/site/Footer";
@@ -15,6 +16,8 @@ export async function generateMetadata(): Promise<Metadata> {
 export default function SiteLayout({ children }: { children: React.ReactNode }) {
   return (
     <div className="min-h-screen bg-zinc-950 text-zinc-100">
+      {/* ExoClick ad provider (loads once for all public pages). */}
+      <Script src="https://a.magsrv.com/ad-provider.js" strategy="afterInteractive" />
       <Header />
       <main className="mx-auto max-w-7xl px-4 py-6">{children}</main>
       <Footer />

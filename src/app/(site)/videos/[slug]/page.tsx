@@ -10,6 +10,7 @@ import { listVideos } from "@/lib/queries";
 import VideoPlayer from "@/components/player/VideoPlayer";
 import VideoGrid from "@/components/site/VideoGrid";
 import JsonLd from "@/components/site/JsonLd";
+import AdZone from "@/components/ads/AdZone";
 
 export const dynamic = "force-dynamic";
 
@@ -166,6 +167,8 @@ export default async function VideoPage({
             {video.description}
           </p>
         )}
+
+        <AdZone zoneId={process.env.EXO_ZONE_UNDER_PLAYER} className="mt-6" />
       </div>
 
       {related.length > 0 && (

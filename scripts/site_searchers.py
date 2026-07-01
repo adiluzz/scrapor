@@ -128,6 +128,155 @@ def _pages(need, per_page):
     return max(2, -(-need // max(1, per_page)))
 
 
+# ── HTML search fallback (curl_cffi + bs4) ────────────────────────────
+# Used for sources that have no working library search (RedTube, SpankBang)
+# and as a fallback when a library returns nothing (XHamster, YouPorn).
+# We only extract video-page URLs (+ best-effort title/duration/thumbnail)
+# from the search-results HTML; the worker downloads each via yt-dlp.
+_HTML_HEADERS = {
+    "User-Agent": ("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
+                   "(KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"),
+    "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8",
+    "Accept-Language": "en-US,en;q=0.9",
+}
+_DUR_RE = re.compile(r"\b(\d{1,2}):([0-5]\d)(?::([0-5]\d))?\b")
+
+
+def _html_get(url):
+    """Fetch a page, preferring curl_cffi (chrome impersonation beats most bot
+    protection), then httpx, then urllib. Returns "" on any failure."""
+    try:
+        from curl_cffi import requests as _cr
+        r = _cr.get(url, impersonate="chrome", timeout=30)
+        if r.status_code == 200 and r.text:
+            return r.text
+    except Exception:
+        pass
+    try:
+        import httpx
+        r = httpx.get(url, headers=_HTML_HEADERS, timeout=30, follow_redirects=True)
+        if r.status_code == 200 and r.text:
+            return r.text
+    except Exception:
+        pass
+    try:
+        import urllib.request
+        req = urllib.request.Request(url, headers=_HTML_HEADERS)
+        with urllib.request.urlopen(req, timeout=30) as resp:
+            return resp.read().decode("utf-8", "ignore")
+    except Exception:
+        return ""
+
+
+def _find_duration(node):
+    for _ in range(4):
+        if node is None or not hasattr(node, "get_text"):
+            break
+        m = _DUR_RE.search(node.get_text(" ", strip=True))
+        if m:
+            if m.group(3):
+                return int(m.group(1)) * 3600 + int(m.group(2)) * 60 + int(m.group(3))
+            return int(m.group(1)) * 60 + int(m.group(2))
+        node = getattr(node, "parent", None)
+    return 0
+
+
+def _find_thumb(node):
+    for _ in range(3):
+        if node is None or not hasattr(node, "find"):
+            break
+        img = node.find("img")
+        if img:
+            for attr in ("data-original", "data-src", "data-thumb_url", "data-thumb", "src"):
+                v = img.get(attr)
+                if v and str(v).startswith("http"):
+                    return str(v)
+        node = getattr(node, "parent", None)
+    return ""
+
+
+def _html_search(source, query, count, skip, min_duration, *,
+                 domain, base, page_url, link_re, max_pages=4):
+    from urllib.parse import quote_plus, urljoin, urlparse
+    need = count + skip
+    try:
+        from bs4 import BeautifulSoup
+    except Exception as e:  # noqa: BLE001
+        print(f"[site_searchers] {source} html: bs4 unavailable: {e!r}", file=sys.stderr)
+        return []
+    q = quote_plus(query)
+    out, seen = [], set()
+    try:
+        for n in range(1, max_pages + 1):
+            if len(out) >= need:
+                break
+            html = _html_get(page_url(q, n))
+            if not html:
+                if n == 1:
+                    break
+                continue
+            soup = BeautifulSoup(html, "html.parser")
+            for a in soup.find_all("a", href=True):
+                full = urljoin(base, a["href"])
+                parsed = urlparse(full)
+                if domain not in (parsed.netloc or ""):
+                    continue
+                if not link_re.search(parsed.path):
+                    continue
+                clean = f"{parsed.scheme}://{parsed.netloc}{parsed.path}"
+                if clean in seen:
+                    continue
+                seen.add(clean)
+                dur = _find_duration(a)
+                if dur and dur < min_duration:
+                    continue
+                title = (a.get("title") or a.get("data-title")
+                         or a.get_text(" ", strip=True) or "").strip()
+                out.append(_norm(clean, title or "Unknown", dur or None,
+                                 thumbnail=_find_thumb(a)))
+                if len(out) >= need:
+                    break
+    except Exception as e:  # noqa: BLE001
+        print(f"[site_searchers] {source} html failed: {e!r}", file=sys.stderr, flush=True)
+    return out[skip:skip + count]
+
+
+def _html_redtube(query, count, skip=0, min_duration=600):
+    return _html_search(
+        "RedTube", query, count, skip, min_duration,
+        domain="redtube.com", base="https://www.redtube.com",
+        page_url=lambda q, n: f"https://www.redtube.com/?search={q}&page={n}",
+        link_re=re.compile(r"^/\d{4,}$"),
+    )
+
+
+def _html_spankbang(query, count, skip=0, min_duration=600):
+    return _html_search(
+        "SpankBang", query, count, skip, min_duration,
+        domain="spankbang.com", base="https://spankbang.com",
+        page_url=lambda q, n: f"https://spankbang.com/s/{q}/{n}/",
+        link_re=re.compile(r"^/[0-9a-z]+/video/"),
+    )
+
+
+def _html_xhamster(query, count, skip=0, min_duration=600):
+    return _html_search(
+        "XHamster", query, count, skip, min_duration,
+        domain="xhamster.com", base="https://xhamster.com",
+        page_url=lambda q, n: f"https://xhamster.com/search/{q}?page={n}",
+        link_re=re.compile(r"^/videos/"),
+    )
+
+
+def _html_youporn(query, count, skip=0, min_duration=600):
+    return _html_search(
+        "YouPorn", query, count, skip, min_duration,
+        domain="youporn.com", base="https://www.youporn.com",
+        page_url=lambda q, n: f"https://www.youporn.com/search/?query={q}&page={n}",
+        link_re=re.compile(r"^/watch/\d+"),
+    )
+
+
 # ── XNXX ──────────────────────────────────────────────────────────────
 def search_xnxx(query, count, skip=0, min_duration=600):
     need = count + skip
@@ -220,7 +369,8 @@ def search_xhamster(query, count, skip=0, min_duration=600):
                                     min_duration=md, pages=pages)
         return await _collect(agen, extract, need, min_duration)
 
-    return _run("XHamster", run, skip, count)
+    res = _run("XHamster", run, skip, count)
+    return res or _html_xhamster(query, count, skip, min_duration)
 
 
 # ── XVideos ───────────────────────────────────────────────────────────
@@ -315,7 +465,8 @@ def search_youporn(query, count, skip=0, min_duration=600):
                                     filter_duration_minimum=md)
         return await _collect(agen, extract, need, min_duration)
 
-    return _run("YouPorn", run, skip, count)
+    res = _run("YouPorn", run, skip, count)
+    return res or _html_youporn(query, count, skip, min_duration)
 
 
 # ── HQPorner ──────────────────────────────────────────────────────────
@@ -392,6 +543,8 @@ SEARCHERS = {
     "Eporner": search_eporner,
     "YouPorn": search_youporn,
     "HQPorner": search_hqporner,
-    "RedTube": lambda q, c, s=0, m=600: search_ytdlp(q, c, s, m, prefix="rtsearch"),
-    "SpankBang": lambda q, c, s=0, m=600: search_ytdlp(q, c, s, m, prefix="sbsearch"),
+    # No library and no yt-dlp search extractor exist for these two, so discover
+    # via HTML search; the worker downloads each URL with yt-dlp.
+    "RedTube": _html_redtube,
+    "SpankBang": _html_spankbang,
 }

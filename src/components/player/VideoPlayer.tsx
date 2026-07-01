@@ -12,6 +12,16 @@ type Storyboard = { sprite: string; vtt: string } | null;
 type Cue = { start: number; end: number; x: number; y: number; w: number; h: number };
 
 const BUCKET_SEC = 5;
+const SKIP_FORWARD_SEC = 7;
+const SKIP_BACK_SEC = 78;
+
+function formatTime(sec: number): string {
+  const s = Math.max(0, Math.floor(sec));
+  const h = Math.floor(s / 3600);
+  const m = Math.floor((s % 3600) / 60);
+  const ss = (s % 60).toString().padStart(2, "0");
+  return h > 0 ? `${h}:${m.toString().padStart(2, "0")}:${ss}` : `${m}:${ss}`;
+}
 
 async function parseVtt(url: string): Promise<Cue[]> {
   try {
@@ -57,8 +67,10 @@ export default function VideoPlayer({
   initialPositionSec?: number;
 }) {
   const videoRef = useRef<HTMLDivElement>(null);
+  const rootRef = useRef<HTMLDivElement>(null);
   const playerRef = useRef<Player | null>(null);
   const [status, setStatus] = useState<"idle" | "ad" | "loading" | "playing" | "error">("idle");
+  const [controlsVisible, setControlsVisible] = useState(true);
   const [adSkipIn, setAdSkipIn] = useState<number | null>(null);
   const [adCanSkip, setAdCanSkip] = useState(false);
   const adVideoRef = useRef<HTMLVideoElement>(null);
@@ -66,7 +78,7 @@ export default function VideoPlayer({
   const lastFlush = useRef(0);
   const viewCounted = useRef(false);
   const cuesRef = useRef<Cue[]>([]);
-  const [preview, setPreview] = useState<{ left: number; cue: Cue } | null>(null);
+  const [preview, setPreview] = useState<{ left: number; cue: Cue; time: number } | null>(null);
 
   // Initialize the Video.js player once.
   useEffect(() => {
@@ -82,6 +94,12 @@ export default function VideoPlayer({
       playsinline: true,
     });
     playerRef.current = player;
+
+    // Tie overlay visibility to Video.js control-bar activity so the heatmap
+    // fades in/out together with the bottom control bar.
+    player.on("useractive", () => setControlsVisible(true));
+    player.on("userinactive", () => setControlsVisible(false));
+    player.on("pause", () => setControlsVisible(true));
 
     if (storyboard) parseVtt(storyboard.vtt).then((c) => (cuesRef.current = c));
 
@@ -140,11 +158,20 @@ export default function VideoPlayer({
       if (seekBar) {
         seekBar.addEventListener("mousemove", (e: MouseEvent) => {
           const rect = seekBar.getBoundingClientRect();
+          const root = rootRef.current?.getBoundingClientRect();
+          if (!root) return;
           const pct = Math.min(1, Math.max(0, (e.clientX - rect.left) / rect.width));
           const dur = player.duration() || 0;
           const time = pct * dur;
-          const cue = cuesRef.current.find((c) => time >= c.start && time < c.end);
-          if (cue) setPreview({ left: e.clientX - rect.left, cue });
+          const cue =
+            cuesRef.current.find((c) => time >= c.start && time < c.end) ||
+            cuesRef.current[cuesRef.current.length - 1];
+          if (!cue) return;
+          // Position relative to the outer container (the preview is absolutely
+          // positioned there), and clamp so it never overflows the player edges.
+          const half = cue.w / 2;
+          const left = Math.min(root.width - half, Math.max(half, e.clientX - root.left));
+          setPreview({ left, cue, time });
         });
         seekBar.addEventListener("mouseleave", () => setPreview(null));
       }
@@ -158,6 +185,26 @@ export default function VideoPlayer({
     return () => window.removeEventListener("beforeunload", onUnload);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // Arrow-key seeking: → skips forward, ← skips back.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      const player = playerRef.current;
+      if (!player || status !== "playing") return;
+      const t = e.target as HTMLElement | null;
+      if (t && (t.tagName === "INPUT" || t.tagName === "TEXTAREA" || t.isContentEditable)) return;
+      const cur = player.currentTime() || 0;
+      if (e.key === "ArrowRight") {
+        e.preventDefault();
+        player.currentTime(Math.min(player.duration() || cur, cur + SKIP_FORWARD_SEC));
+      } else if (e.key === "ArrowLeft") {
+        e.preventDefault();
+        player.currentTime(Math.max(0, cur - SKIP_BACK_SEC));
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [status]);
 
   async function grantAndPlay(adSessionId: string, outcome: string) {
     setStatus("loading");
@@ -226,9 +273,13 @@ export default function VideoPlayer({
   }
 
   return (
-    <div className="relative">
+    <div ref={rootRef} className="relative">
       {heatmap.length > 0 && status === "playing" && (
-        <div className="pointer-events-none absolute inset-x-0 bottom-10 z-10 px-1">
+        <div
+          className={`pointer-events-none absolute inset-x-0 bottom-10 z-10 px-1 transition-opacity duration-300 ${
+            controlsVisible ? "opacity-100" : "opacity-0"
+          }`}
+        >
           <Heatmap buckets={heatmap} />
         </div>
       )}
@@ -282,15 +333,22 @@ export default function VideoPlayer({
       {/* Storyboard scrubber preview */}
       {preview && storyboard && (
         <div
-          className="pointer-events-none absolute bottom-14 z-30 -translate-x-1/2 rounded border border-zinc-700 shadow-xl"
-          style={{
-            left: preview.left,
-            width: preview.cue.w,
-            height: preview.cue.h,
-            backgroundImage: `url(${storyboard.sprite})`,
-            backgroundPosition: `-${preview.cue.x}px -${preview.cue.y}px`,
-          }}
-        />
+          className="pointer-events-none absolute bottom-14 z-30 -translate-x-1/2"
+          style={{ left: preview.left }}
+        >
+          <div
+            className="overflow-hidden rounded border border-zinc-600 shadow-xl"
+            style={{
+              width: preview.cue.w,
+              height: preview.cue.h,
+              backgroundImage: `url(${storyboard.sprite})`,
+              backgroundPosition: `-${preview.cue.x}px -${preview.cue.y}px`,
+            }}
+          />
+          <div className="mt-1 text-center text-[11px] font-medium text-white [text-shadow:0_1px_2px_rgba(0,0,0,0.9)]">
+            {formatTime(preview.time)}
+          </div>
+        </div>
       )}
     </div>
   );

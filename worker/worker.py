@@ -250,11 +250,12 @@ def process_run(conn, run_id: str):
             s_stats["found"] = len(results)
             totals["found"] += len(results)
             for v in results:
-                if v["url"] in seen:
+                dedupe_key = db.canonical_key(v["url"]) or v["url"]
+                if dedupe_key in seen:
                     s_stats["skipped"] += 1
                     totals["skip"] += 1
                     continue
-                seen.add(v["url"])
+                seen.add(dedupe_key)
                 outcome = _process_one(conn, run, source, v)
                 if outcome == "new":
                     s_stats["new_videos"] += 1; totals["new"] += 1

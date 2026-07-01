@@ -82,6 +82,10 @@ server {
         proxy_cache_key   "$uri";
         add_header        X-Cache-Status $upstream_cache_status;
 
+        # storyboard.vtt is read via fetch() from the main site origin, so the
+        # cross-origin read needs CORS. Harmless for the image/video assets.
+        add_header        Access-Control-Allow-Origin "*" always;
+
         # Send S3 the exact host the presigned URL was signed for (SigV4 signs Host).
         proxy_set_header  Host $s3host;
         proxy_set_header  Authorization "";

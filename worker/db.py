@@ -46,10 +46,91 @@ def connect():
     return psycopg.connect(dsn, autocommit=True)
 
 
+# Query params that never identify a specific video (tracking / session noise).
+_TRACKING_PARAMS = {
+    "utm_source", "utm_medium", "utm_campaign", "utm_term", "utm_content",
+    "ref", "referrer", "from", "source", "tracking", "aff", "affiliate",
+    "promo", "sid", "session", "fbclid", "gclid", "_ga", "spm",
+}
+
+
+def canonical_key(url: str) -> str:
+    """
+    Stable per-video identity used for dedup, in addition to the raw sourceUrl.
+
+    Extracts the site's own video id when the host is recognized (e.g.
+    pornhub viewkey, youporn/redtube numeric id, xhamster trailing id), so the
+    same video is caught even when its URL varies (www/m host, tracking params,
+    trailing slash). Falls back to a normalized URL otherwise. Returns "" for an
+    empty/unparseable url so callers can skip keying on it.
+    """
+    if not url:
+        return ""
+    try:
+        parts = urlsplit(url.strip())
+    except Exception:
+        return ""
+    host = (parts.netloc or "").lower().split("@")[-1].split(":")[0]
+    host = re.sub(r"^(?:www\d*|m|mobile|[a-z]{2})\.", "", host)
+    path = parts.path or "/"
+    q = dict(parse_qsl(parts.query, keep_blank_values=True))
+
+    # Per-site video-id extraction — the strongest "only this video" key.
+    if "pornhub" in host and q.get("viewkey"):
+        return f"pornhub:{q['viewkey']}"
+    if "youporn" in host:
+        m = re.search(r"/watch/(\d+)", path)
+        if m:
+            return f"youporn:{m.group(1)}"
+    if "redtube" in host:
+        m = re.search(r"/(\d+)", path)
+        if m:
+            return f"redtube:{m.group(1)}"
+    if "xvideos" in host:
+        m = re.search(r"/video\.?([a-z0-9]+)", path, re.I)
+        if m:
+            return f"xvideos:{m.group(1).lower()}"
+    if "xnxx" in host:
+        m = re.search(r"/video-?([a-z0-9]+)", path, re.I)
+        if m:
+            return f"xnxx:{m.group(1).lower()}"
+    if "eporner" in host:
+        m = re.search(r"/video-([a-z0-9]+)", path, re.I)
+        if m:
+            return f"eporner:{m.group(1).lower()}"
+    if "xhamster" in host:
+        m = re.search(r"-(\d{4,})/?$", path) or re.search(r"/videos/(\d+)", path)
+        if m:
+            return f"xhamster:{m.group(1)}"
+    if "spankbang" in host:
+        m = re.search(r"^/([a-z0-9]+)/(?:video|play)/", path, re.I)
+        if m:
+            return f"spankbang:{m.group(1).lower()}"
+
+    # Generic fallback: normalized url (drop tracking params, sort the rest,
+    # strip trailing slash) so cosmetic differences collapse to one key.
+    keep = sorted((k, v) for k, v in q.items() if k.lower() not in _TRACKING_PARAMS)
+    norm_path = path.rstrip("/") or "/"
+    query = urlencode(keep)
+    base = f"{host}{norm_path}"
+    return f"{base}?{query}" if query else base
+
+
 def video_exists(conn, source_url: str) -> bool:
-    """Global dedup — includes soft-deleted rows (no isDeleted filter)."""
+    """
+    Global dedup — matches on the raw sourceUrl OR the canonical dedupeKey, and
+    intentionally includes soft-deleted rows (no isDeleted filter) so a video
+    that was already scraped and later deleted is never downloaded again.
+    """
+    key = canonical_key(source_url)
     with conn.cursor() as cur:
-        cur.execute('SELECT id FROM "Video" WHERE "sourceUrl" = %s', (source_url,))
+        if key:
+            cur.execute(
+                'SELECT 1 FROM "Video" WHERE "sourceUrl" = %s OR "dedupeKey" = %s LIMIT 1',
+                (source_url, key),
+            )
+        else:
+            cur.execute('SELECT 1 FROM "Video" WHERE "sourceUrl" = %s LIMIT 1', (source_url,))
         return cur.fetchone() is not None
 
 
@@ -93,14 +174,15 @@ def create_video(conn, *, site_id, source_url, title, description, duration_sec,
                  tags, pornstars):
     vid = _cuid()
     slug = _unique_slug(conn, site_id, title)
+    dedupe_key = canonical_key(source_url) or None
     with conn.cursor() as cur:
         cur.execute(
             'INSERT INTO "Video" '
-            '(id,slug,"siteId",title,"sourceUrl","sourceSite",description,"durationSec",'
+            '(id,slug,"siteId",title,"sourceUrl","dedupeKey","sourceSite",description,"durationSec",'
             '"s3VideoKey","s3ThumbKey","s3PreviewKey","s3StoryboardKey","s3StoryboardVttKey",'
             '"scrapeRunId","viewCount","isDeleted","createdAt","updatedAt") '
-            'VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,0,false,now(),now())',
-            (vid, slug, site_id, title[:400], source_url, source_site, description or None,
+            'VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,0,false,now(),now())',
+            (vid, slug, site_id, title[:400], source_url, dedupe_key, source_site, description or None,
              duration_sec, s3_video_key, s3_thumb_key, s3_preview_key,
              s3_storyboard_key, s3_storyboard_vtt_key, scrape_run_id),
         )

@@ -64,6 +64,7 @@ model Video {
   site               Site            @relation(fields: [siteId], references: [id])
   title              String
   sourceUrl          String          @unique // GLOBAL dedup key (incl. soft-deleted)
+  dedupeKey          String? // canonical per-video identity (site video-id or normalized url); dedup incl. soft-deleted
   sourceSite         String? // "PornHub", "XVideos", ...
   description        String?
   status             VideoStatus     @default(READY) // creator uploads start PENDING
@@ -88,6 +89,7 @@ model Video {
   updatedAt          DateTime        @updatedAt
 
   @@unique([siteId, slug])
+  @@index([dedupeKey])
   @@index([siteId, isDeleted, createdAt])
   @@index([siteId, isDeleted, viewCount])
 }

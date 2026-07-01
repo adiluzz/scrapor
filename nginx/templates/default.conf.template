@@ -49,6 +49,11 @@ server {
         # Hotlink protection.
         valid_referers none blocked server_names ${PRIMARY_DOMAIN} *.${PRIMARY_DOMAIN};
 
+        # Capture the ad-claim token in the MAIN request context. $arg_t is empty
+        # inside the auth subrequest (it has no query string), so it must be
+        # snapshotted here and passed via this variable to /_authorize_stream.
+        set               $stream_token $arg_t;
+
         auth_request      /_authorize_stream;
         auth_request_set  $s3url $upstream_http_x_s3_url;
         auth_request_set  $s3host $upstream_http_x_s3_host;
@@ -86,7 +91,7 @@ server {
     # Internal authorize subrequests → app mints a presigned S3 GET URL.
     location = /_authorize_stream {
         internal;
-        proxy_pass              http://web_upstream/api/cdn/authorize?videoId=$vid&t=$arg_t;
+        proxy_pass              http://web_upstream/api/cdn/authorize?videoId=$vid&t=$stream_token;
         proxy_pass_request_body off;
         proxy_set_header        Content-Length "";
         proxy_set_header        X-Original-Host $http_host;

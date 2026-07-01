@@ -5,10 +5,11 @@ export const revalidate = 0;
 
 export async function GET(
   _req: Request,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const id = String(params.id || "").trim();
+    const { id: idParam } = await params;
+    const id = String(idParam || "").trim();
     if (!id) throw new Error("Chat id is required.");
     const thread = await getChatThread(id);
     if (!thread) {

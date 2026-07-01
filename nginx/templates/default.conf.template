@@ -51,8 +51,10 @@ server {
 
         auth_request      /_authorize_stream;
         auth_request_set  $s3url $upstream_http_x_s3_url;
+        auth_request_set  $s3host $upstream_http_x_s3_host;
 
-        proxy_set_header  Host "";
+        # Send S3 the exact host the presigned URL was signed for (SigV4 signs Host).
+        proxy_set_header  Host $s3host;
         proxy_set_header  Authorization "";
         proxy_hide_header x-amz-id-2;
         proxy_hide_header x-amz-request-id;
@@ -68,13 +70,15 @@ server {
 
         auth_request      /_authorize_asset;
         auth_request_set  $s3url $upstream_http_x_s3_url;
+        auth_request_set  $s3host $upstream_http_x_s3_host;
 
         proxy_cache       cdncache;
         proxy_cache_valid 200 206 12h;
         proxy_cache_key   "$uri";
         add_header        X-Cache-Status $upstream_cache_status;
 
-        proxy_set_header  Host "";
+        # Send S3 the exact host the presigned URL was signed for (SigV4 signs Host).
+        proxy_set_header  Host $s3host;
         proxy_set_header  Authorization "";
         proxy_pass        $s3url;
     }

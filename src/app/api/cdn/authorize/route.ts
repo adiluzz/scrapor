@@ -47,5 +47,8 @@ export async function GET(request: Request) {
   const presigned = await presignGet(key, 60);
   const res = new NextResponse(null, { status: 200 });
   res.headers.set("X-S3-Url", presigned);
+  // nginx must send this exact Host to S3 — a presigned GET signs the Host
+  // header, so proxying with a different/empty Host yields SignatureDoesNotMatch.
+  res.headers.set("X-S3-Host", new URL(presigned).host);
   return res;
 }

@@ -40,10 +40,12 @@ env/
 .ruff_cache/
 
 # ── Generated / downloaded media (never commit large binaries) ────────
-downloads/
-videos/
-library/
-uploads/
+# Anchored to repo root so they don't also ignore app routes like
+# src/app/(site)/videos/ or src/app/api/.../uploads/.
+/downloads/
+/videos/
+/library/
+/uploads/
 .ollama-local/
 
 # ── Recordings & screenshots (runtime artifacts) ──────────────────────

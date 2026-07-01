@@ -2,18 +2,15 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { prisma } from "@/lib/db";
 import { requireAdmin } from "@/lib/session";
-import { thumbUrl, loadStoryboardData } from "@/lib/media";
+import { adminThumbUrl, loadStoryboardData } from "@/lib/media";
 import { formatDuration } from "@/lib/videos";
 import VideoPlayer from "@/components/player/VideoPlayer";
 
 export const dynamic = "force-dynamic";
 
 /**
- * Admin video detail / preview. Lives under /admin so it works on the admin
- * subdomain (where middleware rewrites non-/admin paths into /admin) and shows
- * any video regardless of status or soft-delete. Playback of a soft-deleted
- * video is limited (the CDN authorize step rejects deleted videos), but the
- * metadata + thumbnail always render.
+ * Admin video detail / preview. Shows any video regardless of status or
+ * soft-delete; playback uses admin-only routes that bypass CDN/ad gates.
  */
 export default async function AdminVideoDetail({
   params,
@@ -33,7 +30,10 @@ export default async function AdminVideoDetail({
   });
   if (!video) notFound();
 
-  const [poster, storyboard] = await Promise.all([thumbUrl(video), loadStoryboardData(video)]);
+  const [poster, storyboard] = await Promise.all([
+    adminThumbUrl(video),
+    loadStoryboardData(video, { directS3: video.isDeleted }),
+  ]);
 
   let heatmap: number[] = [];
   try {
@@ -66,7 +66,13 @@ export default async function AdminVideoDetail({
       </p>
 
       <div className="mt-4 overflow-hidden rounded-xl bg-black">
-        <VideoPlayer videoId={video.id} poster={poster} storyboard={storyboard} heatmap={heatmap} />
+        <VideoPlayer
+          videoId={video.id}
+          poster={poster}
+          storyboard={storyboard}
+          heatmap={heatmap}
+          adminPreview
+        />
       </div>
 
       {video.sourceUrl && (

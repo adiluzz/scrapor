@@ -31,6 +31,8 @@ export function makeStreamToken(payload: {
   siteId: string;
   exp: number;
   adSessionId: string;
+  /** Set when an admin previews a soft-deleted or hidden video. */
+  adminPreview?: boolean;
 }): string {
   const body = base64url(Buffer.from(JSON.stringify(payload)));
   const sig = base64url(crypto.createHmac("sha256", SECRET).update(body).digest());
@@ -38,7 +40,7 @@ export function makeStreamToken(payload: {
 }
 
 export function verifyStreamToken(token: string):
-  | { videoId: string; siteId: string; exp: number; adSessionId: string }
+  | { videoId: string; siteId: string; exp: number; adSessionId: string; adminPreview?: boolean }
   | null {
   const [body, sig] = (token || "").split(".");
   if (!body || !sig) return null;
@@ -63,6 +65,7 @@ export function mintStreamUrl(opts: {
   clientIp: string;
   adSessionId: string;
   ttlSeconds?: number;
+  adminPreview?: boolean;
 }): string {
   const ttl = opts.ttlSeconds ?? TTL;
   const expires = Math.floor(Date.now() / 1000) + ttl;
@@ -73,6 +76,7 @@ export function mintStreamUrl(opts: {
     siteId: opts.siteId,
     exp: expires,
     adSessionId: opts.adSessionId,
+    adminPreview: opts.adminPreview,
   });
   return `${CDN_BASE_URL}${uri}?e=${expires}&s=${s}&t=${encodeURIComponent(t)}`;
 }

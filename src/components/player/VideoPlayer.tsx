@@ -33,12 +33,15 @@ export default function VideoPlayer({
   storyboard,
   heatmap,
   initialPositionSec = 0,
+  adminPreview = false,
 }: {
   videoId: string;
   poster: string;
   storyboard: Storyboard;
   heatmap: number[];
   initialPositionSec?: number;
+  /** Admin panel: skip ads and allow playback of soft-deleted videos. */
+  adminPreview?: boolean;
 }) {
   const videoRef = useRef<HTMLDivElement>(null);
   const rootRef = useRef<HTMLDivElement>(null);
@@ -266,6 +269,17 @@ export default function VideoPlayer({
   async function start() {
     setStatus("loading");
     try {
+      if (adminPreview) {
+        const res = await fetch(`/api/admin/videos/${videoId}/playback`, { method: "POST" });
+        if (!res.ok) throw new Error("admin playback failed");
+        const { url } = await res.json();
+        const player = playerRef.current!;
+        player.src({ src: url, type: "video/mp4" });
+        attachContentTracking();
+        await player.play()?.catch(() => {});
+        setStatus("playing");
+        return;
+      }
       const res = await fetch(`/api/videos/${videoId}/ad-session`, { method: "POST" });
       const data = await res.json();
       if (data.adRequired && data.vastTagUrl) {

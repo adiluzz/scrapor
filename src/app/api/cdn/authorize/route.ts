@@ -21,8 +21,16 @@ export async function GET(request: Request) {
 
   if (!videoId) return new NextResponse("bad request", { status: 400 });
 
-  // Soft-delete revokes access instantly (video row must exist and be live).
-  const video = await prisma.video.findFirst({ where: { id: videoId, isDeleted: false } });
+  let adminPreview = false;
+  if (!file) {
+    const claim = verifyStreamToken(token);
+    adminPreview = Boolean(claim?.adminPreview);
+  }
+
+  // Soft-delete revokes public CDN access; admin-preview stream tokens bypass this.
+  const video = await prisma.video.findFirst({
+    where: { id: videoId, ...(adminPreview ? {} : { isDeleted: false }) },
+  });
   if (!video) return new NextResponse("gone", { status: 410 });
 
   let key: string;

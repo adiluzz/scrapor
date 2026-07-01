@@ -55,15 +55,21 @@ export async function storyboardUrls(
 /**
  * Storyboard scrubber data for the video player: signed sprite URL plus VTT cues
  * parsed on the server (avoids a cross-origin fetch to cdn.* from the browser).
+ *
+ * When `directS3` is true (admin preview of a soft-deleted video), the sprite is
+ * a presigned S3 URL because the CDN asset gate rejects deleted rows.
  */
 export async function loadStoryboardData(
-  video: VideoMediaFields & { siteId: string }
+  video: VideoMediaFields & { siteId: string },
+  opts?: { directS3?: boolean }
 ): Promise<{ sprite: string; cues: StoryboardCue[] } | null> {
   if (!isS3Configured() || !video.s3StoryboardKey || !video.s3StoryboardVttKey) {
     return null;
   }
   const ip = await getClientIp();
-  const sprite = mintAssetUrl({ videoId: video.id, file: "storyboard.jpg", clientIp: ip });
+  const sprite = opts?.directS3
+    ? await presignGet(s3Keys.storyboard(video.siteId, video.id), 3600)
+    : mintAssetUrl({ videoId: video.id, file: "storyboard.jpg", clientIp: ip });
   try {
     const vttUrl = await presignGet(s3Keys.storyboardVtt(video.siteId, video.id), 120);
     const res = await fetch(vttUrl, { cache: "no-store" });
@@ -73,4 +79,14 @@ export async function loadStoryboardData(
   } catch {
     return { sprite, cues: [] };
   }
+}
+
+/** Thumbnail for admin preview — presigned S3 when the video is soft-deleted. */
+export async function adminThumbUrl(
+  video: VideoMediaFields & { siteId: string; isDeleted: boolean }
+): Promise<string> {
+  if (isS3Configured() && video.s3ThumbKey && video.isDeleted) {
+    return presignGet(s3Keys.thumb(video.siteId, video.id), 3600);
+  }
+  return thumbUrl(video);
 }

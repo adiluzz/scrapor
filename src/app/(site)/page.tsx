@@ -1,10 +1,18 @@
-import { getCurrentSiteId } from "@/lib/site";
-import { listVideos, parseDiscoveryParams } from "@/lib/queries";
-import VideoGrid from "@/components/site/VideoGrid";
 import Filters from "@/components/site/Filters";
 import Pagination from "@/components/site/Pagination";
+import VideoGrid from "@/components/site/VideoGrid";
+import { listVideos, parseDiscoveryParams } from "@/lib/queries";
+import { getCurrentSiteId } from "@/lib/site";
+import type { Metadata } from "next";
 
 export const dynamic = "force-dynamic";
+
+// Renders: <meta name="replaec" content="replace">  (replace name/content below)
+export const metadata: Metadata = {
+  other: {
+    "6a97888e-site-verification": "b4df9ea4db568763f1b9f8188c253ac9",
+  },
+};
 
 type SearchParams = Record<string, string | string[] | undefined>;
 

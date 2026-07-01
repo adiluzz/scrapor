@@ -1,0 +1,20 @@
+#!/usr/bin/env bash
+# Git pre-push hook (zero-trust): block any push that would ship secrets.
+#
+# Enabled via `git config core.hooksPath .githooks`, which the npm "prepare"
+# script runs automatically after `npm install`. This enforces the secrets scan
+# for EVERY push — CLI, IDE, CI, or agent — not just Cursor-driven ones.
+set -euo pipefail
+
+root="$(git rev-parse --show-toplevel 2>/dev/null || echo .)"
+
+if ! bash "$root/scripts/secrets-scan.sh"; then
+  {
+    echo ""
+    echo "✖ Push blocked by pre-push secrets scan (.githooks/pre-push)."
+    echo "  Move the flagged values into an untracked .env, remove them from tracked"
+    echo "  files, then push again. To bypass in a true emergency: git push --no-verify"
+  } >&2
+  exit 1
+fi
+exit 0

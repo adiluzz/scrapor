@@ -1,0 +1,27 @@
+---
+description: Agent must handle tool call errors gracefully by reading the error and retrying with a fix instead of failing the mission
+alwaysApply: true
+---
+
+# Tool Call Error Resilience
+
+When a tool call returns an error, **never treat it as a mission failure**. Always:
+
+1. **Read the full error message** returned by the tool.
+2. **Diagnose the cause** — wrong parameters, missing context, invalid path, permission issue, etc.
+3. **Fix the call** — correct the arguments, try an alternative approach, or use a different tool to achieve the same goal.
+4. **Retry** the corrected call before giving up.
+5. Only **report to the user** after exhausting reasonable attempts, explaining what failed and why.
+
+## Rules
+
+- A single tool error must never abort the current task.
+- Do not re-run the exact same failing call unchanged — always apply a fix.
+- If a tool fails twice with the same error, switch to an alternative approach (different tool, different parameters, different strategy).
+- Treat the error response as actionable feedback, not a stop signal.
+
+## Example
+
+If `Shell` returns `No such file or directory`:
+- ❌ Stop and say "the command failed"
+- ✅ Use `Glob` or `Read` to locate the correct path, then retry with the right path

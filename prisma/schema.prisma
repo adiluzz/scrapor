@@ -1,0 +1,359 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ─────────────────────────────────────────────────────────────
+// Multi-tenant core
+// ─────────────────────────────────────────────────────────────
+
+model Site {
+  id           String               @id @default(cuid())
+  domain       String               @unique // pisster.com
+  name         String
+  createdAt    DateTime             @default(now())
+  videos       Video[]
+  users        User[]
+  scrapeRuns   ScrapeRun[]
+  pornstars    Pornstar[]
+  creators     CreatorProfile[]
+  searches     SearchQuery[]
+  applications CreatorApplication[]
+}
+
+enum Role {
+  ADMIN
+  USER
+  CREATOR
+}
+
+model User {
+  id              String               @id @default(cuid())
+  email           String
+  passwordHash    String
+  role            Role                 @default(USER)
+  siteId          String
+  site            Site                 @relation(fields: [siteId], references: [id])
+  emailVerifiedAt DateTime? // set when signup code is confirmed
+  creator         CreatorProfile?
+  applications    CreatorApplication[]
+  createdAt       DateTime             @default(now())
+
+  @@unique([siteId, email])
+}
+
+// ─────────────────────────────────────────────────────────────
+// Videos + taxonomy
+// ─────────────────────────────────────────────────────────────
+
+model Video {
+  id                 String          @id @default(cuid())
+  slug               String
+  siteId             String
+  site               Site            @relation(fields: [siteId], references: [id])
+  title              String
+  sourceUrl          String          @unique // GLOBAL dedup key (incl. soft-deleted)
+  sourceSite         String? // "PornHub", "XVideos", ...
+  description        String?
+  durationSec        Int? // for duration filter
+  s3VideoKey         String?
+  s3ThumbKey         String? // static jpg
+  s3PreviewKey       String? // hover mp4
+  s3StoryboardKey    String? // sprite sheet for scrubber thumbnails
+  s3StoryboardVttKey String? // WebVTT mapping timecodes -> sprite
+  sourceUploadDate   DateTime? // original upload date when scraped (for date sort)
+  viewCount          Int             @default(0)
+  isDeleted          Boolean         @default(false)
+  deletedAt          DateTime?
+  creatorId          String?
+  creator            CreatorProfile? @relation(fields: [creatorId], references: [id])
+  scrapeRunId        String?
+  scrapeRun          ScrapeRun?      @relation(fields: [scrapeRunId], references: [id])
+  pornstars          VideoPornstar[]
+  tags               VideoTag[]
+  heatmap            VideoHeatmap?
+  createdAt          DateTime        @default(now())
+  updatedAt          DateTime        @updatedAt
+
+  @@unique([siteId, slug])
+  @@index([siteId, isDeleted, createdAt])
+  @@index([siteId, isDeleted, viewCount])
+}
+
+model Pornstar {
+  id      String          @id @default(cuid())
+  siteId  String
+  site    Site            @relation(fields: [siteId], references: [id])
+  name    String
+  slug    String
+  bio     String?
+  s3Image String?
+  videos  VideoPornstar[]
+
+  @@unique([siteId, slug])
+}
+
+model VideoPornstar {
+  videoId    String
+  pornstarId String
+  video      Video    @relation(fields: [videoId], references: [id], onDelete: Cascade)
+  pornstar   Pornstar @relation(fields: [pornstarId], references: [id], onDelete: Cascade)
+
+  @@id([videoId, pornstarId])
+  @@index([pornstarId])
+}
+
+model Tag {
+  id     String     @id @default(cuid())
+  siteId String
+  slug   String
+  name   String
+  videos VideoTag[]
+
+  @@unique([siteId, slug])
+}
+
+model VideoTag {
+  videoId String
+  tagId   String
+  video   Video  @relation(fields: [videoId], references: [id], onDelete: Cascade)
+  tag     Tag    @relation(fields: [tagId], references: [id], onDelete: Cascade)
+
+  @@id([videoId, tagId])
+  @@index([tagId])
+}
+
+// ─────────────────────────────────────────────────────────────
+// Creators (user uploads)
+// ─────────────────────────────────────────────────────────────
+
+model CreatorProfile {
+  id          String   @id @default(cuid())
+  userId      String   @unique
+  user        User     @relation(fields: [userId], references: [id])
+  siteId      String
+  site        Site     @relation(fields: [siteId], references: [id])
+  displayName String
+  slug        String
+  bio         String?
+  s3Avatar    String?
+  videos      Video[]
+  createdAt   DateTime @default(now())
+
+  @@unique([siteId, slug])
+}
+
+enum AppStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+model CreatorApplication {
+  id           String    @id @default(cuid())
+  userId       String
+  user         User      @relation(fields: [userId], references: [id])
+  siteId       String
+  site         Site      @relation(fields: [siteId], references: [id])
+  displayName  String
+  desiredSlug  String
+  bio          String?
+  status       AppStatus @default(PENDING)
+  reviewNote   String?
+  reviewedById String?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  @@index([siteId, status])
+}
+
+// ─────────────────────────────────────────────────────────────
+// Scrape jobs
+// ─────────────────────────────────────────────────────────────
+
+enum RunStatus {
+  QUEUED
+  RUNNING
+  DONE
+  ERROR
+}
+
+model ScrapeRun {
+  id             String          @id @default(cuid())
+  siteId         String
+  site           Site            @relation(fields: [siteId], references: [id])
+  query          String
+  selectedSites  String // JSON array of source sites to search
+  minDurationSec Int             @default(600)
+  status         RunStatus       @default(QUEUED)
+  totalFound     Int             @default(0)
+  newVideos      Int             @default(0)
+  skipped        Int             @default(0)
+  failed         Int             @default(0)
+  createdById    String?
+  startedAt      DateTime?
+  finishedAt     DateTime?
+  createdAt      DateTime        @default(now())
+  videos         Video[]
+  siteResults    ScrapeRunSite[]
+
+  @@index([siteId, createdAt])
+}
+
+model ScrapeRunSite {
+  id         String    @id @default(cuid())
+  runId      String
+  run        ScrapeRun @relation(fields: [runId], references: [id], onDelete: Cascade)
+  sourceSite String
+  status     RunStatus @default(QUEUED)
+  found      Int       @default(0)
+  newVideos  Int       @default(0)
+  skipped    Int       @default(0)
+  failed     Int       @default(0)
+  error      String?
+  startedAt  DateTime?
+  finishedAt DateTime?
+
+  @@unique([runId, sourceSite])
+}
+
+// ─────────────────────────────────────────────────────────────
+// Search tracking
+// ─────────────────────────────────────────────────────────────
+
+model SearchQuery {
+  id         String   @id @default(cuid())
+  siteId     String
+  site       Site     @relation(fields: [siteId], references: [id])
+  normalized String // lowercased/trimmed query - the dedup key
+  sample     String // last raw form seen (for display casing)
+  count      Int      @default(1)
+  updatedAt  DateTime @updatedAt
+  createdAt  DateTime @default(now())
+
+  @@unique([siteId, normalized])
+  @@index([siteId, count])
+}
+
+// ─────────────────────────────────────────────────────────────
+// Email 2FA
+// ─────────────────────────────────────────────────────────────
+
+enum CodePurpose {
+  SIGNUP
+  LOGIN
+}
+
+model EmailCode {
+  id         String      @id @default(cuid())
+  email      String
+  siteId     String
+  purpose    CodePurpose
+  codeHash   String
+  expiresAt  DateTime
+  attempts   Int         @default(0)
+  consumedAt DateTime?
+  createdAt  DateTime    @default(now())
+
+  @@index([email, siteId, purpose])
+}
+
+// ─────────────────────────────────────────────────────────────
+// Watch tracking / heatmap
+// ─────────────────────────────────────────────────────────────
+
+model VideoHeatmap {
+  videoId   String   @id
+  video     Video    @relation(fields: [videoId], references: [id], onDelete: Cascade)
+  buckets   String // JSON int[] - one counter per N-second bucket
+  updatedAt DateTime @updatedAt
+}
+
+model WatchProgress {
+  userId      String
+  videoId     String
+  positionSec Int
+  buckets     String // JSON int[] the user has watched
+  updatedAt   DateTime @updatedAt
+
+  @@id([userId, videoId])
+}
+
+// ─────────────────────────────────────────────────────────────
+// AI assistant models (unchanged, internal tooling)
+// ─────────────────────────────────────────────────────────────
+
+model Context {
+  id               String         @id @default(cuid())
+  name             String         @unique
+  content          String
+  selectedToolKeys String?
+  createdAt        DateTime       @default(now())
+  updatedAt        DateTime       @updatedAt
+  skills           ContextSkill[]
+}
+
+model ChatThread {
+  id        String        @id
+  title     String
+  createdAt DateTime      @default(now())
+  updatedAt DateTime      @updatedAt
+  messages  ChatMessage[]
+}
+
+model ChatMessage {
+  id          String           @id
+  threadId    String
+  role        String
+  content     String
+  createdAt   DateTime         @default(now())
+  thread      ChatThread       @relation(fields: [threadId], references: [id], onDelete: Cascade)
+  attachments ChatAttachment[]
+
+  @@index([threadId, createdAt])
+}
+
+model ChatAttachment {
+  id          String      @id @default(cuid())
+  messageId   String
+  url         String
+  contentType String?
+  name        String?
+  createdAt   DateTime    @default(now())
+  message     ChatMessage @relation(fields: [messageId], references: [id], onDelete: Cascade)
+
+  @@index([messageId])
+}
+
+model AgentSkill {
+  id        String         @id @default(cuid())
+  key       String         @unique
+  title     String
+  content   String
+  createdAt DateTime       @default(now())
+  updatedAt DateTime       @updatedAt
+  contexts  ContextSkill[]
+}
+
+model AgentScript {
+  id          String   @id @default(cuid())
+  name        String   @unique
+  description String
+  content     String
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+model ContextSkill {
+  contextId String
+  skillId   String
+  context   Context    @relation(fields: [contextId], references: [id], onDelete: Cascade)
+  skill     AgentSkill @relation(fields: [skillId], references: [id], onDelete: Cascade)
+
+  @@id([contextId, skillId])
+  @@index([skillId])
+}

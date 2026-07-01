@@ -1,0 +1,110 @@
+"use client";
+
+import { Suspense, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
+import Link from "next/link";
+import { signIn } from "next-auth/react";
+
+function LoginForm() {
+  const router = useRouter();
+  const search = useSearchParams();
+  const callbackUrl = search.get("callbackUrl") || "/";
+  const [step, setStep] = useState<"credentials" | "code">("credentials");
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [code, setCode] = useState("");
+  const [error, setError] = useState<string | null>(null);
+  const [loading, setLoading] = useState(false);
+
+  async function submitCredentials(e: React.FormEvent) {
+    e.preventDefault();
+    setError(null);
+    setLoading(true);
+    try {
+      const res = await fetch("/api/auth/login-init", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ email, password }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setError(data.error || "Login failed");
+        return;
+      }
+      setStep("code");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function submitCode(e: React.FormEvent) {
+    e.preventDefault();
+    setError(null);
+    setLoading(true);
+    try {
+      const res = await signIn("credentials", {
+        email,
+        password,
+        code,
+        mode: "login",
+        redirect: false,
+      });
+      if (res?.error) {
+        setError("Invalid or expired code");
+        return;
+      }
+      router.push(callbackUrl);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  return (
+    <div className="flex min-h-screen items-center justify-center bg-zinc-950 px-4">
+      <div className="w-full max-w-sm rounded-2xl border border-zinc-800 bg-zinc-900 p-8">
+        <h1 className="mb-6 text-2xl font-bold text-white">
+          Log in to <span className="text-pink-500">Pisster</span>
+        </h1>
+        {error && <p className="mb-4 rounded bg-red-500/10 px-3 py-2 text-sm text-red-400">{error}</p>}
+
+        {step === "credentials" ? (
+          <form onSubmit={submitCredentials} className="space-y-4">
+            <input type="email" required placeholder="Email" value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              className="w-full rounded-lg border border-zinc-700 bg-zinc-950 px-4 py-2.5 text-sm text-white focus:border-pink-500 focus:outline-none" />
+            <input type="password" required placeholder="Password" value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              className="w-full rounded-lg border border-zinc-700 bg-zinc-950 px-4 py-2.5 text-sm text-white focus:border-pink-500 focus:outline-none" />
+            <button disabled={loading} type="submit"
+              className="w-full rounded-lg bg-pink-600 py-2.5 font-medium text-white hover:bg-pink-500 disabled:opacity-50">
+              {loading ? "Sending code…" : "Continue"}
+            </button>
+          </form>
+        ) : (
+          <form onSubmit={submitCode} className="space-y-4">
+            <p className="text-sm text-zinc-400">We emailed a 6-digit code to {email}.</p>
+            <input inputMode="numeric" required placeholder="123456" value={code}
+              onChange={(e) => setCode(e.target.value)}
+              className="w-full rounded-lg border border-zinc-700 bg-zinc-950 px-4 py-2.5 text-center text-lg tracking-[0.5em] text-white focus:border-pink-500 focus:outline-none" />
+            <button disabled={loading} type="submit"
+              className="w-full rounded-lg bg-pink-600 py-2.5 font-medium text-white hover:bg-pink-500 disabled:opacity-50">
+              {loading ? "Verifying…" : "Verify & log in"}
+            </button>
+          </form>
+        )}
+
+        <p className="mt-6 text-center text-sm text-zinc-500">
+          No account? <Link href="/signup" className="text-pink-400 hover:underline">Sign up</Link>
+        </p>
+      </div>
+    </div>
+  );
+}
+
+export default function LoginPage() {
+  return (
+    <Suspense fallback={<div className="min-h-screen bg-zinc-950" />}>
+      <LoginForm />
+    </Suspense>
+  );
+}

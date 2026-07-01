@@ -1,0 +1,15 @@
+# Core worker infra
+psycopg[binary]==3.2.3
+redis==5.2.1
+boto3==1.35.71
+yt-dlp>=2024.12.0
+
+# Adult-site search APIs (EchterAlsFake ecosystem). Any that fail to import are
+# skipped gracefully per-source at runtime.
+phub
+xnxx-api
+xvideos-api
+xhamster-api
+youporn-api
+eporner-api
+hqporner-api

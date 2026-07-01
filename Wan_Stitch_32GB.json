@@ -1,0 +1,26 @@
+{
+  "last_node_id": 9,
+  "nodes": [
+    {"id": 1, "type": "UNETLoader", "widgets_values": ["wan2.2_14b_fp8.safetensors", "fp8_e4m3fn"]},
+    {"id": 2, "type": "CLIPLoader", "widgets_values": ["t5xxl_fp8_e4m3fn_scaled.safetensors", "wan"]},
+    {"id": 3, "type": "VAELoader", "widgets_values": ["wan_2.1_vae.safetensors"]},
+    {"id": 4, "type": "LoadImage", "widgets_values": ["start_frame.png", "image"]},
+    {"id": 5, "type": "LoadImage", "widgets_values": ["end_frame.png", "image"]},
+    {"id": 6, "type": "CLIPTextEncode", "widgets_values": ["cinematic slow motion, highly detailed, 4k, consistent lighting"]},
+    {"id": 7, "type": "WanImageToVideo", "widgets_values": [1024, 576, 81, 3.0, 20, 1.0, "uni_pc", "simple", 12345]},
+    {"id": 8, "type": "VAEDecode"},
+    {"id": 9, "type": "VHS_VideoCombine", "widgets_values": [24, 0, "Wan_Output", "video/h264-mp4", false, true]}
+  ],
+  "links": [
+    [1, 2, 0, 6, 0, "CLIP"],
+    [2, 1, 0, 7, 0, "MODEL"],
+    [3, 3, 0, 7, 1, "VAE"],
+    [4, 6, 0, 7, 2, "CONDITIONING"],
+    [5, 4, 0, 7, 4, "IMAGE"],
+    [6, 5, 0, 7, 5, "IMAGE"],
+    [7, 7, 0, 8, 0, "LATENT"],
+    [8, 3, 0, 8, 1, "VAE"],
+    [9, 8, 0, 9, 0, "IMAGE"]
+  ]
+}
+

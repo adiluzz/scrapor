@@ -1,0 +1,14 @@
+---
+description: Assistant tool modules are file-backed and code-owned
+globs: src/lib/assistant-tools/**/*.ts,src/app/api/assistant/route.ts,src/app/api/agent-tools/**/*.ts
+alwaysApply: false
+---
+
+# Assistant Tools
+
+- Add each assistant tool as exactly one module in `src/lib/assistant-tools/tools`.
+- Each module must export a default `AssistantToolModule` with `key`, `description`, and `createTool(runtime)`.
+- Keep the LLM-facing tool description in the same file as the implementation.
+- Do not store assistant tool definitions or descriptions in Prisma.
+- Use `listAssistantTools()` for tool lists and `createAssistantTools(runtime)` for the `streamText` tool set.
+- Update `src/lib/assistant-tools/README.md` if the tool contract changes.

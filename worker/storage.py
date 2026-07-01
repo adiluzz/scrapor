@@ -1,0 +1,42 @@
+"""S3 upload helpers for the worker (Python side of the storage layer)."""
+
+import os
+import boto3
+from botocore.config import Config
+
+_BUCKET = os.environ.get("S3_BUCKET", "pisster-media")
+_REGION = os.environ.get("AWS_REGION", "us-east-1")
+_ENDPOINT = os.environ.get("S3_ENDPOINT") or None
+
+_client = None
+
+
+def s3():
+    global _client
+    if _client is None:
+        _client = boto3.client(
+            "s3",
+            region_name=_REGION,
+            endpoint_url=_ENDPOINT,
+            config=Config(s3={"addressing_style": "path" if _ENDPOINT else "auto"}),
+        )
+    return _client
+
+
+def configured() -> bool:
+    return bool(os.environ.get("AWS_ACCESS_KEY_ID") and os.environ.get("AWS_SECRET_ACCESS_KEY"))
+
+
+# Key layout — must match src/lib/storage.ts s3Keys.
+def key_video(site_id, video_id):        return f"sites/{site_id}/videos/{video_id}/video.mp4"
+def key_thumb(site_id, video_id):        return f"sites/{site_id}/videos/{video_id}/thumbnail.jpg"
+def key_preview(site_id, video_id):      return f"sites/{site_id}/videos/{video_id}/preview.mp4"
+def key_storyboard(site_id, video_id):   return f"sites/{site_id}/videos/{video_id}/storyboard.jpg"
+def key_storyboard_vtt(site_id, video_id): return f"sites/{site_id}/videos/{video_id}/storyboard.vtt"
+
+
+def upload(local_path, key, content_type):
+    if not os.path.exists(local_path):
+        return None
+    s3().upload_file(local_path, _BUCKET, key, ExtraArgs={"ContentType": content_type})
+    return key

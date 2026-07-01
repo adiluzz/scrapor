@@ -1,0 +1,130 @@
+services:
+  # ── App (Next.js standalone) ──────────────────────────────────────
+  web:
+    build: { context: ., dockerfile: Dockerfile }
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      NODE_ENV: production
+    depends_on:
+      postgres: { condition: service_healthy }
+      redis: { condition: service_started }
+    expose: ["3000"]
+    logging: { driver: json-file, options: { max-size: "10m", max-file: "3" } }
+
+  # ── DB migrations (one-shot; runs the full toolchain image) ────────
+  migrate:
+    build: { context: ., dockerfile: Dockerfile, target: builder }
+    env_file: .env
+    depends_on:
+      postgres: { condition: service_healthy }
+    command: npx prisma migrate deploy
+    restart: "no"
+
+  # ── Python scrape worker ──────────────────────────────────────────
+  worker:
+    build: { context: ., dockerfile: worker/Dockerfile }
+    restart: unless-stopped
+    env_file: .env
+    depends_on:
+      postgres: { condition: service_healthy }
+      redis: { condition: service_started }
+    volumes:
+      - downloads:/app/downloads
+    logging: { driver: json-file, options: { max-size: "10m", max-file: "3" } }
+
+  # ── nginx (TLS termination + app router + protecting CDN edge) ─────
+  nginx:
+    image: nginx:1.27-alpine
+    restart: unless-stopped
+    depends_on: [web]
+    ports: ["80:80", "443:443"]
+    environment:
+      PRIMARY_DOMAIN: ${PRIMARY_DOMAIN}
+      ADMIN_SUBDOMAIN: ${ADMIN_SUBDOMAIN}
+      CDN_SIGNING_SECRET: ${CDN_SIGNING_SECRET}
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./nginx/templates:/etc/nginx/templates:ro
+      - certbot-www:/var/www/certbot
+      - certbot-certs:/etc/letsencrypt
+      - nginx-cache:/var/cache/nginx
+    logging: { driver: json-file, options: { max-size: "10m", max-file: "3" } }
+
+  certbot:
+    image: certbot/certbot
+    volumes:
+      - certbot-www:/var/www/certbot
+      - certbot-certs:/etc/letsencrypt
+    entrypoint: /bin/sh -c 'trap exit TERM; while :; do certbot renew --webroot -w /var/www/certbot; sleep 12h & wait $${!}; done'
+
+  # ── Datastores ────────────────────────────────────────────────────
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-pisster}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-pisster}
+      POSTGRES_DB: ${POSTGRES_DB:-pisster}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-pisster}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes:
+      - redisdata:/data
+
+  # ── ELK logging stack ─────────────────────────────────────────────
+  elasticsearch:
+    image: docker.elastic.co/elasticsearch/elasticsearch:8.15.3
+    restart: unless-stopped
+    environment:
+      discovery.type: single-node
+      xpack.security.enabled: "false"
+      ES_JAVA_OPTS: "-Xms512m -Xmx512m"
+    volumes:
+      - esdata:/usr/share/elasticsearch/data
+    expose: ["9200"]
+
+  logstash:
+    image: docker.elastic.co/logstash/logstash:8.15.3
+    restart: unless-stopped
+    depends_on: [elasticsearch]
+    volumes:
+      - ./logstash/logstash.conf:/usr/share/logstash/pipeline/logstash.conf:ro
+    expose: ["5044"]
+
+  kibana:
+    image: docker.elastic.co/kibana/kibana:8.15.3
+    restart: unless-stopped
+    depends_on: [elasticsearch]
+    environment:
+      ELASTICSEARCH_HOSTS: http://elasticsearch:9200
+    ports: ["5601:5601"]
+
+  filebeat:
+    image: docker.elastic.co/beats/filebeat:8.15.3
+    restart: unless-stopped
+    user: root
+    depends_on: [logstash]
+    volumes:
+      - ./filebeat/filebeat.yml:/usr/share/filebeat/filebeat.yml:ro
+      - /var/lib/docker/containers:/var/lib/docker/containers:ro
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    command: ["--strict.perms=false"]
+
+volumes:
+  pgdata:
+  redisdata:
+  esdata:
+  downloads:
+  certbot-www:
+  certbot-certs:
+  nginx-cache:

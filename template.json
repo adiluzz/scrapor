@@ -1,0 +1,133 @@
+{
+  "last_node_id": 25,
+  "last_link_id": 35,
+  "nodes": [
+    {
+      "id": 10,
+      "type": "UNETLoader",
+      "pos": [100, 100],
+      "size": {"0": 300, "1": 80},
+      "flags": {},
+      "order": 0,
+      "mode": 0,
+      "outputs": [{"name": "MODEL", "type": "MODEL", "links": [1], "slot_index": 0}],
+      "properties": {"Node name for S&R": "UNETLoader"},
+      "widgets_values": ["wan2.2_14b_fp8.safetensors", "fp8_e4m3fn"]
+    },
+    {
+      "id": 11,
+      "type": "DualCLIPLoader",
+      "pos": [100, 200],
+      "size": {"0": 300, "1": 100},
+      "flags": {},
+      "order": 1,
+      "mode": 0,
+      "outputs": [{"name": "CLIP", "type": "CLIP", "links": [2], "slot_index": 0}],
+      "properties": {"Node name for S&R": "DualCLIPLoader"},
+      "widgets_values": ["t5xxl_fp8_e4m3fn.safetensors", "clip_l.safetensors", "wan"]
+    },
+    {
+      "id": 12,
+      "type": "VAE visual_search",
+      "pos": [100, 320],
+      "size": {"0": 300, "1": 60},
+      "flags": {},
+      "order": 2,
+      "mode": 0,
+      "outputs": [{"name": "VAE", "type": "VAE", "links": [3, 4], "slot_index": 0}],
+      "properties": {"Node name for S&R": "VAE visual_search"},
+      "widgets_values": ["wan2.1_vae.safetensors"]
+    },
+    {
+      "id": 13,
+      "type": "ModelSamplingDiscrete",
+      "pos": [450, 100],
+      "size": {"0": 300, "1": 80},
+      "flags": {},
+      "order": 3,
+      "mode": 0,
+      "inputs": [{"name": "model", "type": "MODEL", "link": 1}],
+      "outputs": [{"name": "MODEL", "type": "MODEL", "links": [5], "slot_index": 0}],
+      "properties": {"Node name for S&R": "ModelSamplingDiscrete"},
+      "widgets_values": ["wan", 1.0, false]
+    },
+    {
+      "id": 2,
+      "type": "LoadImage",
+      "pos": [100, 450],
+      "size": {"0": 300, "1": 300},
+      "flags": {},
+      "order": 4,
+      "mode": 0,
+      "outputs":}],
+      "widgets_values":
+    },
+    {
+      "id": 3,
+      "type": "LoadImage",
+      "pos": [450, 450],
+      "size": {"0": 300, "1": 300},
+      "flags": {},
+      "order": 5,
+      "mode": 0,
+      "outputs":}],
+      "widgets_values":
+    },
+    {
+      "id": 14,
+      "type": "CLIPTextEncode",
+      "pos": [450, 200],
+      "size": {"0": 400, "1": 100},
+      "flags": {},
+      "order": 6,
+      "mode": 0,
+      "inputs": [{"name": "clip", "type": "CLIP", "link": 2}],
+      "outputs": [{"name": "CONDITIONING", "type": "CONDITIONING", "links": [8]}],
+      "widgets_values": ["cinematic slow motion, high quality, consistent lighting"]
+    },
+    {
+      "id": 15,
+      "type": "WanImageToVideo",
+      "pos": [900, 100],
+      "size": {"0": 400, "1": 500},
+      "flags": {},
+      "order": 7,
+      "mode": 0,
+      "inputs":,
+      "outputs": [{"name": "LATENT", "type": "LATENT", "links": [9]}],
+      "widgets_values": [1024, 576, 81, 3.0, 20, 1.0, "dpmpp_2m", "karras", 12345]
+    },
+    {
+      "id": 16,
+      "type": "VAEDecode",
+      "pos": [1350, 100],
+      "size": {"0": 210, "1": 50},
+      "flags": {},
+      "order": 8,
+      "mode": 0,
+      "inputs": [{"name": "samples", "type": "LATENT", "link": 9}, {"name": "vae", "type": "VAE", "link": 4}],
+      "outputs":}]
+    },
+    {
+      "id": 17,
+      "type": "VHS_VideoCombine",
+      "pos": [1600, 100],
+      "size": {"0": 300, "1": 500},
+      "flags": {},
+      "order": 9,
+      "mode": 0,
+      "inputs":,
+      "widgets_values": {"frame_rate": 24, "format": "video/h264-mp4"}
+    }
+  ],
+  "links": [
+    [1, 10, 0, 13, 0, "MODEL"],
+    [2, 11, 0, 14, 0, "CLIP"],
+    [3, 12, 0, 15, 1, "VAE"],
+    [4, 12, 0, 16, 1, "VAE"],
+    [5, 13, 0, 15, 0, "MODEL"],,,
+    [8, 14, 0, 15, 2, "CONDITIONING"],
+    [9, 15, 0, 16, 0, "LATENT"],
+  ]
+}
+

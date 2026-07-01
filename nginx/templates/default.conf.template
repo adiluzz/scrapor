@@ -1,0 +1,91 @@
+# Rendered by the nginx image's envsubst at container start.
+# Variables: ${PRIMARY_DOMAIN}, ${ADMIN_SUBDOMAIN}, ${CDN_SIGNING_SECRET}
+
+upstream web_upstream { server web:3000; keepalive 32; }
+
+# ── App + admin (public site and admin.<domain>) ──────────────────────
+server {
+    listen 80;
+    server_name ${PRIMARY_DOMAIN} ${ADMIN_SUBDOMAIN}.${PRIMARY_DOMAIN} www.${PRIMARY_DOMAIN};
+
+    # Certbot HTTP-01 challenge
+    location /.well-known/acme-challenge/ { root /var/www/certbot; }
+
+    location / {
+        proxy_pass http://web_upstream;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Forwarded-Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection "upgrade";
+    }
+}
+
+# ── Protecting CDN edge (cdn.<domain>) ────────────────────────────────
+# All objects live in a PRIVATE S3 bucket. nginx validates a short-lived,
+# IP-bound signed link (secure_link), asks the app to authorize + presign,
+# then proxies the fresh presigned S3 URL. No public S3 URL ever exists.
+server {
+    listen 80;
+    server_name cdn.${PRIMARY_DOMAIN};
+
+    # Ad-gated video stream: /v/{videoId}/video.mp4?e=<exp>&s=<sig>&t=<adToken>
+    location ~ "^/v/(?<vid>[^/]+)/video\.mp4$" {
+        secure_link      $arg_s,$arg_e;
+        secure_link_md5  "$secure_link_expires$uri$remote_addr ${CDN_SIGNING_SECRET}";
+        if ($secure_link = "")  { return 403; }   # bad signature
+        if ($secure_link = "0") { return 410; }   # expired
+
+        # Hotlink protection.
+        valid_referers none blocked server_names ${PRIMARY_DOMAIN} *.${PRIMARY_DOMAIN};
+
+        auth_request      /_authorize_stream;
+        auth_request_set  $s3url $upstream_http_x_s3_url;
+
+        proxy_set_header  Host "";
+        proxy_set_header  Authorization "";
+        proxy_hide_header x-amz-id-2;
+        proxy_hide_header x-amz-request-id;
+        proxy_pass        $s3url;
+    }
+
+    # Non ad-gated assets: /a/{videoId}/{thumbnail.jpg|preview.mp4|storyboard.jpg|storyboard.vtt}
+    location ~ "^/a/(?<vid>[^/]+)/(?<file>thumbnail\.jpg|preview\.mp4|storyboard\.jpg|storyboard\.vtt)$" {
+        secure_link      $arg_s,$arg_e;
+        secure_link_md5  "$secure_link_expires$uri$remote_addr ${CDN_SIGNING_SECRET}";
+        if ($secure_link = "")  { return 403; }
+        if ($secure_link = "0") { return 410; }
+
+        auth_request      /_authorize_asset;
+        auth_request_set  $s3url $upstream_http_x_s3_url;
+
+        proxy_cache       cdncache;
+        proxy_cache_valid 200 206 12h;
+        proxy_cache_key   "$uri";
+        add_header        X-Cache-Status $upstream_cache_status;
+
+        proxy_set_header  Host "";
+        proxy_set_header  Authorization "";
+        proxy_pass        $s3url;
+    }
+
+    # Internal authorize subrequests → app mints a presigned S3 GET URL.
+    location = /_authorize_stream {
+        internal;
+        proxy_pass              http://web_upstream/api/cdn/authorize?videoId=$vid&t=$arg_t;
+        proxy_pass_request_body off;
+        proxy_set_header        Content-Length "";
+        proxy_set_header        X-Original-Host $http_host;
+        proxy_set_header        X-Real-IP $remote_addr;
+    }
+    location = /_authorize_asset {
+        internal;
+        proxy_pass              http://web_upstream/api/cdn/authorize?videoId=$vid&file=$file;
+        proxy_pass_request_body off;
+        proxy_set_header        Content-Length "";
+        proxy_set_header        X-Original-Host $http_host;
+    }
+}

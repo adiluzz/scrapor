@@ -1,4 +1,6 @@
 import { getChatThread } from "@/lib/chat-store";
+import { guardAdmin } from "@/lib/admin-guard";
+import { NextResponse } from "next/server";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -7,6 +9,8 @@ export async function GET(
   _req: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  const g = await guardAdmin();
+  if (g instanceof NextResponse) return g;
   try {
     const { id: idParam } = await params;
     const id = String(idParam || "").trim();

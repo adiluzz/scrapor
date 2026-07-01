@@ -1,3 +1,6 @@
+import { guardAdmin } from "@/lib/admin-guard";
+import { NextResponse } from "next/server";
+
 import { isLikelyToolModel, isLikelyVisionModel } from "@/lib/model-capabilities";
 
 const baseURL = (process.env.OLLAMA_BASE_URL || "http://127.0.0.1:11434/api").replace(/\/$/, "");
@@ -71,6 +74,8 @@ async function probeToolSupport(modelName: string): Promise<boolean> {
 }
 
 export async function GET() {
+  const g = await guardAdmin();
+  if (g instanceof NextResponse) return g;
   try {
     const res = await fetch(`${baseURL}/tags`, { method: "GET", cache: "no-store" });
     const text = await res.text();

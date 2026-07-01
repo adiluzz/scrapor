@@ -20,7 +20,7 @@ export const DEFAULT_ASSISTANT_SETTINGS: AssistantSettings = {
   maxSteps: 12,
   numCtx: 8192,
   numPredict: 4096,
-  model: process.env.OLLAMA_MODEL || "qwen2.5:7b",
+  model: process.env.BEDROCK_MODEL_ID || "anthropic.claude-3-5-sonnet-20241022-v2:0",
   customSystemPrompt: "",
   activeContextId: "",
 };

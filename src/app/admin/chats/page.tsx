@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
+import AssistantNav from "@/components/admin/AssistantNav";
 
 type ChatResult = {
   id: string;
@@ -43,7 +44,7 @@ function highlight(text: string, query: string) {
 function ChatCard({ chat, query }: { chat: ChatResult; query: string }) {
   return (
     <Link
-      href={`/assistant/${chat.id}`}
+      href={`/admin/assistant/${chat.id}`}
       className="group block rounded-xl border border-zinc-800 bg-zinc-900 px-5 py-4 hover:border-zinc-600 hover:bg-zinc-800/70 transition-colors"
     >
       <div className="flex items-start justify-between gap-3">
@@ -128,30 +129,11 @@ export default function ChatsPage() {
   const isSearching = query.trim().length > 0;
 
   return (
-    <main className="min-h-screen bg-zinc-950 text-zinc-100">
-      <header className="border-b border-zinc-800 px-6 py-4 flex items-center gap-4">
-        <Link href="/" className="text-zinc-400 hover:text-zinc-200 text-sm">
-          ← Home
-        </Link>
-        <Link href="/assistant" className="text-zinc-400 hover:text-zinc-200 text-sm">
-          Assistant
-        </Link>
-        <Link href="/settings" className="text-zinc-400 hover:text-zinc-200 text-sm">
-          Settings
-        </Link>
-        <Link href="/contexts" className="text-zinc-400 hover:text-zinc-200 text-sm">
-          Contexts
-        </Link>
-        <Link href="/tools" className="text-zinc-400 hover:text-zinc-200 text-sm">
-          Tools
-        </Link>
-        <Link href="/skills" className="text-zinc-400 hover:text-zinc-200 text-sm">
-          Skills
-        </Link>
-        <h1 className="text-lg font-semibold ml-2">Chats</h1>
-      </header>
+    <div>
+      <AssistantNav active="/admin/chats" />
+      <h1 className="text-2xl font-bold text-white">Chats</h1>
 
-      <div className="max-w-3xl mx-auto px-6 py-8">
+      <div className="mt-6 max-w-3xl">
         {/* Search bar */}
         <div className="relative mb-6">
           <div className="pointer-events-none absolute inset-y-0 left-4 flex items-center">
@@ -205,7 +187,7 @@ export default function ChatsPage() {
             <p className="text-sm">{isSearching ? "No chats match your search." : "No chats yet."}</p>
             {!isSearching && (
               <Link
-                href="/assistant"
+                href="/admin/assistant"
                 className="mt-2 rounded-lg bg-zinc-800 px-4 py-2 text-sm text-zinc-300 hover:bg-zinc-700 hover:text-white transition-colors"
               >
                 Start a chat →
@@ -252,6 +234,6 @@ export default function ChatsPage() {
           </>
         )}
       </div>
-    </main>
+    </div>
   );
 }

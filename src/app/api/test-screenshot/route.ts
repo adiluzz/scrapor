@@ -5,10 +5,14 @@
  */
 import { NextRequest } from "next/server";
 import { browserNavigate, browserSaveScreenshot } from "@/lib/browser-agent";
+import { guardAdmin } from "@/lib/admin-guard";
+import { NextResponse } from "next/server";
 
 export const maxDuration = 60;
 
 export async function GET(req: NextRequest) {
+  const g = await guardAdmin();
+  if (g instanceof NextResponse) return g;
   const filename = req.nextUrl.searchParams.get("filename") || "test-screenshot";
   try {
     await browserNavigate("https://example.com");

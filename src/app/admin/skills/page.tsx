@@ -1,7 +1,7 @@
 "use client";
 
-import Link from "next/link";
 import { useEffect, useState } from "react";
+import AssistantNav from "@/components/admin/AssistantNav";
 
 type AgentSkill = {
   id: string;
@@ -100,18 +100,11 @@ export default function SkillsPage() {
   };
 
   return (
-    <main className="min-h-screen bg-zinc-950 text-zinc-100">
-      <header className="border-b border-zinc-800 px-6 py-4 flex items-center gap-4">
-        <Link href="/" className="text-zinc-400 hover:text-zinc-200 text-sm">← Home</Link>
-        <Link href="/assistant" className="text-zinc-400 hover:text-zinc-200 text-sm">Assistant</Link>
-        <Link href="/settings" className="text-zinc-400 hover:text-zinc-200 text-sm">Settings</Link>
-        <Link href="/contexts" className="text-zinc-400 hover:text-zinc-200 text-sm">Contexts</Link>
-        <Link href="/tools" className="text-zinc-400 hover:text-zinc-200 text-sm">Tools</Link>
-        <Link href="/chats" className="text-zinc-400 hover:text-zinc-200 text-sm">Chats</Link>
-        <h1 className="text-lg font-semibold ml-2">Skills</h1>
-      </header>
+    <div>
+      <AssistantNav active="/admin/skills" />
+      <h1 className="text-2xl font-bold text-white">Skills</h1>
 
-      <div className="max-w-5xl mx-auto p-6 space-y-6">
+      <div className="mt-6 max-w-5xl space-y-6">
         {(error || status) && (
           <div className={`rounded-lg border px-4 py-3 text-sm ${error ? "bg-red-500/10 border-red-500/30 text-red-300" : "bg-emerald-500/10 border-emerald-500/30 text-emerald-300"}`}>
             {error || status}
@@ -183,7 +176,7 @@ export default function SkillsPage() {
           ))}
         </section>
       </div>
-    </main>
+    </div>
   );
 }
 

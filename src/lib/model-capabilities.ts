@@ -4,6 +4,9 @@ export function isLikelyVisionModel(
   family?: string
 ): boolean {
   const name = (modelName || "").toLowerCase();
+  if (/claude|anthropic\.|amazon\.nova|nova-pro|nova-lite|meta\.llama.*vision/.test(name)) {
+    return true;
+  }
   const fams = (families || []).map((f) => String(f).toLowerCase());
   const singleFamily = (family || "").toLowerCase();
 
@@ -26,6 +29,10 @@ export function isLikelyVisionModel(
  */
 export function isLikelyToolModel(modelName: string): boolean {
   const name = (modelName || "").toLowerCase();
+
+  if (/claude|anthropic\.|amazon\.nova|nova-pro|meta\.llama-3|mistral\.|cohere\.command/.test(name)) {
+    return true;
+  }
 
   // Explicit non-tool models
   if (/^llama2[:\-_]/.test(name) || name === "llama2") return false;

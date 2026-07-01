@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import Link from "next/link";
+import AssistantNav from "@/components/admin/AssistantNav";
 
 type SavedContext = {
   id: string;
@@ -238,30 +238,11 @@ export default function ContextsPage() {
   };
 
   return (
-    <main className="min-h-screen bg-zinc-950 text-zinc-100">
-      <header className="border-b border-zinc-800 px-6 py-4 flex items-center gap-4">
-        <Link href="/" className="text-zinc-400 hover:text-zinc-200 text-sm">
-          ← Home
-        </Link>
-        <Link href="/assistant" className="text-zinc-400 hover:text-zinc-200 text-sm">
-          Assistant
-        </Link>
-        <Link href="/settings" className="text-zinc-400 hover:text-zinc-200 text-sm">
-          Settings
-        </Link>
-        <Link href="/tools" className="text-zinc-400 hover:text-zinc-200 text-sm">
-          Tools
-        </Link>
-        <Link href="/skills" className="text-zinc-400 hover:text-zinc-200 text-sm">
-          Skills
-        </Link>
-        <Link href="/chats" className="text-zinc-400 hover:text-zinc-200 text-sm">
-          Chats
-        </Link>
-        <h1 className="text-lg font-semibold ml-2">Context Manager</h1>
-      </header>
+    <div>
+      <AssistantNav active="/admin/contexts" />
+      <h1 className="text-2xl font-bold text-white">Context manager</h1>
 
-      <div className="max-w-4xl mx-auto p-6 space-y-6">
+      <div className="mt-6 max-w-4xl space-y-6">
         {(error || status) && (
           <div
             className={`rounded-lg border px-4 py-3 text-sm ${
@@ -478,6 +459,6 @@ export default function ContextsPage() {
           <option key={label} value={label} />
         ))}
       </datalist>
-    </main>
+    </div>
   );
 }

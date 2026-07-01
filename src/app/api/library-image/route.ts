@@ -1,5 +1,7 @@
 import { readFile } from "fs/promises";
 import { join, normalize } from "path";
+import { guardAdmin } from "@/lib/admin-guard";
+import { NextResponse } from "next/server";
 
 const ALLOWED_PREFIXES = [
   "library/assistant-screenshots/",
@@ -21,6 +23,8 @@ function toContentType(path: string): string {
 }
 
 export async function GET(req: Request) {
+  const g = await guardAdmin();
+  if (g instanceof NextResponse) return g;
   const url = new URL(req.url);
   const rawPath = (url.searchParams.get("path") || "").trim().replace(/^\/+/, "");
   const normalized = normalize(rawPath).replace(/\\/g, "/");

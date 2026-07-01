@@ -1,98 +1,13 @@
 import { loadAssistantSettings } from "@/lib/assistant-settings";
 import { createFilteredAssistantTools } from "@/lib/assistant-tools/registry";
+import { getBedrockProvider, resolveBedrockModelId } from "@/lib/bedrock";
+import { guardAdmin } from "@/lib/admin-guard";
 import { buildContextSelections } from "@/lib/context-store";
 import { isLikelyVisionModel } from "@/lib/model-capabilities";
-import { createOpenAI } from "@ai-sdk/openai";
 import { NoSuchToolError, stepCountIs, streamText } from "ai";
-import http from "node:http";
-import https from "node:https";
+import { NextResponse } from "next/server";
 
-// Ollama can take a very long time to load a model and start streaming.
-// The global fetch (undici) has a 300 s headersTimeout that kills slow responses.
-// This custom fetch uses Node's http/https directly — no timeout at all.
-const ollamaFetch: typeof globalThis.fetch = (input, init) => {
-  const url = new URL(
-    typeof input === "string" ? input : input instanceof URL ? input.href : (input as Request).url
-  );
-  const isHttps = url.protocol === "https:";
-
-  // Normalise HeadersInit → plain Record so Node's http.request accepts it.
-  // Casting `init?.headers as Record` silently drops a Headers instance, which
-  // is what the AI SDK passes — causing Content-Type to never reach Ollama.
-  const rawHeaders: Record<string, string> = {};
-  const hi = init?.headers;
-  if (hi) {
-    if (hi instanceof Headers) {
-      hi.forEach((v, k) => { rawHeaders[k] = v; });
-    } else if (Array.isArray(hi)) {
-      for (const [k, v] of hi) rawHeaders[k] = v;
-    } else {
-      Object.assign(rawHeaders, hi);
-    }
-  }
-
-  return new Promise<Response>((resolve, reject) => {
-    const req = (isHttps ? https : http).request(
-      {
-        hostname: url.hostname,
-        port: url.port || (isHttps ? 443 : 80),
-        path: url.pathname + url.search,
-        method: init?.method ?? "GET",
-        headers: rawHeaders,
-      },
-      (res) => {
-        const stream = new ReadableStream({
-          start(controller) {
-            res.on("data", (chunk: Buffer) => controller.enqueue(new Uint8Array(chunk)));
-            res.on("end", () => controller.close());
-            res.on("error", (err) => controller.error(err));
-          },
-        });
-        // Strip hop-by-hop headers that Node already handled; passing
-        // transfer-encoding:chunked to the Response constructor confuses parsers.
-        const responseHeaders: Record<string, string> = {};
-        for (const [k, v] of Object.entries(res.headers)) {
-          if (k === "transfer-encoding" || k === "connection") continue;
-          responseHeaders[k] = Array.isArray(v) ? v.join(", ") : (v ?? "");
-        }
-        resolve(new Response(stream, { status: res.statusCode ?? 200, headers: responseHeaders }));
-      }
-    );
-    req.on("error", reject);
-
-    const body = init?.body;
-    if (body == null) {
-      req.end();
-    } else if (typeof body === "string" || body instanceof Uint8Array) {
-      req.write(body);
-      req.end();
-    } else if (body instanceof ReadableStream) {
-      // AI SDK may stream the request body as a Web ReadableStream.
-      const reader = (body as ReadableStream<Uint8Array>).getReader();
-      const pump = (): Promise<void> =>
-        reader.read().then(({ done, value }) => {
-          if (done) { req.end(); return; }
-          req.write(value);
-          return pump();
-        });
-      pump().catch(reject);
-    } else {
-      req.end();
-    }
-  });
-};
-
-// Use Ollama's OpenAI-compatible endpoint — it has much better tool-calling support
-// than the native Ollama API (ollama-ai-provider).
-const rawBase = (process.env.OLLAMA_BASE_URL || "http://127.0.0.1:11434/api")
-  .replace(/\/api\/?$/, "");
-const ollama = createOpenAI({
-  baseURL: `${rawBase}/v1`,
-  apiKey: "ollama",
-  fetch: ollamaFetch,
-});
-
-/** No practical server-side timeout — keep requests alive for days. */
+/** No practical server-side timeout — keep requests alive for long agent runs. */
 export const maxDuration = 604800;
 
 const SYSTEM_PROMPT = `You are an agentic assistant with access to tools.
@@ -107,15 +22,6 @@ CRITICAL RULES — never break these:
 7. If a tool returns an error (ok: false, or an error message), READ the error carefully, fix the issue, and retry the tool with corrected arguments. Never give up after a single tool error.
 8. If you get a parameter/argument error from a tool, check the exact parameter names required by that tool and retry with the correct names.`;
 
-/**
- * Attempts to repair a tool call whose arguments failed Zod schema validation.
- *
- * Strategy: heuristically remap field names from the provided args to the
- * expected schema fields by comparing normalised lower-case names (stripping
- * underscores and hyphens).  If every required field can be satisfied this way
- * we return repaired args; otherwise we return null so the SDK surfaces the
- * original validation error to the model as a readable tool result.
- */
 async function repairToolCallArgs(
   toolCall: { toolName: string; toolCallId: string; input: string },
   inputSchema: (tc: { toolName: string }) => PromiseLike<Record<string, unknown>>
@@ -135,13 +41,10 @@ async function repairToolCallArgs(
   if (expected.length === 0) return null;
 
   const normalize = (s: string) => s.toLowerCase().replace(/[_-]/g, "");
-
   const repaired: Record<string, unknown> = { ...provided };
-
-  // Remap provided keys that don't match an expected field but normalise to one
   const providedKeys = Object.keys(provided);
   for (const exp of expected) {
-    if (exp in repaired) continue; // already present — no remapping needed
+    if (exp in repaired) continue;
     const normExp = normalize(exp);
     const match = providedKeys.find(
       (k) => !(k in Object.fromEntries(expected.map((e) => [e, true]))) &&
@@ -156,7 +59,6 @@ async function repairToolCallArgs(
   }
 
   const repairedStr = JSON.stringify(repaired);
-  // Only return if we actually changed something
   return repairedStr !== toolCall.input ? repairedStr : null;
 }
 
@@ -227,6 +129,9 @@ function hasImageAttachments(
 }
 
 export async function POST(req: Request) {
+  const g = await guardAdmin();
+  if (g instanceof NextResponse) return g;
+
   let messages: unknown;
   let requestedContextId: string | undefined;
   try {
@@ -252,11 +157,10 @@ export async function POST(req: Request) {
       parts?: Array<{ type: string; text?: string; url?: string; mediaType?: string }>;
     }>;
 
-    const modelId = settings.model;
+    const modelId = resolveBedrockModelId(settings.model);
     const activeContextId = requestedContextId ?? settings.activeContextId;
     const basePrompt = settings.customSystemPrompt.trim() || SYSTEM_PROMPT;
 
-    // Build system prompt + get the set of tools the context allows
     const { systemPrompt, activeToolKeys } = await buildContextSelections(
       basePrompt,
       activeContextId
@@ -265,7 +169,6 @@ export async function POST(req: Request) {
     const modelHasVision = isLikelyVisionModel(modelId);
     const hasImages = hasImageAttachments(typedMessages);
 
-    // Build the filtered toolset from the context's allowed keys
     const tools = createFilteredAssistantTools(
       { runtimeModelHasVision: modelHasVision },
       activeToolKeys
@@ -274,17 +177,17 @@ export async function POST(req: Request) {
 
     console.info("[assistant] request config", {
       modelId,
+      region: process.env.AWS_REGION || "us-east-1",
       activeContextId,
       toolCount: Object.keys(tools).length,
-      toolKeys: Object.keys(tools),
       modelHasVision,
       hasImages,
       maxSteps: settings.maxSteps,
     });
-    console.info("[assistant] system prompt:\n" + systemPrompt);
 
+    const bedrock = getBedrockProvider();
     const result = streamText({
-      model: ollama(modelId) as any,
+      model: bedrock(modelId),
       maxOutputTokens: settings.numPredict,
       temperature: settings.temperature,
       system: systemPrompt,
@@ -293,8 +196,6 @@ export async function POST(req: Request) {
       onError: (event: { error: unknown }) => {
         console.error("[assistant] streamText error:", event.error);
       },
-      // Best-effort repair of tool calls whose arguments fail schema validation
-      // (common with local models that mislabel fields).
       experimental_repairToolCall: (async ({
         toolCall,
         inputSchema,
@@ -304,28 +205,9 @@ export async function POST(req: Request) {
         inputSchema: (tc: { toolName: string }) => PromiseLike<Record<string, unknown>>;
         error: unknown;
       }) => {
-        console.warn("[assistant] tool call repair triggered", {
-          tool: toolCall.toolName,
-          input: toolCall.input,
-          error: error instanceof Error ? error.message : String(error),
-        });
-
-        // Unknown tool name: let the SDK surface it so the model can self-correct.
-        if (NoSuchToolError.isInstance(error)) {
-          console.warn("[assistant] NoSuchToolError — tool not in active context:", toolCall.toolName);
-          return null;
-        }
-
+        if (NoSuchToolError.isInstance(error)) return null;
         const repaired = await repairToolCallArgs(toolCall, inputSchema);
-        if (repaired !== null) {
-          console.info("[assistant] repaired tool args via field remapping", {
-            tool: toolCall.toolName,
-            original: toolCall.input,
-            repaired,
-          });
-          return { ...toolCall, input: repaired };
-        }
-        return null;
+        return repaired !== null ? { ...toolCall, input: repaired } : null;
       }) as any,
       ...(hasTools
         ? {

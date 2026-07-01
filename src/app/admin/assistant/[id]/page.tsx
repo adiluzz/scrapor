@@ -157,7 +157,7 @@ export default function AssistantChatPage() {
         const [ctxRes, settingsRes, modelsRes] = await Promise.all([
           fetch("/api/contexts", { cache: "no-store" }),
           fetch("/api/assistant-settings", { cache: "no-store" }),
-          fetch("/api/ollama/models"),
+          fetch("/api/admin/bedrock/models"),
         ]);
         const ctxJson = await ctxRes.json();
         const settingsJson = await settingsRes.json();
@@ -172,9 +172,9 @@ export default function AssistantChatPage() {
         const currentId = String(settingsJson?.settings?.activeContextId || "");
         setActiveContextId(currentId || (loadedContexts[0]?.id ?? ""));
 
-        const selectedModel = String(settingsJson?.settings?.model || settingsJson?.settings?.chatModel || "").trim();
+        const selectedModel = String(settingsJson?.settings?.model || "").trim();
         const models = Array.isArray(modelsJson?.models) ? modelsJson.models : [];
-        const found = models.find((m: { name?: string }) => m?.name === selectedModel) as { hasVision?: boolean } | undefined;
+        const found = models.find((m: { id?: string }) => m?.id === selectedModel) as { hasVision?: boolean } | undefined;
         setChatModelName(selectedModel);
         setChatModelHasVision(found?.hasVision !== false);
         if (found?.hasVision === false) setFiles([]);
@@ -363,14 +363,10 @@ export default function AssistantChatPage() {
   const isLastAssistantStreaming = isLoading && (messages as unknown as ChatMessageLike[]).at(-1)?.role === "assistant";
 
   return (
-    <main className="min-h-screen flex flex-col bg-zinc-950">
+    <main className="flex flex-col min-h-[calc(100vh-4rem)]">
       <header className="sticky top-0 z-20 border-b border-zinc-800 px-4 py-3 flex items-center gap-3 bg-zinc-950">
-        <Link href="/" className="text-zinc-400 hover:text-white text-sm flex-shrink-0">← Back</Link>
-        <Link href="/settings" className="text-zinc-400 hover:text-white text-sm flex-shrink-0">Settings</Link>
-        <Link href="/contexts" className="text-zinc-400 hover:text-white text-sm flex-shrink-0">Contexts</Link>
-        <Link href="/tools" className="text-zinc-400 hover:text-white text-sm flex-shrink-0">Tools</Link>
-        <Link href="/skills" className="text-zinc-400 hover:text-white text-sm flex-shrink-0">Skills</Link>
-        <Link href="/chats" className="text-zinc-400 hover:text-white text-sm flex-shrink-0">Chats</Link>
+        <Link href="/admin/assistant" className="text-zinc-400 hover:text-white text-sm flex-shrink-0">Assistant</Link>
+        <Link href="/admin/chats" className="text-zinc-400 hover:text-white text-sm flex-shrink-0">Chats</Link>
 
         {/* Chat title */}
         <span className="text-sm font-medium text-zinc-200 truncate max-w-[240px]" title={chatTitle}>
@@ -379,7 +375,7 @@ export default function AssistantChatPage() {
 
         {/* New chat button */}
         <button
-          onClick={() => router.push(`/assistant/${makeChatId()}`)}
+          onClick={() => router.push(`/admin/assistant/${makeChatId()}`)}
           className="px-2.5 py-1 rounded text-xs border border-zinc-700 bg-zinc-900 text-zinc-300 hover:bg-zinc-800 flex-shrink-0"
         >
           + New chat

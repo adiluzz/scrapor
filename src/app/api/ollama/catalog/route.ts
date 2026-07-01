@@ -1,3 +1,6 @@
+import { guardAdmin } from "@/lib/admin-guard";
+import { NextResponse } from "next/server";
+
 type CatalogModel = {
   name: string;
   size: number;
@@ -5,6 +8,8 @@ type CatalogModel = {
 };
 
 export async function GET(req: Request) {
+  const g = await guardAdmin();
+  if (g instanceof NextResponse) return g;
   try {
     const url = new URL(req.url);
     const q = (url.searchParams.get("q") || "").trim().toLowerCase();

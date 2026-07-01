@@ -10,7 +10,7 @@ function makeChatId(): string {
 export default function AssistantIndexPage() {
   const router = useRouter();
   useEffect(() => {
-    router.replace(`/assistant/${makeChatId()}`);
+    router.replace(`/admin/assistant/${makeChatId()}`);
   }, [router]);
   return null;
 }

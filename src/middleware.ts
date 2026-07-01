@@ -28,6 +28,25 @@ export default auth((req) => {
     pathname.startsWith("/favicon") ||
     pathname.includes(".");
 
+  // Dev/assistant tooling — admin console only (not on the public site).
+  const adminOnlyPaths = [
+    "/assistant",
+    "/settings",
+    "/tools",
+    "/chats",
+    "/contexts",
+    "/skills",
+  ];
+  if (
+    !isAdminHost &&
+    !isInternal &&
+    adminOnlyPaths.some((p) => pathname === p || pathname.startsWith(`${p}/`))
+  ) {
+    const url = req.nextUrl.clone();
+    url.pathname = "/";
+    return NextResponse.redirect(url);
+  }
+
   if (isAdminHost && !isInternal) {
     const role = req.auth?.user?.role;
     const isAdmin = role === "ADMIN";

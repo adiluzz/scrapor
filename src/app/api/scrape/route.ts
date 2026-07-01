@@ -5,11 +5,14 @@ import {
 } from "@/lib/scraper";
 import { ensureDefaultSite } from "@/lib/site";
 import { upsertVideoWithMedia, durationToSeconds } from "@/lib/videos";
+import { guardAdmin } from "@/lib/admin-guard";
 
 export const dynamic = "force-dynamic";
 
 export async function GET(request: Request) {
-  try {
+    const g = await guardAdmin();
+    if (g instanceof NextResponse) return g;
+    try {
     const { searchParams } = new URL(request.url);
     const page = Math.max(1, parseInt(searchParams.get("page") || "1", 10));
     const full = searchParams.get("full") === "1";

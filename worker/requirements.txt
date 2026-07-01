@@ -4,12 +4,14 @@ redis==5.2.1
 boto3==1.35.71
 yt-dlp>=2024.12.0
 
-# Adult-site search APIs (EchterAlsFake ecosystem). Any that fail to import are
-# skipped gracefully per-source at runtime.
-phub
-xnxx-api
-xvideos-api
-xhamster-api
-youporn-api
-eporner-api
-hqporner-api
+# Adult-site search APIs (EchterAlsFake ecosystem). These are async-first and
+# break their public API frequently, so pin exact versions — scripts/site_searchers.py
+# is written against these. Any that fail to import/search are skipped gracefully
+# per-source at runtime.
+phub==5.1.2
+xnxx-api==2.1
+xvideos-api==2.2.2
+xhamster-api==2.2
+youporn-api==1.5.2
+eporner-api==2.2
+hqporner-api==2.1.1

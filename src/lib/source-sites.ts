@@ -13,6 +13,7 @@ export const SOURCE_SITES = [
   "HQPorner",
   "RedTube",
   "SpankBang",
+  "ParadiseHill",
 ] as const;
 
 export type SourceSite = (typeof SOURCE_SITES)[number];

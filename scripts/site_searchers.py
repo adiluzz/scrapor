@@ -13,9 +13,16 @@ Each searcher returns a list of normalized dicts:
     "duration_sec": int | None,
     "_m3u8_base_url": str | None,   # XHamster HLS fast path
     "_cdn_url": str | None,         # HQPorner direct MP4 fast path
+    "_part_urls": list[str] | None, # ParadiseHill multi-part MP4 fast path
   }
 
 Site names match src/lib/source-sites.ts.
+
+Each searcher returns a pagination tuple:
+  (results, next_cursor, exhausted)
+where `next_cursor` is passed back on the next batch (page number for HTML /
+Eporner / ParadiseHill; result offset for API libraries), and `exhausted` is True
+when the source has no more result pages.
 
 The "EchterAlsFake" site-API libraries (phub, xnxx_api, xvideos_api,
 xhamster_api, youporn_api, eporner_api, hqporner_api) are async-first: their
@@ -96,9 +103,15 @@ def _dur(value):
 
 async def _collect(agen, extract, need, min_duration, seen=None):
     """Iterate an async generator of video objects, run `extract` (async) on each,
-    apply the duration/url/dedup filters, and stop once `need` items are gathered."""
+    apply the duration/url/dedup filters, and stop once `need` items are gathered.
+
+    Returns (items, saw_any) where saw_any is True if the generator yielded at
+    least one video object (even if all were filtered out).
+    """
     out = []
+    saw_any = False
     async for v in agen:
+        saw_any = True
         try:
             item = await extract(v)
         except Exception:
@@ -116,22 +129,51 @@ async def _collect(agen, extract, need, min_duration, seen=None):
         out.append(item)
         if len(out) >= need:
             break
-    return out
+    return out, saw_any
 
 
-def _run(source, coro_factory, skip, count):
-    """Run an async searcher coroutine, degrading to [] (never raising) so a
-    broken library can't turn the whole run red."""
-    try:
-        results = asyncio.run(coro_factory())
-    except Exception as e:  # noqa: BLE001
-        print(f"[site_searchers] {source} failed: {e!r}", file=sys.stderr, flush=True)
-        return []
-    return results[skip:skip + count]
+def _page_cursor(cursor):
+    """HTML searchers use 1-based page cursors; 0 means page 1."""
+    return max(1, int(cursor or 0))
+
+
+def _offset_cursor(cursor):
+    """API searchers use a running result offset (number of hits already consumed)."""
+    return max(0, int(cursor or 0))
 
 
 def _pages(need, per_page):
     return max(2, -(-need // max(1, per_page)))
+
+
+async def _fetch_until(collect_fn, need, per_page):
+    """Keep widening page depth until at least `need` items or the source stops growing."""
+    pages = max(1, _pages(need, per_page))
+    prev_len = -1
+    results = []
+    while True:
+        results = await collect_fn(pages)
+        if len(results) >= need:
+            return results
+        if len(results) == prev_len:
+            break
+        prev_len = len(results)
+        pages += 1
+    return results
+
+
+async def _run_paginated(source, coro_factory, offset, count):
+    """Run an async paginated search; return (batch, next_offset, exhausted)."""
+    need = offset + count
+    try:
+        full = await coro_factory(need)
+    except Exception as e:  # noqa: BLE001
+        print(f"[site_searchers] {source} failed: {e!r}", file=sys.stderr, flush=True)
+        return [], offset, True
+    batch = full[offset:offset + count]
+    next_offset = offset + len(batch)
+    exhausted = len(full) < need
+    return batch, next_offset, exhausted
 
 
 # ── HTML search fallback (curl_cffi + bs4) ────────────────────────────
@@ -338,31 +380,26 @@ def _find_thumb(node):
     return ""
 
 
-def _html_search(source, query, count, skip, min_duration, *,
+def _html_search(source, query, count, min_duration, *, cursor,
                  domain, base, page_url, link_re, per_page=36):
-    """HTML search with pagination. Fetches enough result pages to satisfy
-    `count + skip`, then returns the slice [skip:skip+count]."""
+    """HTML search starting at page `cursor`. Returns (results, next_page, exhausted)."""
     from urllib.parse import quote_plus, urljoin, urlparse
-    need = count + skip
-    max_pages = _pages(need, per_page)
     try:
         from bs4 import BeautifulSoup
     except Exception as e:  # noqa: BLE001
         print(f"[site_searchers] {source} html: bs4 unavailable: {e!r}", file=sys.stderr)
-        return []
+        return [], _page_cursor(cursor), True
     q = quote_plus(query)
     out, seen = [], set()
+    page = _page_cursor(cursor)
     try:
-        for n in range(1, max_pages + 1):
-            if len(out) >= need:
-                break
-            html = _html_get(page_url(q, n))
+        while len(out) < count:
+            html = _html_get(page_url(q, page))
             if not html:
-                if n == 1:
-                    break
-                continue
+                return out, page, page == _page_cursor(cursor)
             soup = BeautifulSoup(html, "html.parser")
-            added = 0
+            matching = 0
+            new_urls = 0
             for a in soup.find_all("a", href=True):
                 full = urljoin(base, a["href"])
                 parsed = urlparse(full)
@@ -370,10 +407,12 @@ def _html_search(source, query, count, skip, min_duration, *,
                     continue
                 if not link_re.search(parsed.path):
                     continue
+                matching += 1
                 clean = f"{parsed.scheme}://{parsed.netloc}{parsed.path}"
                 if clean in seen:
                     continue
                 seen.add(clean)
+                new_urls += 1
                 dur = _find_duration(a)
                 if dur and dur < min_duration:
                     continue
@@ -381,92 +420,323 @@ def _html_search(source, query, count, skip, min_duration, *,
                          or a.get_text(" ", strip=True) or "").strip()
                 out.append(_norm(clean, title or "Unknown", dur or None,
                                  thumbnail=_find_thumb(a)))
-                added += 1
-                if len(out) >= need:
+                if len(out) >= count:
                     break
-            if added == 0:
-                break
+            if matching == 0:
+                return out, page, True
+            # No new URLs on this page => past the last page (or site is looping).
+            if new_urls == 0:
+                return out, page, True
+            page += 1
     except Exception as e:  # noqa: BLE001
         print(f"[site_searchers] {source} html failed: {e!r}", file=sys.stderr, flush=True)
-    return out[skip:skip + count]
+    exhausted = len(out) < count
+    return out, page, exhausted
 
 
-def _html_redtube(query, count, skip=0, min_duration=600):
+def _html_redtube(query, count, cursor=0, min_duration=600):
     return _html_search(
-        "RedTube", query, count, skip, min_duration,
+        "RedTube", query, count, min_duration, cursor=cursor,
         domain="redtube.com", base="https://www.redtube.com",
         page_url=lambda q, n: f"https://www.redtube.com/?search={q}&page={n}",
         link_re=re.compile(r"^/\d{4,}$"),
     )
 
 
-def _html_spankbang(query, count, skip=0, min_duration=600):
+def _html_spankbang(query, count, cursor=0, min_duration=600):
     return _html_search(
-        "SpankBang", query, count, skip, min_duration,
+        "SpankBang", query, count, min_duration, cursor=cursor,
         domain="spankbang.com", base="https://spankbang.com",
         page_url=lambda q, n: f"https://spankbang.com/s/{q}/{n}/",
         link_re=re.compile(r"^/[0-9a-z]+/video/"),
     )
 
 
-def _html_xhamster(query, count, skip=0, min_duration=600):
+def _xhamster_new_urls_on_page(html, seen):
+    """Count never-before-seen video URLs on this page (before duration filtering)."""
+    data = _extract_initials_json(html)
+    if data:
+        sr = data.get("searchResult")
+        if isinstance(sr, dict):
+            n = 0
+            for v in sr.get("videoThumbProps") or []:
+                if not isinstance(v, dict):
+                    continue
+                url = _xhamster_canonical_url(v.get("pageURL") or "")
+                if url and url not in seen:
+                    n += 1
+            if n:
+                return n
+    from urllib.parse import urljoin, urlparse
+    try:
+        from bs4 import BeautifulSoup
+    except Exception:
+        return 0
+    soup = BeautifulSoup(html or "", "html.parser")
+    n = 0
+    for a in soup.find_all("a", href=True):
+        full = urljoin(_XH_BASE, a["href"])
+        parsed = urlparse(full)
+        if "xhamster" not in (parsed.netloc or ""):
+            continue
+        if not re.search(r"^/videos/", parsed.path or ""):
+            continue
+        clean = _xhamster_canonical_url(parsed.path)
+        if clean and clean not in seen:
+            n += 1
+    return n
+
+
+def _html_xhamster(query, count, cursor=0, min_duration=600):
     """Search xHamster via embedded JSON + HTML links.
 
     Skips the broken xhamster-api search_videos() (wrong HTML extractor in 2.2).
     Detects the US age-verification interstitial and logs a clear hint to use VPN.
     """
     from urllib.parse import quote_plus
-    need = count + skip
-    max_pages = _pages(need, 36)
     md = _xhamster_min_duration_param(min_duration)
     q = quote_plus(query)
     out, seen = [], set()
     age_gate = False
+    page = _page_cursor(cursor)
     try:
-        for n in range(1, max_pages + 1):
-            if len(out) >= need:
-                break
-            url = f"{_XH_BASE}/search/{q}?sort=longest&min-duration={md}&page={n}"
+        while len(out) < count:
+            url = f"{_XH_BASE}/search/{q}?sort=longest&min-duration={md}&page={page}"
             html = _html_get(url)
             if not html:
-                if n == 1:
-                    print("[site_searchers] XHamster: empty response from search page",
-                          file=sys.stderr, flush=True)
-                break
+                return out, page, page == _page_cursor(cursor)
             if _is_xhamster_age_gate(html):
                 age_gate = True
-                if n == 1:
+                if page == _page_cursor(cursor):
                     print(
                         "[site_searchers] XHamster: age-verification wall (US datacenter IP). "
                         "Run the worker through NordVPN — see docker-compose.vpn.yml",
                         file=sys.stderr, flush=True,
                     )
-                break
-            batch = _xhamster_videos_from_html(html, need - len(out), min_duration, seen)
-            if not batch:
-                break
-            out.extend(batch)
+                return out, page, True
+            new_urls = _xhamster_new_urls_on_page(html, seen)
+            batch = _xhamster_videos_from_html(html, count - len(out), min_duration, seen)
+            if batch:
+                out.extend(batch)
+            if new_urls == 0:
+                return out, page, True
+            page += 1
     except Exception as e:  # noqa: BLE001
         print(f"[site_searchers] XHamster html failed: {e!r}", file=sys.stderr, flush=True)
     if age_gate and not out:
-        return []
-    return out[skip:skip + count]
+        return [], page, True
+    return out, page, len(out) < count
 
 
-def _html_youporn(query, count, skip=0, min_duration=600):
+def _html_youporn(query, count, cursor=0, min_duration=600):
     return _html_search(
-        "YouPorn", query, count, skip, min_duration,
+        "YouPorn", query, count, min_duration, cursor=cursor,
         domain="youporn.com", base="https://www.youporn.com",
         page_url=lambda q, n: f"https://www.youporn.com/search/?query={q}&page={n}",
         link_re=re.compile(r"^/watch/\d+"),
     )
 
 
-# ── XNXX ──────────────────────────────────────────────────────────────
-def search_xnxx(query, count, skip=0, min_duration=600):
-    need = count + skip
+# ── ParadiseHill ──────────────────────────────────────────────────────
+_PH_BASE = "https://en.paradisehill.cc"
+_PH_LINK_RE = re.compile(r"^/[0-9a-f]{10,}/?$", re.I)
+_PH_VIDEO_LIST_RE = re.compile(r"var videoList = (\[.*?\]);", re.S)
+_PH_ACTOR_RE = re.compile(r"^/actor/\d+/?$", re.I)
+_PH_CATEGORY_RE = re.compile(r"^/category/[^/?#]+", re.I)
 
-    async def run():
+
+def _ph_abs(url_or_path):
+    from urllib.parse import urljoin
+    if not url_or_path:
+        return ""
+    if str(url_or_path).startswith("http"):
+        return str(url_or_path)
+    return urljoin(_PH_BASE, str(url_or_path))
+
+
+def _ph_parse_video_list(html):
+    """Extract ordered MP4 part URLs from the embedded videoList JS array."""
+    m = _PH_VIDEO_LIST_RE.search(html or "")
+    if not m:
+        return []
+    try:
+        data = json.loads(m.group(1))
+    except Exception:
+        return []
+    out = []
+    for item in data:
+        if not isinstance(item, dict):
+            continue
+        sources = item.get("sources") or []
+        if not sources or not isinstance(sources[0], dict):
+            continue
+        src = sources[0].get("src") or ""
+        if src:
+            out.append(str(src).replace("\\/", "/"))
+    return out
+
+
+def _ph_parse_detail(html, url):
+    """Parse a ParadiseHill film page for metadata and download URLs."""
+    from bs4 import BeautifulSoup
+    soup = BeautifulSoup(html or "", "html.parser")
+    title_el = soup.select_one("h1")
+    title = title_el.get_text(strip=True) if title_el else "Unknown"
+
+    description = ""
+    desc_p = soup.select_one(".opisanie p")
+    if desc_p:
+        description = re.sub(r"^Description:\s*", "", desc_p.get_text(" ", strip=True))
+    if not description:
+        meta_desc = soup.select_one('meta[name="description"]')
+        if meta_desc and meta_desc.get("content"):
+            description = str(meta_desc["content"]).strip()
+
+    pornstars = []
+    for a in soup.select('a[href*="/actor/"]'):
+        href = a.get("href") or ""
+        if _PH_ACTOR_RE.match(href.split("?", 1)[0]):
+            name = a.get_text(strip=True)
+            if name and name not in pornstars:
+                pornstars.append(name)
+
+    tags = []
+    for a in soup.select('a[href*="/category/"]'):
+        href = a.get("href") or ""
+        if _PH_CATEGORY_RE.match(href.split("?", 1)[0]):
+            name = a.get_text(strip=True)
+            if name and name not in tags:
+                tags.append(name)
+
+    thumbnail = ""
+    og = soup.select_one('meta[property="og:image"]')
+    if og and og.get("content"):
+        thumbnail = _ph_abs(og["content"])
+    if not thumbnail:
+        img = soup.select_one(".poster img, .block-poster img, picture img")
+        if img:
+            for attr in ("src", "data-src"):
+                if img.get(attr):
+                    thumbnail = _ph_abs(img[attr])
+                    break
+
+    part_urls = _ph_parse_video_list(html)
+    return {
+        "title": title,
+        "description": description,
+        "tags": tags,
+        "pornstars": pornstars,
+        "thumbnail": thumbnail,
+        "_part_urls": part_urls or None,
+        "_cdn_url": part_urls[0] if len(part_urls) == 1 else None,
+    }
+
+
+def _ph_search_items(html):
+    """Extract film cards from a ParadiseHill search/home listing page."""
+    from bs4 import BeautifulSoup
+    from urllib.parse import urljoin, urlparse
+    soup = BeautifulSoup(html or "", "html.parser")
+    out = []
+    seen = set()
+    for item in soup.select(".list-film-item"):
+        a = item.select_one("a[href]")
+        if not a:
+            continue
+        full = urljoin(_PH_BASE, a["href"])
+        parsed = urlparse(full)
+        if "paradisehill.cc" not in (parsed.netloc or ""):
+            continue
+        if not _PH_LINK_RE.match(parsed.path or ""):
+            continue
+        clean = f"{parsed.scheme}://{parsed.netloc}{parsed.path.rstrip('/')}/"
+        if clean in seen:
+            continue
+        seen.add(clean)
+        name_el = item.select_one('[itemprop="name"]')
+        title = name_el.get_text(strip=True) if name_el else ""
+        if not title:
+            title = (a.get("title") or a.get_text(" ", strip=True) or "").strip()
+        genre_el = item.select_one('[itemprop="genre"]')
+        tags = [genre_el.get_text(strip=True)] if genre_el else []
+        thumb = ""
+        img = item.select_one("img")
+        if img:
+            for attr in ("src", "data-src"):
+                if img.get(attr):
+                    thumb = _ph_abs(img[attr])
+                    break
+        out.append((clean, title, tags, thumb))
+    return out
+
+
+def search_paradisehill(query, count, cursor=0, min_duration=600):
+    """Search ParadiseHill and enrich each hit with detail-page metadata + MP4 parts."""
+    from urllib.parse import quote_plus
+    q = quote_plus(query)
+    stubs, seen = [], set()
+    page = _page_cursor(cursor)
+    try:
+        while len(stubs) < count:
+            page_url = (
+                f"{_PH_BASE}/search/?pattern={q}&what=1"
+                if page == 1 else f"{_PH_BASE}/search/?pattern={q}&what=1&page={page}"
+            )
+            html = _html_get(page_url)
+            if not html:
+                break
+            batch = _ph_search_items(html)
+            if not batch:
+                break
+            new_urls = 0
+            for clean, title, tags, thumb in batch:
+                if clean in seen:
+                    continue
+                seen.add(clean)
+                new_urls += 1
+                stubs.append((clean, title, tags, thumb))
+                if len(stubs) >= count:
+                    break
+            if new_urls == 0:
+                break
+            page += 1
+    except Exception as e:  # noqa: BLE001
+        print(f"[site_searchers] ParadiseHill search failed: {e!r}", file=sys.stderr, flush=True)
+        return [], page, True
+
+    out = []
+    for clean, title, tags, thumb in stubs:
+        try:
+            detail_html = _html_get(clean)
+            if not detail_html:
+                out.append(_norm(clean, title, None, thumbnail=thumb, tags=tags))
+                continue
+            meta = _ph_parse_detail(detail_html, clean)
+            item = _norm(
+                clean,
+                meta.get("title") or title,
+                None,
+                thumbnail=meta.get("thumbnail") or thumb,
+                tags=meta.get("tags") or tags,
+                pornstars=meta.get("pornstars"),
+                description=meta.get("description") or "",
+                cdn=meta.get("_cdn_url"),
+            )
+            parts = meta.get("_part_urls")
+            if parts and len(parts) > 1:
+                item["_part_urls"] = parts
+            out.append(item)
+        except Exception:
+            out.append(_norm(clean, title, None, thumbnail=thumb, tags=tags))
+    exhausted = len(stubs) < count
+    return out, page, exhausted
+
+
+# ── XNXX ──────────────────────────────────────────────────────────────
+def search_xnxx(query, count, cursor=0, min_duration=600):
+    offset = _offset_cursor(cursor)
+
+    async def run(need):
         import xnxx_api
         from xnxx_api.modules.search_filters import Length
         client = xnxx_api.Client()
@@ -475,17 +745,8 @@ def search_xnxx(query, count, skip=0, min_duration=600):
             total_p = int(_sget(res, "total_pages", 1) or 1)
         except Exception:
             total_p = 1
-        pages = min(_pages(need, 28), total_p)
-        vids = _sget(res, "videos")
-        if callable(vids):
-            agen = vids(pages=pages)
-        else:
-            agen = vids
-        if inspect.iscoroutine(agen):
-            agen = await agen
 
         async def extract(v):
-            # xnxx exposes duration in *minutes* as a string ('21').
             length_min = _dur(_sget(v, "length", 0))
             dur_s = length_min * 60 if length_min else 0
             thumbs = _sget(v, "thumbnail_url", []) or []
@@ -501,17 +762,28 @@ def search_xnxx(query, count, skip=0, min_duration=600):
                 description=str(_sget(v, "description", "") or ""),
             )
 
-        return await _collect(agen, extract, need, min_duration)
+        async def collect_fn(pages):
+            pages_eff = min(pages, total_p)
+            vids = _sget(res, "videos")
+            if callable(vids):
+                agen = vids(pages=pages_eff)
+            else:
+                agen = vids
+            if inspect.iscoroutine(agen):
+                agen = await agen
+            items, _ = await _collect(agen, extract, need, min_duration)
+            return items
 
-    return _run("XNXX", run, skip, count)
+        return await _fetch_until(collect_fn, need, 28)
+
+    return asyncio.run(_run_paginated("XNXX", run, offset, count))
 
 
 # ── PornHub (phub) ────────────────────────────────────────────────────
-def search_pornhub(query, count, skip=0, min_duration=600):
-    need = count + skip
-    pages = _pages(need, 12)
+def search_pornhub(query, count, cursor=0, min_duration=600):
+    offset = _offset_cursor(cursor)
 
-    async def run():
+    async def run(need):
         import phub
         client = phub.Client(login=False)
 
@@ -533,28 +805,30 @@ def search_pornhub(query, count, skip=0, min_duration=600):
                 thumbnail=thumb, tags=tags,
             )
 
-        return await _collect(client.search_videos(query, pages=pages), extract, need, min_duration)
+        async def collect_fn(pages):
+            items, _ = await _collect(
+                client.search_videos(query, pages=pages), extract, need, min_duration,
+            )
+            return items
 
-    return _run("PornHub", run, skip, count)
+        return await _fetch_until(collect_fn, need, 12)
+
+    return asyncio.run(_run_paginated("PornHub", run, offset, count))
 
 
 # ── XHamster ──────────────────────────────────────────────────────────
-def search_xhamster(query, count, skip=0, min_duration=600):
-    # xhamster-api 2.2 search_videos() uses extractor_shorts (0 results on search
-    # pages). HTML + window.initials JSON is reliable when not age-gated.
-    return _html_xhamster(query, count, skip, min_duration)
+def search_xhamster(query, count, cursor=0, min_duration=600):
+    return _html_xhamster(query, count, cursor, min_duration)
 
 
 # ── XVideos ───────────────────────────────────────────────────────────
-def search_xvideos(query, count, skip=0, min_duration=600):
-    need = count + skip
-    pages = _pages(need, 20)
+def search_xvideos(query, count, cursor=0, min_duration=600):
+    offset = _offset_cursor(cursor)
 
-    async def run():
+    async def run(need):
         import xvideos_api
         from xvideos_api.modules.sorting import SortVideoTime
         client = xvideos_api.Client()
-        seen, out = set(), []
 
         async def extract(v):
             dur_s = _dur(_sget(v, "length", ""))
@@ -565,29 +839,30 @@ def search_xvideos(query, count, skip=0, min_duration=600):
                 description=str(_sget(v, "description", "") or ""),
             )
 
-        for st in (SortVideoTime.Sort_really_long, SortVideoTime.Sort_long_10_20min):
-            agen = client.search(query, sorting_time=st, pages=pages)
-            out.extend(await _collect(agen, extract, need - len(out), min_duration, seen=seen))
-            if len(out) >= need:
-                break
-        return out
+        async def collect_fn(pages):
+            seen, out = set(), []
+            for st in (SortVideoTime.Sort_really_long, SortVideoTime.Sort_long_10_20min):
+                agen = client.search(query, sorting_time=st, pages=pages)
+                batch, _ = await _collect(agen, extract, need - len(out), min_duration, seen=seen)
+                out.extend(batch)
+                if len(out) >= need:
+                    break
+            return out
 
-    return _run("XVideos", run, skip, count)
+        return await _fetch_until(collect_fn, need, 20)
+
+    return asyncio.run(_run_paginated("XVideos", run, offset, count))
 
 
 # ── Eporner ───────────────────────────────────────────────────────────
-def search_eporner(query, count, skip=0, min_duration=600):
-    need = count + skip
-    per_page = min(max(need, 20), 60)
-
+def search_eporner(query, count, cursor=0, min_duration=600):
     async def run():
         import eporner_api
         from eporner_api import Gay, Order, LowQuality
         client = eporner_api.Client()
+        per_page = min(max(count, 20), 60)
 
         async def extract(v):
-            # Many derived properties (thumbnail, rating, ...) raise behind the
-            # age-verification wall, so only touch the safe fields.
             dur_s = _dur(_sget(v, "length", 0))
             tags = [t for t in (list(_sget(v, "tags", []) or [])) if t]
             return _norm(
@@ -595,31 +870,34 @@ def search_eporner(query, count, skip=0, min_duration=600):
                 tags=tags,
             )
 
-        out, page = [], 1
-        max_page = _pages(need, per_page)
-        while len(out) < need and page <= max_page:
+        out, page = [], _page_cursor(cursor)
+        while len(out) < count:
             agen = client.search_videos(
                 query=query, sorting_gay=Gay.exclude_gay_content,
                 sorting_order=Order.longest,
                 sorting_low_quality=LowQuality.exclude_low_quality_content,
                 page=page, per_page=per_page,
             )
-            batch = await _collect(agen, extract, need - len(out), min_duration)
-            if not batch:
-                break
-            out.extend(batch)
+            batch, saw_any = await _collect(agen, extract, count - len(out), min_duration)
+            if not saw_any:
+                return out, page, True
+            if batch:
+                out.extend(batch)
             page += 1
-        return out
+        return out, page, len(out) < count
 
-    return _run("Eporner", run, skip, count)
+    try:
+        return asyncio.run(run())
+    except Exception as e:  # noqa: BLE001
+        print(f"[site_searchers] Eporner failed: {e!r}", file=sys.stderr, flush=True)
+        return [], _page_cursor(cursor), True
 
 
 # ── YouPorn ───────────────────────────────────────────────────────────
-def search_youporn(query, count, skip=0, min_duration=600):
-    need = count + skip
-    pages = _pages(need, 15)
+def search_youporn(query, count, cursor=0, min_duration=600):
+    offset = _offset_cursor(cursor)
 
-    async def run():
+    async def run(need):
         import youporn_api
         client = youporn_api.Client()
         min_min = max(1, min_duration // 60)
@@ -634,26 +912,30 @@ def search_youporn(query, count, skip=0, min_duration=600):
                 pornstars=list(_sget(v, "pornstars", []) or []),
             )
 
-        agen = client.search_videos(query, pages=pages, filter_relevance="duration",
-                                    filter_duration_minimum=md)
-        return await _collect(agen, extract, need, min_duration)
+        async def collect_fn(pages):
+            agen = client.search_videos(query, pages=pages, filter_relevance="duration",
+                                        filter_duration_minimum=md)
+            items, _ = await _collect(agen, extract, need, min_duration)
+            return items
 
-    res = _run("YouPorn", run, skip, count)
-    return res or _html_youporn(query, count, skip, min_duration)
+        return await _fetch_until(collect_fn, need, 15)
+
+    batch, next_cursor, exhausted = asyncio.run(_run_paginated("YouPorn", run, offset, count))
+    if batch:
+        return batch, next_cursor, exhausted
+    return _html_youporn(query, count, cursor, min_duration)
 
 
 # ── HQPorner ──────────────────────────────────────────────────────────
-def search_hqporner(query, count, skip=0, min_duration=600):
-    need = count + skip
-    pages = _pages(need, 15)
+def search_hqporner(query, count, cursor=0, min_duration=600):
+    offset = _offset_cursor(cursor)
 
-    async def run():
+    async def run(need):
         import hqporner_api
         client = hqporner_api.Client()
 
         async def extract(v):
             dur_s = _dur(_sget(v, "length", ""))
-            # Prefer real MP4 CDN links (now async); worker wgets _cdn_url.
             cdn = ""
             try:
                 urls = await v.direct_download_urls()
@@ -669,9 +951,13 @@ def search_hqporner(query, count, skip=0, min_duration=600):
                 cdn=cdn or None,
             )
 
-        return await _collect(client.search_videos(query, pages=pages), extract, need, min_duration)
+        async def collect_fn(pages):
+            items, _ = await _collect(client.search_videos(query, pages=pages), extract, need, min_duration)
+            return items
 
-    return _run("HQPorner", run, skip, count)
+        return await _fetch_until(collect_fn, need, 15)
+
+    return asyncio.run(_run_paginated("HQPorner", run, offset, count))
 
 
 # ── yt-dlp generic fallback (RedTube / SpankBang) ─────────────────────
@@ -720,4 +1006,5 @@ SEARCHERS = {
     # via HTML search; the worker downloads each URL with yt-dlp.
     "RedTube": _html_redtube,
     "SpankBang": _html_spankbang,
+    "ParadiseHill": search_paradisehill,
 }

@@ -106,6 +106,10 @@ def canonical_key(url: str) -> str:
         m = re.search(r"^/([a-z0-9]+)/(?:video|play)/", path, re.I)
         if m:
             return f"spankbang:{m.group(1).lower()}"
+    if "paradisehill" in host:
+        m = re.search(r"^/([0-9a-f]{10,})/?$", path, re.I)
+        if m:
+            return f"paradisehill:{m.group(1).lower()}"
 
     # Generic fallback: normalized url (drop tracking params, sort the rest,
     # strip trailing slash) so cosmetic differences collapse to one key.

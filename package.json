@@ -19,6 +19,7 @@
     "db:studio": "prisma studio",
     "scrape": "node scripts/run-scrape.cjs",
     "scrape:playwright": "node scripts/run-scrape-playwright.cjs",
+    "scrape:paradisehill": "node scripts/paradisehill-debug.cjs",
     "download-videos": "node scripts/download-videos.cjs",
     "download-videos:test": "LIMIT=2 node scripts/download-videos.cjs",
     "download-videos:fetch": "node scripts/download-videos-fetch.cjs",

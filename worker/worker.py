@@ -90,6 +90,23 @@ CREATOR_QUEUE_KEY = "creator:queue"
 UPLOAD_DIR = os.environ.get("UPLOAD_DIR", os.path.join(ROOT, "uploads"))
 # Optional HTTP(S) proxy for source downloads (or use docker-compose.vpn.yml).
 SCRAPE_PROXY = os.environ.get("SCRAPE_HTTP_PROXY") or os.environ.get("HTTPS_PROXY") or ""
+# yt-dlp: best available video+audio; m3u8 fast path tries highest HLS rung first.
+YTDLP_FORMAT = "bestvideo+bestaudio/best"
+M3U8_QUALITIES = ("1080p", "720p", "480p", "240p")
+
+
+def _download_m3u8(m3u8: str, dest: str, dl_env: dict, timeout: int = 900):
+    """Download XHamster-style HLS template URLs, preferring highest quality."""
+    last_result = None
+    for quality in M3U8_QUALITIES:
+        stream_url = m3u8.replace("_TPL_", quality)
+        cmd = ["ffmpeg", "-y", "-i", stream_url, "-c", "copy", dest]
+        last_result = subprocess.run(cmd, capture_output=True, timeout=timeout, env=dl_env)
+        if os.path.exists(dest) and os.path.getsize(dest) > 100_000:
+            return True, last_result, quality
+        if os.path.exists(dest):
+            os.remove(dest)
+    return False, last_result, None
 
 
 # ── Downloaders ───────────────────────────────────────────────────────
@@ -142,9 +159,14 @@ def _download(video, dest_dir) -> tuple[bool, str, dict]:
             last_result = subprocess.run(cmd, capture_output=True, timeout=1800, env=dl_env)
         elif m3u8:
             method = "ffmpeg-m3u8"
-            stream_url = m3u8.replace("_TPL_", "240p")
-            cmd = ["ffmpeg", "-y", "-i", stream_url, "-c", "copy", dest]
-            last_result = subprocess.run(cmd, capture_output=True, timeout=900, env=dl_env)
+            ok, last_result, quality = _download_m3u8(m3u8, dest, dl_env)
+            if not ok:
+                return False, "m3u8 download failed at all qualities", {
+                    "method": method,
+                    "exitCode": last_result.returncode if last_result else None,
+                    "stderr": _stderr_tail(last_result),
+                }
+            method = f"ffmpeg-m3u8-{quality}"
         elif cdn:
             method = "wget-cdn"
             cmd = ["wget", "-q", "--no-check-certificate", "-O", dest, cdn]
@@ -153,7 +175,7 @@ def _download(video, dest_dir) -> tuple[bool, str, dict]:
             method = "yt-dlp"
             tmp = os.path.join(dest_dir, "dl.%(ext)s")
             cmd = ["yt-dlp", "--no-playlist", "--merge-output-format", "mp4",
-                   "-f", "bestvideo[height<=480]+bestaudio/best[height<=480]/best",
+                   "-f", YTDLP_FORMAT,
                    "-o", tmp, "--socket-timeout", "30", "--retries", "3", url]
             if SCRAPE_PROXY:
                 cmd[1:1] = ["--proxy", SCRAPE_PROXY]
@@ -385,7 +407,7 @@ def _process_source(conn, run, source, min_dur, max_per_site, seen, totals) -> s
     s = {"found": 0, "new_videos": 0, "skipped": 0, "failed": 0}
     download_all = max_per_site is None
     collected = 0  # search-result slots consumed (toward cap or ALL_CAP safety)
-    skip = 0
+    cursor = 0  # page cursor (HTML / Eporner) or result offset (API libs)
     stopped = False
 
     def record(outcome):
@@ -411,7 +433,7 @@ def _process_source(conn, run, source, min_dur, max_per_site, seen, totals) -> s
                 if collected >= max_per_site:
                     break
                 batch_n = min(PAGE_BATCH, max_per_site - collected)
-            results = searcher(run["query"], batch_n, skip, min_dur)
+            results, cursor, exhausted = searcher(run["query"], batch_n, cursor, min_dur)
             if not results:
                 break
 
@@ -455,10 +477,10 @@ def _process_source(conn, run, source, min_dur, max_per_site, seen, totals) -> s
                             stopped = True
 
             db.set_run_site(conn, run_id, source, status="RUNNING", **s)
-            skip += len(results)
             collected += len(results)
-            # Fewer hits than requested => source pagination exhausted.
-            if len(results) < batch_n:
+            if exhausted:
+                break
+            if not download_all and len(results) < batch_n:
                 break
             time.sleep(1)
     except Exception as e:  # noqa: BLE001

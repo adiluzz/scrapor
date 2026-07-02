@@ -44,6 +44,11 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
       where: { id },
       data: { status: "STOPPED", finishedAt: new Date() },
     });
+    try {
+      await redis.lrem(SCRAPE_QUEUE_KEY, 0, id);
+    } catch (err) {
+      logger.warn({ err: String(err), runId: id }, "failed to remove stopped run from queue");
+    }
     logger.info({ runId: id }, "scrape run stopped by admin");
     return NextResponse.json({ ok: true, status: "STOPPED" });
   }

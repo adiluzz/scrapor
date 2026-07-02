@@ -56,6 +56,11 @@ export async function POST(request: Request) {
     await redis.rpush(SCRAPE_QUEUE_KEY, run.id);
   } catch (err) {
     logger.error({ err: String(err), runId: run.id }, "failed to enqueue scrape run");
+    await prisma.scrapeRun.update({
+      where: { id: run.id },
+      data: { status: "ERROR", finishedAt: new Date() },
+    });
+    return NextResponse.json({ error: "Failed to enqueue scrape run (Redis unavailable)" }, { status: 503 });
   }
 
   logger.info({ runId: run.id, sources }, "scrape run created");

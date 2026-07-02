@@ -223,6 +223,8 @@ def _process_one(run, source_site, video) -> str:
     """
     conn = db.connect()
     try:
+        if db.get_run_status(conn, run["id"]) == "STOPPED":
+            return "skip"
         return _process_one_inner(conn, run, source_site, video)
     except Exception as e:
         _log_video_fail("process", video, run, source_site, e,
@@ -463,8 +465,9 @@ def _process_source(conn, run, source, min_dur, max_per_site, seen, totals) -> s
                    skipDupes=len(results) - len(fresh))
 
             if fresh:
-                with ThreadPoolExecutor(max_workers=DOWNLOAD_CONCURRENCY) as ex:
-                    futures = {ex.submit(_process_one, run, source, v): v for v in fresh}
+                ex = ThreadPoolExecutor(max_workers=DOWNLOAD_CONCURRENCY)
+                futures = {ex.submit(_process_one, run, source, v): v for v in fresh}
+                try:
                     for fut in as_completed(futures):
                         v = futures[fut]
                         try:
@@ -480,7 +483,13 @@ def _process_source(conn, run, source, min_dur, max_per_site, seen, totals) -> s
                                              totals["fail"], totals["found"])
                         if _run_stopped(conn, run_id):
                             stopped = True
+                            break
+                finally:
+                    # Don't block the queue on in-flight downloads after an admin STOP.
+                    ex.shutdown(wait=not stopped, cancel_futures=stopped)
 
+            if stopped:
+                break
             db.set_run_site(conn, run_id, source, status="RUNNING", **s)
             collected += len(results)
             if exhausted:
@@ -514,7 +523,7 @@ def process_run(conn, run_id: str):
         return
     # A run stopped by an admin (or already finished) must not be (re)started —
     # this guards duplicate queue entries and the startup resume path.
-    if run["status"] in ("STOPPED", "DONE"):
+    if run["status"] in ("STOPPED", "DONE", "ERROR"):
         log.info(_j(f"run {run_id} is {run['status']}, skipping"))
         return
 

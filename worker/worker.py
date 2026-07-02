@@ -105,6 +105,7 @@ def _download(video, dest_dir) -> tuple[bool, str, dict]:
 
     m3u8 = video.get("_m3u8_base_url")
     cdn = video.get("_cdn_url")
+    parts = video.get("_part_urls")
     url = video.get("url") or ""
     last_result = None
     dl_env = os.environ.copy()
@@ -114,7 +115,32 @@ def _download(video, dest_dir) -> tuple[bool, str, dict]:
         dl_env["http_proxy"] = SCRAPE_PROXY
         dl_env["https_proxy"] = SCRAPE_PROXY
     try:
-        if m3u8:
+        if parts and isinstance(parts, list) and len(parts) > 1:
+            method = "wget-concat"
+            part_files = []
+            for i, part_url in enumerate(parts):
+                if not part_url:
+                    continue
+                pf = os.path.join(dest_dir, f"part_{i:03d}.mp4")
+                cmd = ["wget", "-q", "--no-check-certificate", "-O", pf, str(part_url)]
+                last_result = subprocess.run(cmd, capture_output=True, timeout=900, env=dl_env)
+                if not (os.path.exists(pf) and os.path.getsize(pf) > 100_000):
+                    size = os.path.getsize(pf) if os.path.exists(pf) else 0
+                    return False, f"part {i + 1} missing or too small ({size} bytes)", {
+                        "method": method,
+                        "exitCode": last_result.returncode if last_result else None,
+                        "stderr": _stderr_tail(last_result),
+                    }
+                part_files.append(pf)
+            if len(part_files) < 2:
+                return False, "multi-part download produced fewer than 2 files", {"method": method}
+            list_file = os.path.join(dest_dir, "concat.txt")
+            with open(list_file, "w", encoding="utf-8") as fh:
+                for pf in part_files:
+                    fh.write(f"file '{pf}'\n")
+            cmd = ["ffmpeg", "-y", "-f", "concat", "-safe", "0", "-i", list_file, "-c", "copy", dest]
+            last_result = subprocess.run(cmd, capture_output=True, timeout=1800, env=dl_env)
+        elif m3u8:
             method = "ffmpeg-m3u8"
             stream_url = m3u8.replace("_TPL_", "240p")
             cmd = ["ffmpeg", "-y", "-i", stream_url, "-c", "copy", dest]
@@ -127,7 +153,7 @@ def _download(video, dest_dir) -> tuple[bool, str, dict]:
             method = "yt-dlp"
             tmp = os.path.join(dest_dir, "dl.%(ext)s")
             cmd = ["yt-dlp", "--no-playlist", "--merge-output-format", "mp4",
-                   "-f", "bestvideo[height<=720]+bestaudio/best",
+                   "-f", "bestvideo[height<=480]+bestaudio/best[height<=480]/best",
                    "-o", tmp, "--socket-timeout", "30", "--retries", "3", url]
             if SCRAPE_PROXY:
                 cmd[1:1] = ["--proxy", SCRAPE_PROXY]
@@ -400,6 +426,14 @@ def _process_source(conn, run, source, min_dur, max_per_site, seen, totals) -> s
                 fresh.append(v)
             s["found"] += len(results)
             totals["found"] += len(results)
+            # Persist search hits before downloads so the admin UI doesn't show
+            # Found: 0 while yt-dlp is pulling a large first video over VPN.
+            db.set_run_site(conn, run_id, source, status="RUNNING", **s)
+            db.update_run_totals(conn, run_id, totals["new"], totals["skip"],
+                                 totals["fail"], totals["found"])
+            _event("info", "search_batch", runId=run_id, sourceSite=source,
+                   query=run["query"], batch=len(results), fresh=len(fresh),
+                   skipDupes=len(results) - len(fresh))
 
             if fresh:
                 with ThreadPoolExecutor(max_workers=DOWNLOAD_CONCURRENCY) as ex:

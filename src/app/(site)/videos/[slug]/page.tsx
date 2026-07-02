@@ -10,6 +10,14 @@ import { listVideos } from "@/lib/queries";
 import VideoPlayer from "@/components/player/VideoPlayer";
 import VideoGrid from "@/components/site/VideoGrid";
 import JsonLd from "@/components/site/JsonLd";
+import {
+  breadcrumbJsonLd,
+  buildOpenGraph,
+  getSiteBaseUrl,
+  keywordsMeta,
+  videoObjectJsonLd,
+  videoPageDescription,
+} from "@/lib/seo";
 import AdZone from "@/components/ads/AdZone";
 import ExoFullscreenOverlay from "@/components/ads/ExoFullscreenOverlay";
 
@@ -45,13 +53,23 @@ export async function generateMetadata({
   const site = await getCurrentSite();
   const video = await getVideo(site.id, slug);
   if (!video) return { title: "Not found" };
-  const description =
-    video.description?.slice(0, 300) || `Watch ${video.title} on ${site.name}.`;
+  const [poster] = await Promise.all([thumbUrl(video)]);
+  const description = videoPageDescription(video.title, site.name, video.description);
+  const tagNames = video.tags.map((t) => t.tag.name);
+  const title = `${video.title} — Piss Drinking Porn`;
   return {
-    title: `${video.title} — ${site.name}`,
+    title,
     description,
+    keywords: keywordsMeta([...tagNames, video.title]),
     alternates: { canonical: `/videos/${video.slug}` },
-    openGraph: { title: video.title, description, type: "video.other" },
+    openGraph: buildOpenGraph({
+      title: video.title,
+      description,
+      url: `/videos/${video.slug}`,
+      image: poster,
+      type: "video.other",
+    }),
+    twitter: { card: "summary_large_image", title: video.title, description, images: poster ? [poster] : undefined },
   };
 }
 
@@ -73,9 +91,10 @@ export default async function VideoPage({
   }
   if (!video) notFound();
 
-  const [poster, storyboard] = await Promise.all([
+  const [poster, storyboard, base] = await Promise.all([
     thumbUrl(video),
     loadStoryboardData(video),
+    getSiteBaseUrl(),
   ]);
 
   let heatmap: number[] = [];
@@ -97,21 +116,32 @@ export default async function VideoPage({
     }
   );
 
+  const pageUrl = `${base}/videos/${video.slug}`;
+  const tagNames = video.tags.map((t) => t.tag.name);
+
   return (
     <div className="relative space-y-6">
       {!adminPreview && (
         <ExoFullscreenOverlay zoneId={process.env.EXO_ZONE_VIDEO_FULLSCREEN} />
       )}
       <JsonLd
-        data={{
-          "@context": "https://schema.org",
-          "@type": "VideoObject",
-          name: video.title,
-          description: video.description || undefined,
-          thumbnailUrl: poster || undefined,
+        data={videoObjectJsonLd({
+          title: video.title,
+          description: video.description,
+          thumbnailUrl: poster,
           uploadDate: (video.sourceUploadDate || video.createdAt).toISOString(),
-          duration: isoDuration(video.durationSec),
-        }}
+          durationIso: isoDuration(video.durationSec),
+          pageUrl,
+          viewCount: video.viewCount,
+          tags: tagNames,
+        })}
+      />
+      <JsonLd
+        data={breadcrumbJsonLd([
+          { name: "Home", url: base },
+          { name: "Videos", url: `${base}/` },
+          { name: video.title, url: pageUrl },
+        ])}
       />
 
       <div className="mx-auto w-full max-w-5xl">

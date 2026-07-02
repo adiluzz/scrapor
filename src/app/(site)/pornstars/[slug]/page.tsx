@@ -8,6 +8,12 @@ import Filters from "@/components/site/Filters";
 import Pagination from "@/components/site/Pagination";
 import InPageSearch from "@/components/site/InPageSearch";
 import JsonLd from "@/components/site/JsonLd";
+import {
+  buildOpenGraph,
+  getSiteBaseUrl,
+  keywordsMeta,
+  pornstarPageDescription,
+} from "@/lib/seo";
 
 export const dynamic = "force-dynamic";
 type SearchParams = Record<string, string | string[] | undefined>;
@@ -25,7 +31,15 @@ export async function generateMetadata({
   const site = await getCurrentSite();
   const star = await getStar(site.id, slug);
   if (!star) return { title: "Not found" };
-  return { title: `${star.name} videos`, description: star.bio || `Watch ${star.name} videos on ${site.name}.` };
+  const title = `${star.name} Piss Drinking Porn Videos`;
+  const description = pornstarPageDescription(star.name, site.name, star.bio);
+  return {
+    title,
+    description,
+    keywords: keywordsMeta([star.name, `${star.name} piss drinking`, `${star.name} watersports`]),
+    alternates: { canonical: `/pornstars/${star.slug}` },
+    openGraph: buildOpenGraph({ title, description, url: `/pornstars/${star.slug}` }),
+  };
 }
 
 export default async function PornstarPage({
@@ -44,13 +58,22 @@ export default async function PornstarPage({
   const { videos, total, totalPages } = await listVideos(site.id, dp, {
     pornstars: { some: { pornstarId: star.id } },
   });
+  const base = await getSiteBaseUrl();
 
   return (
     <div>
-      <JsonLd data={{ "@context": "https://schema.org", "@type": "Person", name: star.name, description: star.bio || undefined }} />
+      <JsonLd
+        data={{
+          "@context": "https://schema.org",
+          "@type": "Person",
+          name: star.name,
+          description: pornstarPageDescription(star.name, site.name, star.bio),
+          url: `${base}/pornstars/${star.slug}`,
+        }}
+      />
 
       <div className="mb-6 flex items-center gap-4">
-        <div className="flex h-20 w-20 items-center justify-center rounded-full bg-gradient-to-br from-pink-600 to-purple-600 text-3xl font-bold text-white">
+        <div className="flex h-20 w-20 items-center justify-center rounded-full bg-gradient-to-br from-brand-600 to-purple-600 text-3xl font-bold text-white">
           {star.name.charAt(0).toUpperCase()}
         </div>
         <div>

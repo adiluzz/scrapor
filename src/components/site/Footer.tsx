@@ -7,9 +7,9 @@ export default function Footer({ siteName = "Pisster" }: { siteName?: string }) 
       <div className="mx-auto max-w-7xl px-4 py-8 text-sm text-zinc-500">
         <div className="flex flex-wrap gap-x-6 gap-y-2">
           <Link href="/" className="hover:text-zinc-300">Home</Link>
+          <Link href="/tags" className="hover:text-zinc-300">Tags</Link>
           <Link href="/pornstars" className="hover:text-zinc-300">Pornstars</Link>
           <Link href="/creators" className="hover:text-zinc-300">Creators</Link>
-          <Link href="/terms" className="hover:text-zinc-300">Terms</Link>
           <Link href="/privacy" className="hover:text-zinc-300">Privacy</Link>
           <CookieSettings siteName={siteName} />
           <Link href="/2257" className="hover:text-zinc-300">2257 Statement</Link>

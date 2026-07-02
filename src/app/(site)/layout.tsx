@@ -2,6 +2,13 @@ import type { Metadata } from "next";
 import Script from "next/script";
 import { cookies } from "next/headers";
 import { getCurrentSite } from "@/lib/site";
+import {
+  adultMetadataExtras,
+  buildOpenGraph,
+  keywordsMeta,
+  siteHomeDescription,
+  siteHomeTitle,
+} from "@/lib/seo";
 import Header from "@/components/site/Header";
 import Footer from "@/components/site/Footer";
 import AgeGate from "@/components/site/AgeGate";
@@ -11,10 +18,15 @@ import GoogleAnalytics from "@/components/site/GoogleAnalytics";
 
 export async function generateMetadata(): Promise<Metadata> {
   const site = await getCurrentSite();
+  const title = siteHomeTitle(site.name);
+  const description = siteHomeDescription(site.name);
   return {
-    title: { default: `${site.name} — Free HD Porn Videos`, template: `%s · ${site.name}` },
-    description: `Watch free HD porn videos on ${site.name}. Updated daily.`,
-    other: { rating: "RTA-5042-1996-1400-1577-RTA" },
+    title: { default: title, template: `%s · ${site.name}` },
+    description,
+    keywords: keywordsMeta(),
+    other: adultMetadataExtras(),
+    openGraph: buildOpenGraph({ title, description, url: "/" }),
+    twitter: { card: "summary_large_image", title, description },
   };
 }
 

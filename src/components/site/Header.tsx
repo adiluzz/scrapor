@@ -21,6 +21,7 @@ export default async function Header({ initialQuery = "" }: { initialQuery?: str
         </div>
 
         <nav className="flex items-center gap-4 text-sm">
+          <Link href="/tags" className="text-zinc-300 hover:text-white">Tags</Link>
           <Link href="/pornstars" className="text-zinc-300 hover:text-white">Pornstars</Link>
           <Link href="/creators" className="text-zinc-300 hover:text-white">Creators</Link>
           {user ? (

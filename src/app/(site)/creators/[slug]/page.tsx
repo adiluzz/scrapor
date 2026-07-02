@@ -8,6 +8,7 @@ import Filters from "@/components/site/Filters";
 import Pagination from "@/components/site/Pagination";
 import InPageSearch from "@/components/site/InPageSearch";
 import JsonLd from "@/components/site/JsonLd";
+import { buildOpenGraph, getSiteBaseUrl, keywordsMeta, pornstarPageDescription } from "@/lib/seo";
 
 export const dynamic = "force-dynamic";
 type SearchParams = Record<string, string | string[] | undefined>;
@@ -25,7 +26,15 @@ export async function generateMetadata({
   const site = await getCurrentSite();
   const c = await getCreator(site.id, slug);
   if (!c) return { title: "Not found" };
-  return { title: `${c.displayName} videos`, description: c.bio || `Videos by ${c.displayName}.` };
+  const title = `${c.displayName} Piss Drinking Videos`;
+  const description = pornstarPageDescription(c.displayName, site.name, c.bio);
+  return {
+    title,
+    description,
+    keywords: keywordsMeta([c.displayName, `${c.displayName} piss drinking`]),
+    alternates: { canonical: `/creators/${c.slug}` },
+    openGraph: buildOpenGraph({ title, description, url: `/creators/${c.slug}` }),
+  };
 }
 
 export default async function CreatorPage({
@@ -42,13 +51,22 @@ export default async function CreatorPage({
 
   const dp = parseDiscoveryParams(await searchParams);
   const { videos, total, totalPages } = await listVideos(site.id, dp, { creatorId: creator.id });
+  const base = await getSiteBaseUrl();
 
   return (
     <div>
-      <JsonLd data={{ "@context": "https://schema.org", "@type": "Person", name: creator.displayName, description: creator.bio || undefined }} />
+      <JsonLd
+        data={{
+          "@context": "https://schema.org",
+          "@type": "Person",
+          name: creator.displayName,
+          description: pornstarPageDescription(creator.displayName, site.name, creator.bio),
+          url: `${base}/creators/${creator.slug}`,
+        }}
+      />
 
       <div className="mb-6 flex items-center gap-4">
-        <div className="flex h-20 w-20 items-center justify-center rounded-full bg-gradient-to-br from-indigo-600 to-pink-600 text-3xl font-bold text-white">
+        <div className="flex h-20 w-20 items-center justify-center rounded-full bg-gradient-to-br from-indigo-600 to-brand-600 text-3xl font-bold text-white">
           {creator.displayName.charAt(0).toUpperCase()}
         </div>
         <div>

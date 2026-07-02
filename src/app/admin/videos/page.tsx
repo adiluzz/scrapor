@@ -35,7 +35,7 @@ export default async function AdminVideosPage({
 
       <form className="mb-4" action="/admin/videos">
         <input name="q" defaultValue={q} placeholder="Search title…"
-          className="w-full max-w-sm rounded-lg border border-zinc-700 bg-zinc-900 px-4 py-2 text-sm text-white focus:border-pink-500 focus:outline-none" />
+          className="w-full max-w-sm rounded-lg border border-zinc-700 bg-zinc-900 px-4 py-2 text-sm text-white focus:border-brand-500 focus:outline-none" />
       </form>
 
       <div className="overflow-hidden rounded-xl border border-zinc-800">

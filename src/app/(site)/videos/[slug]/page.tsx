@@ -144,7 +144,7 @@ export default async function VideoPage({
         ])}
       />
 
-      <div className="mx-auto w-full max-w-5xl">
+      <div className="mx-auto w-full max-w-7xl">
         {adminPreview && (
           <div className="mb-3 rounded-lg border border-amber-500/40 bg-amber-500/10 px-4 py-2 text-sm text-amber-300">
             Admin preview — this video is{" "}
@@ -173,7 +173,7 @@ export default async function VideoPage({
               <Link
                 key={p.pornstarId}
                 href={`/pornstars/${p.pornstar.slug}`}
-                className="rounded-full bg-pink-600/15 px-3 py-1 text-sm font-medium text-pink-400 hover:bg-pink-600/25"
+                className="rounded-full bg-brand-600/15 px-3 py-1 text-sm font-medium text-brand-400 hover:bg-brand-600/25"
               >
                 {p.pornstar.name}
               </Link>

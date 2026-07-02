@@ -6,7 +6,7 @@ export const dynamic = "force-dynamic";
 
 function Stat({ label, value, href }: { label: string; value: number; href: string }) {
   return (
-    <Link href={href} className="rounded-xl border border-zinc-800 bg-zinc-900 p-5 hover:border-pink-500/50">
+    <Link href={href} className="rounded-xl border border-zinc-800 bg-zinc-900 p-5 hover:border-brand-500/50">
       <div className="text-3xl font-bold text-white">{value.toLocaleString()}</div>
       <div className="mt-1 text-sm text-zinc-400">{label}</div>
     </Link>

@@ -48,7 +48,7 @@ export default function AdminToolsPage() {
           <ul className="space-y-3">
             {tools.map((t) => (
               <li key={t.id} className="rounded-xl border border-zinc-800 bg-zinc-900/50 p-4">
-                <code className="text-sm text-pink-400">{t.key}</code>
+                <code className="text-sm text-brand-400">{t.key}</code>
                 <p className="mt-2 text-sm text-zinc-300">{t.description}</p>
               </li>
             ))}

@@ -58,7 +58,7 @@ function Row({ creator }: { creator: Creator }) {
         <div className="flex justify-end gap-2">
           {editing ? (
             <>
-              <button disabled={busy} onClick={save} className="rounded bg-pink-600 px-3 py-1 text-xs text-white">Save</button>
+              <button disabled={busy} onClick={save} className="rounded bg-brand-600 px-3 py-1 text-xs text-white">Save</button>
               <button onClick={() => setEditing(false)} className="rounded bg-zinc-800 px-3 py-1 text-xs text-zinc-300">Cancel</button>
             </>
           ) : (
@@ -107,7 +107,7 @@ export default function AdminCreators({ creators }: { creators: Creator[] }) {
           <input required value={displayName} onChange={(e) => setDisplayName(e.target.value)}
             className="rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm text-white" />
         </div>
-        <button disabled={busy} className="rounded-lg bg-pink-600 px-4 py-2 text-sm text-white hover:bg-pink-500">Create creator</button>
+        <button disabled={busy} className="rounded-lg bg-brand-600 px-4 py-2 text-sm text-white hover:bg-brand-500">Create creator</button>
         {error && <span className="text-sm text-red-400">{error}</span>}
       </form>
 

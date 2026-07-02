@@ -76,9 +76,9 @@ export default function SearchBar({ initial = "" }: { initial?: string }) {
           onKeyDown={onKeyDown}
           onFocus={() => suggestions.length && setOpen(true)}
           placeholder="Search videos, pornstars, tags…"
-          className="flex-1 rounded-l-full bg-zinc-900 border border-zinc-700 px-5 py-2.5 text-sm text-zinc-100 placeholder-zinc-500 focus:outline-none focus:border-pink-500"
+          className="flex-1 rounded-l-full bg-zinc-900 border border-zinc-700 px-5 py-2.5 text-sm text-zinc-100 placeholder-zinc-500 focus:outline-none focus:border-brand-500"
         />
-        <button type="submit" className="rounded-r-full bg-pink-600 hover:bg-pink-500 px-5 text-white text-sm font-medium">
+        <button type="submit" className="rounded-r-full bg-brand-600 hover:bg-brand-500 px-5 text-white text-sm font-medium">
           Search
         </button>
       </form>

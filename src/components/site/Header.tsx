@@ -1,20 +1,16 @@
 import Link from "next/link";
 import SearchBar from "@/components/site/SearchBar";
 import SignOutButton from "@/components/auth/SignOutButton";
+import Logo from "@/components/brand/Logo";
 import { getCurrentUser } from "@/lib/session";
 
 export default async function Header({ initialQuery = "" }: { initialQuery?: string }) {
   const user = await getCurrentUser();
 
   return (
-    <header className="sticky top-0 z-30 border-b border-zinc-800 bg-zinc-950/90 backdrop-blur">
+    <header className="sticky top-0 z-30 border-b border-zinc-800/90 bg-zinc-950/90 backdrop-blur supports-[backdrop-filter]:bg-zinc-950/80">
       <div className="mx-auto flex max-w-7xl flex-col gap-3 px-4 py-3 md:flex-row md:items-center">
-        <Link href="/" className="flex items-center gap-2 shrink-0">
-          <span className="text-2xl font-black tracking-tight">
-            <span className="text-white">Piss</span>
-            <span className="text-pink-500">ter</span>
-          </span>
-        </Link>
+        <Logo />
 
         <div className="flex-1 md:px-6">
           <SearchBar initial={initialQuery} />
@@ -32,7 +28,7 @@ export default async function Header({ initialQuery = "" }: { initialQuery?: str
           ) : (
             <>
               <Link href="/login" className="text-zinc-300 hover:text-white">Log in</Link>
-              <Link href="/signup" className="rounded-full bg-pink-600 px-4 py-1.5 font-medium text-white hover:bg-pink-500">
+              <Link href="/signup" className="rounded-full bg-brand-600 px-4 py-1.5 font-medium text-white hover:bg-brand-500">
                 Sign up
               </Link>
             </>

@@ -45,7 +45,7 @@ export default async function ScrapeRunsPage() {
               runs.map((r) => (
                 <tr key={r.id} className="hover:bg-zinc-900/50">
                   <td className="px-4 py-3">
-                    <Link href={`/admin/scrape-runs/${r.id}`} className="text-pink-400 hover:underline">{r.query}</Link>
+                    <Link href={`/admin/scrape-runs/${r.id}`} className="text-brand-400 hover:underline">{r.query}</Link>
                   </td>
                   <td className={`px-4 py-3 ${statusColor[r.status]}`}>{r.status}</td>
                   <td className="px-4 py-3 text-emerald-400">{r.newVideos}</td>

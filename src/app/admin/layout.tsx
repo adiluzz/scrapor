@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { requireAdmin } from "@/lib/session";
 import SignOutButton from "@/components/auth/SignOutButton";
+import Logo from "@/components/brand/Logo";
 
 export const dynamic = "force-dynamic";
 
@@ -20,9 +21,8 @@ export default async function AdminLayout({ children }: { children: React.ReactN
     <div className="min-h-screen bg-zinc-950 text-zinc-100">
       <div className="flex">
         <aside className="sticky top-0 h-screen w-56 shrink-0 border-r border-zinc-800 bg-zinc-900 p-4">
-          <div className="mb-6 text-xl font-black">
-            <span className="text-white">Piss</span><span className="text-pink-500">ter</span>
-            <span className="ml-1 text-xs font-normal text-zinc-500">admin</span>
+          <div className="mb-6">
+            <Logo admin href="/admin" />
           </div>
           <nav className="space-y-1">
             {nav.map((n) => (

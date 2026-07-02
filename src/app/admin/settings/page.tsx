@@ -139,7 +139,7 @@ export default function AdminSettingsPage() {
                 <li
                   key={m.id}
                   className={`flex flex-wrap items-center gap-2 rounded-lg border px-3 py-2 text-sm ${
-                    m.id === settings.model ? "border-pink-500/40 bg-pink-500/5" : "border-zinc-800"
+                    m.id === settings.model ? "border-brand-500/40 bg-brand-500/5" : "border-zinc-800"
                   }`}
                 >
                   <code className="text-xs text-zinc-200">{m.id}</code>
@@ -149,7 +149,7 @@ export default function AdminSettingsPage() {
                     <button
                       type="button"
                       onClick={() => setSettings((p) => ({ ...p, model: m.id }))}
-                      className="ml-auto text-xs text-pink-400 hover:text-pink-300"
+                      className="ml-auto text-xs text-brand-400 hover:text-brand-300"
                     >
                       Select
                     </button>
@@ -252,7 +252,7 @@ export default function AdminSettingsPage() {
               <button
                 type="submit"
                 disabled={saving || !settings.model}
-                className="rounded-lg bg-pink-600 px-4 py-2 text-sm font-medium text-white hover:bg-pink-500 disabled:opacity-50"
+                className="rounded-lg bg-brand-600 px-4 py-2 text-sm font-medium text-white hover:bg-brand-500 disabled:opacity-50"
               >
                 {saving ? "Saving…" : "Save settings"}
               </button>

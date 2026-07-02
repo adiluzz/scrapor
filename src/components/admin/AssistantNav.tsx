@@ -18,7 +18,7 @@ export default function AssistantNav({ active }: { active?: string }) {
           href={l.href}
           className={
             active === l.href
-              ? "font-medium text-pink-400"
+              ? "font-medium text-brand-400"
               : "text-zinc-400 hover:text-zinc-200"
           }
         >

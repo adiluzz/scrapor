@@ -46,15 +46,15 @@ export default function CreatorApplyForm() {
       {error && <p className="rounded bg-red-500/10 px-3 py-2 text-sm text-red-400">{error}</p>}
       <input required placeholder="Display name" value={displayName}
         onChange={(e) => setDisplayName(e.target.value)}
-        className="w-full rounded-lg border border-zinc-700 bg-zinc-950 px-4 py-2.5 text-sm text-white focus:border-pink-500 focus:outline-none" />
+        className="w-full rounded-lg border border-zinc-700 bg-zinc-950 px-4 py-2.5 text-sm text-white focus:border-brand-500 focus:outline-none" />
       <input placeholder="Desired page URL (optional)" value={desiredSlug}
         onChange={(e) => setDesiredSlug(e.target.value)}
-        className="w-full rounded-lg border border-zinc-700 bg-zinc-950 px-4 py-2.5 text-sm text-white focus:border-pink-500 focus:outline-none" />
+        className="w-full rounded-lg border border-zinc-700 bg-zinc-950 px-4 py-2.5 text-sm text-white focus:border-brand-500 focus:outline-none" />
       <textarea placeholder="Tell us about yourself (optional)" value={bio} rows={3}
         onChange={(e) => setBio(e.target.value)}
-        className="w-full rounded-lg border border-zinc-700 bg-zinc-950 px-4 py-2.5 text-sm text-white focus:border-pink-500 focus:outline-none" />
+        className="w-full rounded-lg border border-zinc-700 bg-zinc-950 px-4 py-2.5 text-sm text-white focus:border-brand-500 focus:outline-none" />
       <button disabled={loading} type="submit"
-        className="rounded-lg bg-pink-600 px-5 py-2.5 font-medium text-white hover:bg-pink-500 disabled:opacity-50">
+        className="rounded-lg bg-brand-600 px-5 py-2.5 font-medium text-white hover:bg-brand-500 disabled:opacity-50">
         {loading ? "Submitting…" : "Submit application"}
       </button>
     </form>

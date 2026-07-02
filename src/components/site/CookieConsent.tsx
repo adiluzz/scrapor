@@ -68,7 +68,7 @@ export default function CookieConsent({ siteName, forceOpen = false, onClose }: 
             We use strictly necessary cookies to remember your age verification and account session.
             With your permission we also use Google Analytics to understand how the site is used.
             See our{" "}
-            <Link href="/privacy" className="text-pink-400 underline hover:text-pink-300">
+            <Link href="/privacy" className="text-brand-400 underline hover:text-brand-300">
               Privacy Policy
             </Link>{" "}
             for details, including what data is collected and your rights.
@@ -85,7 +85,7 @@ export default function CookieConsent({ siteName, forceOpen = false, onClose }: 
           <button
             type="button"
             onClick={() => choose("analytics")}
-            className="rounded-full bg-pink-600 px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-pink-500"
+            className="rounded-full bg-brand-600 px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-brand-500"
           >
             Accept analytics
           </button>

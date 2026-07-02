@@ -13,7 +13,7 @@ export default function Heatmap({ buckets }: { buckets: number[] }) {
       {buckets.map((b, i) => (
         <div
           key={i}
-          className="flex-1 rounded-sm bg-gradient-to-t from-pink-600 to-pink-400"
+          className="flex-1 rounded-sm bg-gradient-to-t from-brand-700 to-brand-400"
           style={{ height: `${Math.max(6, (b / max) * 100)}%`, opacity: 0.4 + 0.6 * (b / max) }}
           title={`Segment ${i + 1}`}
         />

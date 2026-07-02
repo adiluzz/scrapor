@@ -49,7 +49,7 @@ export default function NewRunForm() {
       {error && <p className="rounded bg-red-500/10 px-3 py-2 text-sm text-red-400">{error}</p>}
       <input required placeholder="Search query (e.g. milf)" value={query}
         onChange={(e) => setQuery(e.target.value)}
-        className="w-full rounded-lg border border-zinc-700 bg-zinc-950 px-4 py-2.5 text-sm text-white focus:border-pink-500 focus:outline-none" />
+        className="w-full rounded-lg border border-zinc-700 bg-zinc-950 px-4 py-2.5 text-sm text-white focus:border-brand-500 focus:outline-none" />
 
       <div>
         <p className="mb-2 text-sm text-zinc-400">Source sites</p>
@@ -58,7 +58,7 @@ export default function NewRunForm() {
             <label key={s}
               className={`cursor-pointer rounded-full border px-3 py-1.5 text-sm ${
                 sources.includes(s)
-                  ? "border-pink-500 bg-pink-600/20 text-pink-200"
+                  ? "border-brand-500 bg-brand-600/20 text-brand-200"
                   : "border-zinc-700 bg-zinc-950 text-zinc-400"
               }`}>
               <input type="checkbox" className="hidden" checked={sources.includes(s)} onChange={() => toggle(s)} />
@@ -72,7 +72,7 @@ export default function NewRunForm() {
         Minimum duration
         <input type="number" min={0} max={600} value={minMinutes}
           onChange={(e) => setMinMinutes(parseInt(e.target.value || "0", 10))}
-          className="w-20 rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-1.5 text-white focus:border-pink-500 focus:outline-none" />
+          className="w-20 rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-1.5 text-white focus:border-brand-500 focus:outline-none" />
         minutes
       </label>
 
@@ -81,7 +81,7 @@ export default function NewRunForm() {
           Videos per site
           <input type="number" min={1} placeholder="all" value={maxPerSite}
             onChange={(e) => setMaxPerSite(e.target.value)}
-            className="w-24 rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-1.5 text-white focus:border-pink-500 focus:outline-none" />
+            className="w-24 rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-1.5 text-white focus:border-brand-500 focus:outline-none" />
         </label>
         <p className="mt-1 text-xs text-zinc-600">
           Leave empty to download <span className="text-zinc-400">all</span> results for the query (paginates every site).
@@ -89,7 +89,7 @@ export default function NewRunForm() {
       </div>
 
       <button disabled={loading || sources.length === 0} type="submit"
-        className="rounded-lg bg-pink-600 px-5 py-2.5 font-medium text-white hover:bg-pink-500 disabled:opacity-50">
+        className="rounded-lg bg-brand-600 px-5 py-2.5 font-medium text-white hover:bg-brand-500 disabled:opacity-50">
         {loading ? "Queuing…" : "Queue run"}
       </button>
     </form>

@@ -91,7 +91,7 @@ export default async function AdminVideoDetail({
       {(video.pornstars.length > 0 || video.tags.length > 0) && (
         <div className="mt-4 flex flex-wrap gap-2">
           {video.pornstars.map((p) => (
-            <span key={p.pornstarId} className="rounded-full bg-pink-600/15 px-3 py-1 text-sm text-pink-400">
+            <span key={p.pornstarId} className="rounded-full bg-brand-600/15 px-3 py-1 text-sm text-brand-400">
               {p.pornstar.name}
             </span>
           ))}

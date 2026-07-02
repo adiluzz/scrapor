@@ -35,7 +35,7 @@ export default function Filters() {
             const d = DURATIONS[parseInt(e.target.value, 10)];
             setParams({ min: d.min || null, max: d.max || null });
           }}
-          className="rounded-lg bg-zinc-900 border border-zinc-700 px-3 py-1.5 text-sm text-zinc-200 focus:outline-none focus:border-pink-500"
+          className="rounded-lg bg-zinc-900 border border-zinc-700 px-3 py-1.5 text-sm text-zinc-200 focus:outline-none focus:border-brand-500"
         >
           {DURATIONS.map((d, i) => (
             <option key={d.label} value={i}>{d.label}</option>
@@ -48,7 +48,7 @@ export default function Filters() {
         <select
           value={currentSort}
           onChange={(e) => setParams({ sort: e.target.value })}
-          className="rounded-lg bg-zinc-900 border border-zinc-700 px-3 py-1.5 text-sm text-zinc-200 focus:outline-none focus:border-pink-500"
+          className="rounded-lg bg-zinc-900 border border-zinc-700 px-3 py-1.5 text-sm text-zinc-200 focus:outline-none focus:border-brand-500"
         >
           {SORTS.map((s) => (
             <option key={s.value} value={s.value}>{s.label}</option>

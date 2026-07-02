@@ -89,12 +89,12 @@ export default function VideoPlayer({
       textTrackSettings: false,
       controlBar: {
         children: [
+          "progressControl",
           "playToggle",
           "volumePanel",
           "currentTimeDisplay",
           "timeDivider",
           "durationDisplay",
-          "progressControl",
           "pictureInPictureToggle",
           "fullscreenToggle",
         ],
@@ -320,17 +320,11 @@ export default function VideoPlayer({
   }
 
   return (
-    <div ref={rootRef} className="relative video-player-root">
-      <style>{`
-        .video-player-root .vjs-scrubber-preview .vjs-mouse-display,
-        .video-player-root .vjs-scrubber-preview .vjs-time-tooltip {
-          display: none !important;
-        }
-      `}</style>
+    <div ref={rootRef} className="relative video-player-root video-player-themed">
 
       {heatmap.length > 0 && status === "playing" && (
         <div
-          className={`pointer-events-none absolute inset-x-0 bottom-10 z-10 px-1 transition-opacity duration-300 ${
+          className={`pointer-events-none absolute inset-x-0 bottom-[4.5rem] z-10 px-3 transition-opacity duration-300 ${
             controlsVisible ? "opacity-100" : "opacity-0"
           }`}
         >
@@ -338,7 +332,7 @@ export default function VideoPlayer({
         </div>
       )}
 
-      <div data-vjs-player className="overflow-hidden rounded-xl border border-zinc-800 bg-black">
+      <div data-vjs-player className="overflow-hidden rounded-xl border border-zinc-800/80 bg-black shadow-[0_0_0_1px_rgba(212,175,55,0.08)]">
         <div ref={videoRef} />
       </div>
 
@@ -373,8 +367,8 @@ export default function VideoPlayer({
           ) : status === "error" ? (
             <span className="rounded bg-red-600/90 px-4 py-2 text-sm text-white">Playback error — tap to retry</span>
           ) : (
-            <span className="flex h-20 w-20 items-center justify-center rounded-full bg-pink-600/90 shadow-2xl">
-              <svg className="ml-1 h-9 w-9 text-white" fill="currentColor" viewBox="0 0 20 20">
+            <span className="flex h-24 w-24 items-center justify-center rounded-full bg-brand-600/95 shadow-[0_0_40px_rgba(212,175,55,0.35)] ring-2 ring-brand-400/40">
+              <svg className="ml-1.5 h-10 w-10 text-zinc-950" fill="currentColor" viewBox="0 0 20 20">
                 <path d="M6.3 2.8A1.5 1.5 0 004 4.1v11.8a1.5 1.5 0 002.3 1.3l9.3-5.9a1.5 1.5 0 000-2.6L6.3 2.8z" />
               </svg>
             </span>

@@ -55,7 +55,7 @@ export default function AdminVideoRow({
         <div className="flex justify-end gap-2">
           {editing ? (
             <>
-              <button disabled={busy} onClick={save} className="rounded bg-pink-600 px-3 py-1 text-xs text-white hover:bg-pink-500">Save</button>
+              <button disabled={busy} onClick={save} className="rounded bg-brand-600 px-3 py-1 text-xs text-white hover:bg-brand-500">Save</button>
               <button onClick={() => setEditing(false)} className="rounded bg-zinc-800 px-3 py-1 text-xs text-zinc-300">Cancel</button>
             </>
           ) : (

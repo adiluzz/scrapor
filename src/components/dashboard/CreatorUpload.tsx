@@ -86,37 +86,37 @@ export default function CreatorUpload() {
         accept="video/*"
         required
         onChange={(e) => setFile(e.target.files?.[0] || null)}
-        className="w-full text-sm text-zinc-400 file:mr-3 file:rounded-lg file:border-0 file:bg-pink-600 file:px-4 file:py-2 file:text-white"
+        className="w-full text-sm text-zinc-400 file:mr-3 file:rounded-lg file:border-0 file:bg-brand-600 file:px-4 file:py-2 file:text-white"
       />
       <input
         required
         placeholder="Title"
         value={title}
         onChange={(e) => setTitle(e.target.value)}
-        className="w-full rounded-lg border border-zinc-700 bg-zinc-950 px-4 py-2.5 text-sm text-white focus:border-pink-500 focus:outline-none"
+        className="w-full rounded-lg border border-zinc-700 bg-zinc-950 px-4 py-2.5 text-sm text-white focus:border-brand-500 focus:outline-none"
       />
       <textarea
         placeholder="Description (optional)"
         value={description}
         rows={2}
         onChange={(e) => setDescription(e.target.value)}
-        className="w-full rounded-lg border border-zinc-700 bg-zinc-950 px-4 py-2.5 text-sm text-white focus:border-pink-500 focus:outline-none"
+        className="w-full rounded-lg border border-zinc-700 bg-zinc-950 px-4 py-2.5 text-sm text-white focus:border-brand-500 focus:outline-none"
       />
       <input
         placeholder="Tags (comma-separated)"
         value={tags}
         onChange={(e) => setTags(e.target.value)}
-        className="w-full rounded-lg border border-zinc-700 bg-zinc-950 px-4 py-2.5 text-sm text-white focus:border-pink-500 focus:outline-none"
+        className="w-full rounded-lg border border-zinc-700 bg-zinc-950 px-4 py-2.5 text-sm text-white focus:border-brand-500 focus:outline-none"
       />
       {progress !== null && loading && (
         <div className="h-2 w-full overflow-hidden rounded bg-zinc-800">
-          <div className="h-full bg-pink-600 transition-all" style={{ width: `${progress}%` }} />
+          <div className="h-full bg-brand-600 transition-all" style={{ width: `${progress}%` }} />
         </div>
       )}
       <button
         disabled={loading}
         type="submit"
-        className="rounded-lg bg-pink-600 px-5 py-2.5 font-medium text-white hover:bg-pink-500 disabled:opacity-50"
+        className="rounded-lg bg-brand-600 px-5 py-2.5 font-medium text-white hover:bg-brand-500 disabled:opacity-50"
       >
         {loading ? `Uploading… ${progress ?? 0}%` : "Upload"}
       </button>

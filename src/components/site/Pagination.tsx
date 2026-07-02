@@ -27,7 +27,7 @@ export default function Pagination({ page, totalPages }: { page: number; totalPa
           onClick={() => setParams({ page: p })}
           className={`rounded-lg border px-3.5 py-2 text-sm ${
             p === page
-              ? "border-pink-500 bg-pink-600 text-white"
+              ? "border-brand-500 bg-brand-600 text-white"
               : "border-zinc-700 bg-zinc-900 text-zinc-300 hover:bg-zinc-800"
           }`}
         >

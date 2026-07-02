@@ -86,7 +86,7 @@ function Card({
       <div className="p-2.5">
         <h3 className="line-clamp-2 text-sm text-zinc-200 group-hover:text-white">{v.title}</h3>
         {v.pornstars.length > 0 && (
-          <p className="mt-1 truncate text-xs text-pink-400/80">
+          <p className="mt-1 truncate text-xs text-brand-400/80">
             {v.pornstars.map((p) => p.name).join(", ")}
           </p>
         )}

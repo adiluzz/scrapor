@@ -51,7 +51,7 @@ export default function AgeGate({ siteName = "this site" }: { siteName?: string 
         <div className="mt-6 flex flex-col gap-3">
           <button
             onClick={enter}
-            className="rounded-full bg-pink-600 px-6 py-3 font-semibold text-white transition hover:bg-pink-500"
+            className="rounded-full bg-brand-600 px-6 py-3 font-semibold text-white transition hover:bg-brand-500"
           >
             I am 18 or older — Enter
           </button>

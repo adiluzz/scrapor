@@ -8,6 +8,7 @@
   --brand-gold-dark: #b8860b;
   --player-bar-height: 4rem;
   --player-progress-height: 1rem;
+  --player-controls-height: 2.25rem;
 }
 
 /* ── Video.js — Pisster golden control bar ─────────────────────────── */
@@ -17,15 +18,47 @@
 }
 
 .video-player-root.video-player-themed .vjs-control-bar {
+  display: flex;
+  flex-wrap: nowrap;
+  align-items: flex-end;
   height: var(--player-bar-height);
-  padding: 0 0.75rem 0.5rem;
+  padding: 0 0.75rem 0.375rem;
+  box-sizing: border-box;
   background: linear-gradient(to top, rgba(9, 9, 11, 0.97) 0%, rgba(9, 9, 11, 0.75) 70%, transparent 100%);
   border-top: 1px solid rgba(212, 175, 55, 0.15);
 }
 
+/* Button row — same height and vertical centering for every control */
+.video-player-root.video-player-themed .vjs-control-bar > .vjs-control:not(.vjs-progress-control) {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: var(--player-controls-height);
+  margin: 0;
+}
+
+.video-player-root.video-player-themed .vjs-control-bar > .vjs-button {
+  width: 2.5rem;
+}
+
+.video-player-root.video-player-themed .vjs-volume-panel {
+  width: auto;
+  min-width: 4em;
+}
+
+.video-player-root.video-player-themed .vjs-picture-in-picture-control {
+  margin-left: auto;
+}
+
+.video-player-root.video-player-themed .vjs-button > .vjs-icon-placeholder {
+  height: var(--player-controls-height);
+}
+
 .video-player-root.video-player-themed .vjs-button > .vjs-icon-placeholder:before {
-  font-size: 1.65em;
-  line-height: 1.55;
+  font-size: 1.5em;
+  line-height: var(--player-controls-height);
+  height: var(--player-controls-height);
 }
 
 .video-player-root.video-player-themed .vjs-play-control:hover .vjs-icon-placeholder:before,
@@ -38,13 +71,15 @@
 .video-player-root.video-player-themed .vjs-current-time,
 .video-player-root.video-player-themed .vjs-duration,
 .video-player-root.video-player-themed .vjs-time-divider {
-  display: block !important;
+  display: flex !important;
+  align-items: center;
+  height: var(--player-controls-height);
   font-size: 0.95rem;
   font-weight: 600;
   font-variant-numeric: tabular-nums;
   letter-spacing: 0.02em;
   padding: 0 0.35rem;
-  line-height: var(--player-bar-height);
+  line-height: 1;
   color: #fafafa;
 }
 

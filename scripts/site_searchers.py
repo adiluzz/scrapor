@@ -539,7 +539,15 @@ def _html_youporn(query, count, cursor=0, min_duration=600):
 
 # ── ParadiseHill ──────────────────────────────────────────────────────
 _PH_BASE = "https://en.paradisehill.cc"
-_PH_LINK_RE = re.compile(r"^/[0-9a-f]{10,}/?$", re.I)
+_PH_HEX_RE = re.compile(r"^/[0-9a-f]{10,}/?$", re.I)
+# Slug film URLs: /pissing-coffee-brown.../ or /abnorm_20_piss_baby_piss/
+_PH_SLUG_RE = re.compile(r"^/[^/?#]+/?$", re.I)
+_PH_RESERVED_PATH = re.compile(
+    r"^/(?:search|actor|actors|category|categories|porn|studios|news|help|"
+    r"upload|login|signup|order|for-advertisers|about|terms|confidentiality|dmca)(?:/|$)",
+    re.I,
+)
+_PH_LINK_RE = _PH_HEX_RE  # legacy alias
 _PH_VIDEO_LIST_RE = re.compile(r"var videoList = (\[.*?\]);", re.S)
 _PH_ACTOR_RE = re.compile(r"^/actor/\d+/?$", re.I)
 _PH_CATEGORY_RE = re.compile(r"^/category/[^/?#]+", re.I)
@@ -552,6 +560,16 @@ def _ph_abs(url_or_path):
     if str(url_or_path).startswith("http"):
         return str(url_or_path)
     return urljoin(_PH_BASE, str(url_or_path))
+
+
+def _ph_is_film_path(path):
+    """True for ParadiseHill film page paths (hex id or slug), not site nav."""
+    path = path or ""
+    if not path or path == "/":
+        return False
+    if _PH_RESERVED_PATH.match(path):
+        return False
+    return bool(_PH_HEX_RE.match(path) or _PH_SLUG_RE.match(path))
 
 
 def _ph_parse_video_list(html):
@@ -647,7 +665,7 @@ def _ph_search_items(html):
         parsed = urlparse(full)
         if "paradisehill.cc" not in (parsed.netloc or ""):
             continue
-        if not _PH_LINK_RE.match(parsed.path or ""):
+        if not _ph_is_film_path(parsed.path or ""):
             continue
         clean = f"{parsed.scheme}://{parsed.netloc}{parsed.path.rstrip('/')}/"
         if clean in seen:
@@ -673,11 +691,13 @@ def _ph_search_items(html):
 def search_paradisehill(query, count, cursor=0, min_duration=600):
     """Search ParadiseHill and enrich each hit with detail-page metadata + MP4 parts."""
     from urllib.parse import quote_plus
+    offset = _offset_cursor(cursor)
+    need = offset + count
     q = quote_plus(query)
-    stubs, seen = [], set()
-    page = _page_cursor(cursor)
+    all_stubs, seen = [], set()
+    page = 1
     try:
-        while len(stubs) < count:
+        while len(all_stubs) < need:
             page_url = (
                 f"{_PH_BASE}/search/?pattern={q}&what=1"
                 if page == 1 else f"{_PH_BASE}/search/?pattern={q}&what=1&page={page}"
@@ -694,16 +714,17 @@ def search_paradisehill(query, count, cursor=0, min_duration=600):
                     continue
                 seen.add(clean)
                 new_urls += 1
-                stubs.append((clean, title, tags, thumb))
-                if len(stubs) >= count:
+                all_stubs.append((clean, title, tags, thumb))
+                if len(all_stubs) >= need:
                     break
             if new_urls == 0:
                 break
             page += 1
     except Exception as e:  # noqa: BLE001
         print(f"[site_searchers] ParadiseHill search failed: {e!r}", file=sys.stderr, flush=True)
-        return [], page, True
+        return [], offset, True
 
+    stubs = all_stubs[offset:offset + count]
     out = []
     for clean, title, tags, thumb in stubs:
         try:
@@ -728,8 +749,9 @@ def search_paradisehill(query, count, cursor=0, min_duration=600):
             out.append(item)
         except Exception:
             out.append(_norm(clean, title, None, thumbnail=thumb, tags=tags))
-    exhausted = len(stubs) < count
-    return out, page, exhausted
+    next_cursor = offset + len(stubs)
+    exhausted = len(all_stubs) < need
+    return out, next_cursor, exhausted
 
 
 # ── XNXX ──────────────────────────────────────────────────────────────

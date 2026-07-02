@@ -110,6 +110,13 @@ def canonical_key(url: str) -> str:
         m = re.search(r"^/([0-9a-f]{10,})/?$", path, re.I)
         if m:
             return f"paradisehill:{m.group(1).lower()}"
+        m = re.search(r"^/([^/?#]+)/?$", path)
+        if m and not re.match(
+            r"^(?:search|actor|actors|category|categories|porn|studios|news|help|"
+            r"upload|login|signup|order|for-advertisers|about|terms|confidentiality|dmca)$",
+            m.group(1), re.I,
+        ):
+            return f"paradisehill:{m.group(1).lower()}"
 
     # Generic fallback: normalized url (drop tracking params, sort the rest,
     # strip trailing slash) so cosmetic differences collapse to one key.

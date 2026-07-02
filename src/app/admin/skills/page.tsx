@@ -102,7 +102,7 @@ export default function SkillsPage() {
   return (
     <div>
       <AssistantNav active="/admin/skills" />
-      <h1 className="text-2xl font-bold text-white">Skills</h1>
+      <h1 className="text-xl font-bold text-white sm:text-2xl">Skills</h1>
 
       <div className="mt-6 max-w-5xl space-y-6">
         {(error || status) && (

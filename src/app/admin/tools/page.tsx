@@ -33,7 +33,7 @@ export default function AdminToolsPage() {
   return (
     <div>
       <AssistantNav active="/admin/tools" />
-      <h1 className="text-2xl font-bold text-white">Tool descriptions</h1>
+      <h1 className="text-xl font-bold text-white sm:text-2xl">Tool descriptions</h1>
       <p className="mt-1 text-sm text-zinc-500">Code-owned assistant tools registered in the app.</p>
 
       <div className="mt-6 max-w-5xl space-y-4">

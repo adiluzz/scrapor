@@ -30,10 +30,10 @@ export default async function RunDetailPage({ params }: { params: Promise<{ id: 
     <div className="space-y-8">
       <div>
         <Link href="/admin/scrape-runs" className="text-sm text-zinc-500 hover:text-white">← Runs</Link>
-        <h1 className="mt-1 text-2xl font-bold text-white">
+        <h1 className="mt-1 text-xl font-bold text-white sm:text-2xl">
           “{run.query}” <span className={`ml-2 text-base ${statusColor[run.status]}`}>{run.status}</span>
         </h1>
-        <div className="mt-2 flex gap-6 text-sm">
+        <div className="mt-2 flex flex-wrap gap-x-6 gap-y-2 text-sm">
           <span className="text-emerald-400">{run.newVideos} new</span>
           <span className="text-zinc-400">{run.skipped} skipped</span>
           <span className="text-red-400">{run.failed} failed</span>
@@ -49,8 +49,8 @@ export default async function RunDetailPage({ params }: { params: Promise<{ id: 
 
       <section>
         <h2 className="mb-3 text-lg font-semibold text-white">Per-source breakdown</h2>
-        <div className="overflow-hidden rounded-xl border border-zinc-800">
-          <table className="w-full text-left text-sm">
+        <div className="overflow-x-auto rounded-xl border border-zinc-800">
+          <table className="w-full min-w-[720px] text-left text-sm">
             <thead className="bg-zinc-900 text-zinc-400">
               <tr>
                 <th className="px-4 py-3">Source</th>

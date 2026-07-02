@@ -106,7 +106,7 @@ export default function AdminSettingsPage() {
   return (
     <div>
       <AssistantNav active="/admin/settings" />
-      <h1 className="text-2xl font-bold text-white">Assistant settings</h1>
+      <h1 className="text-xl font-bold text-white sm:text-2xl">Assistant settings</h1>
       <p className="mt-1 text-sm text-zinc-500">
         Models run on AWS Bedrock{region ? ` (${region})` : ""}. Credentials come from the server
         environment (IAM role or access keys).

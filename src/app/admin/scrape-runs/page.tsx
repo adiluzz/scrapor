@@ -23,11 +23,11 @@ export default async function ScrapeRunsPage() {
 
   return (
     <div className="space-y-8">
-      <h1 className="text-2xl font-bold text-white">Scrape runs</h1>
+      <h1 className="text-xl font-bold text-white sm:text-2xl">Scrape runs</h1>
       <NewRunForm />
 
-      <div className="overflow-hidden rounded-xl border border-zinc-800">
-        <table className="w-full text-left text-sm">
+      <div className="overflow-x-auto rounded-xl border border-zinc-800">
+        <table className="w-full min-w-[640px] text-left text-sm">
           <thead className="bg-zinc-900 text-zinc-400">
             <tr>
               <th className="px-4 py-3">Query</th>

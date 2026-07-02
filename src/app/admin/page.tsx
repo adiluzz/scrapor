@@ -27,8 +27,8 @@ export default async function AdminHome() {
 
   return (
     <div>
-      <h1 className="mb-6 text-2xl font-bold text-white">Overview</h1>
-      <div className="grid grid-cols-2 gap-4 md:grid-cols-3 lg:grid-cols-5">
+      <h1 className="mb-6 text-xl font-bold text-white sm:text-2xl">Overview</h1>
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5">
         <Stat label="Videos" value={videos} href="/admin/videos" />
         <Stat label="Pornstars" value={pornstars} href="/admin/videos" />
         <Stat label="Creators" value={creators} href="/admin/creators" />

@@ -50,7 +50,7 @@ export default async function AdminVideoDetail({
       </Link>
 
       <div className="mt-3 flex flex-wrap items-center gap-2">
-        <h1 className="text-2xl font-bold text-white">{video.title}</h1>
+        <h1 className="text-xl font-bold text-white sm:text-2xl">{video.title}</h1>
         {video.isDeleted && (
           <span className="rounded bg-red-600/20 px-2 py-0.5 text-xs text-red-400">deleted</span>
         )}

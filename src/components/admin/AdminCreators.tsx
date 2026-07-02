@@ -96,23 +96,23 @@ export default function AdminCreators({ creators }: { creators: Creator[] }) {
 
   return (
     <div className="space-y-6">
-      <form onSubmit={create} className="flex flex-wrap items-end gap-3 rounded-xl border border-zinc-800 bg-zinc-900 p-4">
-        <div>
+      <form onSubmit={create} className="flex flex-col gap-3 rounded-xl border border-zinc-800 bg-zinc-900 p-4 sm:flex-row sm:flex-wrap sm:items-end">
+        <div className="min-w-0 flex-1 sm:flex-none">
           <label className="block text-xs text-zinc-500">User email</label>
           <input required value={userEmail} onChange={(e) => setUserEmail(e.target.value)}
-            className="rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm text-white" />
+            className="w-full rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm text-white" />
         </div>
-        <div>
+        <div className="min-w-0 flex-1 sm:flex-none">
           <label className="block text-xs text-zinc-500">Display name</label>
           <input required value={displayName} onChange={(e) => setDisplayName(e.target.value)}
-            className="rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm text-white" />
+            className="w-full rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm text-white" />
         </div>
-        <button disabled={busy} className="rounded-lg bg-brand-600 px-4 py-2 text-sm text-white hover:bg-brand-500">Create creator</button>
+        <button disabled={busy} className="w-full rounded-lg bg-brand-600 px-4 py-2 text-sm text-white hover:bg-brand-500 sm:w-auto">Create creator</button>
         {error && <span className="text-sm text-red-400">{error}</span>}
       </form>
 
-      <div className="overflow-hidden rounded-xl border border-zinc-800">
-        <table className="w-full text-left text-sm">
+      <div className="overflow-x-auto rounded-xl border border-zinc-800">
+        <table className="w-full min-w-[640px] text-left text-sm">
           <thead className="bg-zinc-900 text-zinc-400">
             <tr>
               <th className="px-4 py-3">Name</th>

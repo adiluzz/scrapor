@@ -14,7 +14,7 @@ export default async function AdminCreatorsPage() {
 
   return (
     <div>
-      <h1 className="mb-4 text-2xl font-bold text-white">Creators</h1>
+      <h1 className="mb-4 text-xl font-bold text-white sm:text-2xl">Creators</h1>
       <AdminCreators creators={creators} />
     </div>
   );

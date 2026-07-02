@@ -131,7 +131,7 @@ export default function ChatsPage() {
   return (
     <div>
       <AssistantNav active="/admin/chats" />
-      <h1 className="text-2xl font-bold text-white">Chats</h1>
+      <h1 className="text-xl font-bold text-white sm:text-2xl">Chats</h1>
 
       <div className="mt-6 max-w-3xl">
         {/* Search bar */}

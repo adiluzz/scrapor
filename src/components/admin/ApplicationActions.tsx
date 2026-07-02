@@ -20,9 +20,13 @@ export default function ApplicationActions({ id }: { id: string }) {
   }
 
   return (
-    <div className="flex flex-col items-end gap-2">
-      <input value={note} onChange={(e) => setNote(e.target.value)} placeholder="Note (optional)"
-        className="w-48 rounded border border-zinc-700 bg-zinc-950 px-2 py-1 text-xs text-white" />
+    <div className="flex w-full flex-col items-stretch gap-2 sm:w-auto sm:items-end">
+      <input
+        value={note}
+        onChange={(e) => setNote(e.target.value)}
+        placeholder="Note (optional)"
+        className="w-full rounded border border-zinc-700 bg-zinc-950 px-2 py-1 text-xs text-white sm:w-48"
+      />
       <div className="flex gap-2">
         <button disabled={busy} onClick={() => act("approve")}
           className="rounded bg-emerald-600 px-3 py-1 text-xs text-white hover:bg-emerald-500">Approve</button>

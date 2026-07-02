@@ -21,13 +21,16 @@ export default async function ApplicationsPage() {
 
   return (
     <div>
-      <h1 className="mb-4 text-2xl font-bold text-white">Creator applications</h1>
+      <h1 className="mb-4 text-xl font-bold text-white sm:text-2xl">Creator applications</h1>
       <div className="space-y-3">
         {apps.length === 0 ? (
           <p className="py-8 text-center text-zinc-500">No applications.</p>
         ) : (
           apps.map((a) => (
-            <div key={a.id} className="flex items-start justify-between rounded-xl border border-zinc-800 bg-zinc-900 p-4">
+            <div
+              key={a.id}
+              className="flex flex-col gap-4 rounded-xl border border-zinc-800 bg-zinc-900 p-4 sm:flex-row sm:items-start sm:justify-between"
+            >
               <div>
                 <p className="font-medium text-white">
                   {a.displayName} <span className={`ml-2 text-sm ${statusColor[a.status]}`}>{a.status}</span>

@@ -240,7 +240,7 @@ export default function ContextsPage() {
   return (
     <div>
       <AssistantNav active="/admin/contexts" />
-      <h1 className="text-2xl font-bold text-white">Context manager</h1>
+      <h1 className="text-xl font-bold text-white sm:text-2xl">Context manager</h1>
 
       <div className="mt-6 max-w-4xl space-y-6">
         {(error || status) && (

@@ -33,7 +33,7 @@ export default function RunActions({ runId, status }: { runId: string; status: s
   }
 
   return (
-    <div className="flex items-center gap-3">
+    <div className="flex flex-wrap items-center gap-3">
       {canStop && (
         <button
           onClick={() => act("stop")}

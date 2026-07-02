@@ -88,6 +88,8 @@ QUEUE_KEY = "scrape:queue"
 CREATOR_QUEUE_KEY = "creator:queue"
 # Shared volume the web app writes creator uploads to (see docker-compose).
 UPLOAD_DIR = os.environ.get("UPLOAD_DIR", os.path.join(ROOT, "uploads"))
+# Optional HTTP(S) proxy for source downloads (or use docker-compose.vpn.yml).
+SCRAPE_PROXY = os.environ.get("SCRAPE_HTTP_PROXY") or os.environ.get("HTTPS_PROXY") or ""
 
 
 # ── Downloaders ───────────────────────────────────────────────────────
@@ -105,23 +107,31 @@ def _download(video, dest_dir) -> tuple[bool, str, dict]:
     cdn = video.get("_cdn_url")
     url = video.get("url") or ""
     last_result = None
+    dl_env = os.environ.copy()
+    if SCRAPE_PROXY:
+        dl_env["HTTP_PROXY"] = SCRAPE_PROXY
+        dl_env["HTTPS_PROXY"] = SCRAPE_PROXY
+        dl_env["http_proxy"] = SCRAPE_PROXY
+        dl_env["https_proxy"] = SCRAPE_PROXY
     try:
         if m3u8:
             method = "ffmpeg-m3u8"
             stream_url = m3u8.replace("_TPL_", "240p")
             cmd = ["ffmpeg", "-y", "-i", stream_url, "-c", "copy", dest]
-            last_result = subprocess.run(cmd, capture_output=True, timeout=900)
+            last_result = subprocess.run(cmd, capture_output=True, timeout=900, env=dl_env)
         elif cdn:
             method = "wget-cdn"
             cmd = ["wget", "-q", "--no-check-certificate", "-O", dest, cdn]
-            last_result = subprocess.run(cmd, capture_output=True, timeout=900)
+            last_result = subprocess.run(cmd, capture_output=True, timeout=900, env=dl_env)
         else:
             method = "yt-dlp"
             tmp = os.path.join(dest_dir, "dl.%(ext)s")
             cmd = ["yt-dlp", "--no-playlist", "--merge-output-format", "mp4",
                    "-f", "bestvideo[height<=720]+bestaudio/best",
                    "-o", tmp, "--socket-timeout", "30", "--retries", "3", url]
-            last_result = subprocess.run(cmd, capture_output=True, timeout=1800)
+            if SCRAPE_PROXY:
+                cmd[1:1] = ["--proxy", SCRAPE_PROXY]
+            last_result = subprocess.run(cmd, capture_output=True, timeout=1800, env=dl_env)
             if not (os.path.exists(dest) and os.path.getsize(dest) > 100_000):
                 for f in os.listdir(dest_dir):
                     if f.startswith("dl."):

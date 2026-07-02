@@ -1,0 +1,66 @@
+# Route the scrape worker through NordVPN via Gluetun.
+#
+# NordVPN does not publish an official Docker image. Gluetun (qmcgaw/gluetun) is
+# the standard sidecar: it connects to NordVPN and other containers share its
+# network stack so all their outbound traffic exits through the VPN.
+#
+# Setup:
+#   1. In Nord Account → NordVPN → Manual setup → Service credentials,
+#      generate an OpenVPN username/password (NOT your login password).
+#   2. Add to .env:
+#        NORDVPN_OPENVPN_USER=...
+#        NORDVPN_OPENVPN_PASSWORD=...
+#        NORDVPN_SERVER_COUNTRIES=Netherlands,Germany,France   # avoid US (age-verification)
+#   3. Recreate the worker through the VPN:
+#        docker compose -f docker-compose.yml -f docker-compose.vpn.yml up -d gluetun
+#        docker compose -f docker-compose.yml -f docker-compose.vpn.yml up -d worker
+#
+# To revert to direct (datacenter) IP:
+#        docker compose up -d worker
+#
+# Gluetun publishes its current VPN IP at http://127.0.0.1:8000/v1/openvpn/status
+# when you map port 8000 below (optional, for debugging).
+
+services:
+  gluetun:
+    image: qmcgaw/gluetun:latest
+    cap_add:
+      - NET_ADMIN
+    devices:
+      - /dev/net/tun:/dev/net/tun
+    environment:
+      VPN_SERVICE_PROVIDER: nordvpn
+      VPN_TYPE: openvpn
+      OPENVPN_USER: ${NORDVPN_OPENVPN_USER:?Set NORDVPN_OPENVPN_USER in .env — Nord service credentials, not login password}
+      OPENVPN_PASSWORD: ${NORDVPN_OPENVPN_PASSWORD:?Set NORDVPN_OPENVPN_PASSWORD in .env}
+      # Non-US countries avoid xHamster's US state age-verification wall.
+      SERVER_COUNTRIES: ${NORDVPN_SERVER_COUNTRIES:-Netherlands,Germany,France}
+      # Allow postgres/redis/S3 on Docker-internal subnets without forcing VPN.
+      FIREWALL_OUTBOUND_SUBNETS: ${DOCKER_INTERNAL_SUBNETS:-172.16.0.0/12,10.0.0.0/8,192.168.0.0/16}
+      TZ: UTC
+    volumes:
+      - gluetun:/gluetun
+    ports:
+      # Optional: Gluetun control API + HTTP proxy (use SCRAPE_HTTP_PROXY=http://gluetun:8888
+      # if you prefer proxy mode instead of network_mode below).
+      - "127.0.0.1:8000:8000/tcp"
+    healthcheck:
+      test: ["CMD", "/gluetun-entrypoint", "healthcheck"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 45s
+    restart: unless-stopped
+
+  worker:
+    network_mode: "service:gluetun"
+    depends_on:
+      gluetun:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_started
+
+volumes:
+  gluetun:

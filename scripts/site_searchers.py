@@ -32,8 +32,14 @@ page, etc.) returns [] instead of raising, so one bad source can't fail the run.
 import asyncio
 import datetime
 import inspect
+import json
+import os
 import re
 import sys
+
+_XH_BASE = "https://xhamster.com"
+# Age-verification interstitials are ~50 KB; real search pages are 300 KB+.
+_XH_MIN_SEARCH_BYTES = 100_000
 
 
 def _norm(url, title, duration_sec, thumbnail="", tags=None, pornstars=None,
@@ -142,30 +148,167 @@ _HTML_HEADERS = {
 _DUR_RE = re.compile(r"\b(\d{1,2}):([0-5]\d)(?::([0-5]\d))?\b")
 
 
+def _scrape_proxy():
+    """Optional HTTP(S) proxy for scrape fetches (or Gluetun HTTP proxy on :8888)."""
+    return os.environ.get("SCRAPE_HTTP_PROXY") or os.environ.get("HTTPS_PROXY") or ""
+
+
 def _html_get(url):
     """Fetch a page, preferring curl_cffi (chrome impersonation beats most bot
     protection), then httpx, then urllib. Returns "" on any failure."""
+    proxy = _scrape_proxy()
+    proxies = {"http": proxy, "https": proxy} if proxy else None
     try:
         from curl_cffi import requests as _cr
-        r = _cr.get(url, impersonate="chrome", timeout=30)
+        r = _cr.get(url, impersonate="chrome", timeout=30, proxies=proxies)
         if r.status_code == 200 and r.text:
             return r.text
     except Exception:
         pass
     try:
         import httpx
-        r = httpx.get(url, headers=_HTML_HEADERS, timeout=30, follow_redirects=True)
+        kw = {"headers": _HTML_HEADERS, "timeout": 30, "follow_redirects": True}
+        if proxy:
+            kw["proxy"] = proxy
+        r = httpx.get(url, **kw)
         if r.status_code == 200 and r.text:
             return r.text
     except Exception:
         pass
     try:
         import urllib.request
+        handlers = []
+        if proxy:
+            handlers.append(urllib.request.ProxyHandler({"http": proxy, "https": proxy}))
+        opener = urllib.request.build_opener(*handlers)
         req = urllib.request.Request(url, headers=_HTML_HEADERS)
-        with urllib.request.urlopen(req, timeout=30) as resp:
+        with opener.open(req, timeout=30) as resp:
             return resp.read().decode("utf-8", "ignore")
     except Exception:
         return ""
+
+
+def _extract_initials_json(html):
+    """Parse window.initials={...} embedded in xHamster pages."""
+    start = html.find("window.initials=")
+    if start < 0:
+        return None
+    json_start = html.find("{", start)
+    if json_start < 0:
+        return None
+    depth = 0
+    end = json_start
+    for i in range(json_start, len(html)):
+        c = html[i]
+        if c == "{":
+            depth += 1
+        elif c == "}":
+            depth -= 1
+            if depth == 0:
+                end = i + 1
+                break
+    try:
+        return json.loads(html[json_start:end].replace("\\/", "/"))
+    except Exception:
+        return None
+
+
+def _is_xhamster_age_gate(html):
+    """True when xHamster returns the age-verification interstitial instead of results."""
+    if not html:
+        return False
+    if "age-verification" in html or "ageVerificationBannerProps" in html:
+        return True
+    if "searchResult" not in html and html.count("/videos/") == 0:
+        if len(html) < _XH_MIN_SEARCH_BYTES or "start-modal" in html:
+            return True
+    return False
+
+
+def _xhamster_canonical_url(url_or_path):
+    from urllib.parse import urlparse
+    if not url_or_path:
+        return ""
+    if str(url_or_path).startswith("http"):
+        path = urlparse(url_or_path).path or ""
+    else:
+        path = url_or_path if str(url_or_path).startswith("/") else f"/{url_or_path}"
+    if "/videos/" not in path:
+        return ""
+    return f"{_XH_BASE}{path.rstrip('/')}"
+
+
+def _xhamster_min_duration_param(min_duration):
+    min_min = max(1, min_duration // 60)
+    return next((c for c in ("40", "30", "10", "5", "2") if int(c) <= min_min), "10")
+
+
+def _xhamster_from_initials(html, need, min_duration, seen):
+    """Extract search hits from window.initials.searchResult.videoThumbProps."""
+    data = _extract_initials_json(html)
+    if not data:
+        return []
+    sr = data.get("searchResult")
+    if not isinstance(sr, dict):
+        return []
+    items = sr.get("videoThumbProps") or []
+    out = []
+    for v in items:
+        if not isinstance(v, dict):
+            continue
+        url = _xhamster_canonical_url(v.get("pageURL") or "")
+        if not url or url in seen:
+            continue
+        dur_raw = v.get("duration")
+        dur_s = int(dur_raw) if dur_raw else None
+        if dur_s and dur_s < min_duration:
+            continue
+        seen.add(url)
+        thumb = str(v.get("thumbURL") or v.get("imageURL") or "")
+        title = str(v.get("title") or "Unknown")
+        out.append(_norm(url, title, dur_s, thumbnail=thumb))
+        if len(out) >= need:
+            break
+    return out
+
+
+def _xhamster_from_links(html, need, min_duration, seen):
+    """Anchor-based fallback when initials JSON is missing or incomplete."""
+    from urllib.parse import urljoin, urlparse
+    try:
+        from bs4 import BeautifulSoup
+    except Exception:
+        return []
+    soup = BeautifulSoup(html, "html.parser")
+    out = []
+    for a in soup.find_all("a", href=True):
+        full = urljoin(_XH_BASE, a["href"])
+        parsed = urlparse(full)
+        if "xhamster" not in (parsed.netloc or ""):
+            continue
+        if not re.search(r"^/videos/", parsed.path or ""):
+            continue
+        clean = _xhamster_canonical_url(parsed.path)
+        if not clean or clean in seen:
+            continue
+        dur = _find_duration(a)
+        if dur and dur < min_duration:
+            continue
+        seen.add(clean)
+        title = (a.get("title") or a.get("data-title")
+                 or a.get_text(" ", strip=True) or "").strip()
+        out.append(_norm(clean, title or "Unknown", dur or None, thumbnail=_find_thumb(a)))
+        if len(out) >= need:
+            break
+    return out
+
+
+def _xhamster_videos_from_html(html, need, min_duration, seen):
+    out = _xhamster_from_initials(html, need, min_duration, seen)
+    if len(out) >= need:
+        return out
+    out.extend(_xhamster_from_links(html, need - len(out), min_duration, seen))
+    return out[:need]
 
 
 def _find_duration(node):
@@ -267,12 +410,47 @@ def _html_spankbang(query, count, skip=0, min_duration=600):
 
 
 def _html_xhamster(query, count, skip=0, min_duration=600):
-    return _html_search(
-        "XHamster", query, count, skip, min_duration,
-        domain="xhamster.com", base="https://xhamster.com",
-        page_url=lambda q, n: f"https://xhamster.com/search/{q}?page={n}",
-        link_re=re.compile(r"^/videos/"),
-    )
+    """Search xHamster via embedded JSON + HTML links.
+
+    Skips the broken xhamster-api search_videos() (wrong HTML extractor in 2.2).
+    Detects the US age-verification interstitial and logs a clear hint to use VPN.
+    """
+    from urllib.parse import quote_plus
+    need = count + skip
+    max_pages = _pages(need, 36)
+    md = _xhamster_min_duration_param(min_duration)
+    q = quote_plus(query)
+    out, seen = [], set()
+    age_gate = False
+    try:
+        for n in range(1, max_pages + 1):
+            if len(out) >= need:
+                break
+            url = f"{_XH_BASE}/search/{q}?sort=longest&min-duration={md}&page={n}"
+            html = _html_get(url)
+            if not html:
+                if n == 1:
+                    print("[site_searchers] XHamster: empty response from search page",
+                          file=sys.stderr, flush=True)
+                break
+            if _is_xhamster_age_gate(html):
+                age_gate = True
+                if n == 1:
+                    print(
+                        "[site_searchers] XHamster: age-verification wall (US datacenter IP). "
+                        "Run the worker through NordVPN — see docker-compose.vpn.yml",
+                        file=sys.stderr, flush=True,
+                    )
+                break
+            batch = _xhamster_videos_from_html(html, need - len(out), min_duration, seen)
+            if not batch:
+                break
+            out.extend(batch)
+    except Exception as e:  # noqa: BLE001
+        print(f"[site_searchers] XHamster html failed: {e!r}", file=sys.stderr, flush=True)
+    if age_gate and not out:
+        return []
+    return out[skip:skip + count]
 
 
 def _html_youporn(query, count, skip=0, min_duration=600):
@@ -362,30 +540,9 @@ def search_pornhub(query, count, skip=0, min_duration=600):
 
 # ── XHamster ──────────────────────────────────────────────────────────
 def search_xhamster(query, count, skip=0, min_duration=600):
-    need = count + skip
-    pages = _pages(need, 20)
-
-    async def run():
-        import xhamster_api
-        client = xhamster_api.Client()
-        min_min = max(1, min_duration // 60)
-        md = next((c for c in ("40", "30", "10", "5", "2") if int(c) <= min_min), None)
-
-        async def extract(v):
-            dur_s = _dur(_sget(v, "length", _sget(v, "duration", 0)))
-            return _norm(
-                _sget(v, "url", ""), _sget(v, "title", ""), dur_s or None,
-                thumbnail=str(_sget(v, "thumbnail", "") or _sget(v, "thumbnail_url", "") or ""),
-                pornstars=list(_sget(v, "pornstars", []) or []),
-                m3u8=str(_sget(v, "m3u8_base_url", "") or "") or None,
-            )
-
-        agen = client.search_videos(query=query, sort_by="longest",
-                                    min_duration=md, pages=pages)
-        return await _collect(agen, extract, need, min_duration)
-
-    res = _run("XHamster", run, skip, count)
-    return res or _html_xhamster(query, count, skip, min_duration)
+    # xhamster-api 2.2 search_videos() uses extractor_shorts (0 results on search
+    # pages). HTML + window.initials JSON is reliable when not age-gated.
+    return _html_xhamster(query, count, skip, min_duration)
 
 
 # ── XVideos ───────────────────────────────────────────────────────────

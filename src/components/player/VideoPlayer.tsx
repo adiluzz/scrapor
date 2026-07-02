@@ -61,6 +61,7 @@ export default function VideoPlayer({
     bottom: number;
     cue: StoryboardCue;
     time: number;
+    scale: number;
   } | null>(null);
 
   useEffect(() => {
@@ -80,7 +81,7 @@ export default function VideoPlayer({
     el.classList.add("vjs-big-play-centered", "vjs-scrubber-preview");
     videoRef.current.appendChild(el);
     const player = videojs(el, {
-      controls: true,
+      controls: false,
       preload: "none",
       fluid: true,
       poster,
@@ -115,6 +116,12 @@ export default function VideoPlayer({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  useEffect(() => {
+    const player = playerRef.current;
+    if (!player) return;
+    player.controls(status === "playing");
+  }, [status]);
+
   function attachScrubberPreview() {
     scrubCleanupRef.current?.();
     scrubCleanupRef.current = null;
@@ -127,12 +134,12 @@ export default function VideoPlayer({
       const seekBar = player.el().querySelector(".vjs-progress-holder") as HTMLElement | null;
       if (!seekBar) return;
 
-      const onMove = (e: MouseEvent) => {
+      const updatePreview = (clientX: number) => {
         const seekRect = seekBar.getBoundingClientRect();
         const rootRect = root.getBoundingClientRect();
         if (seekRect.width <= 0) return;
 
-        const pct = Math.min(1, Math.max(0, (e.clientX - seekRect.left) / seekRect.width));
+        const pct = Math.min(1, Math.max(0, (clientX - seekRect.left) / seekRect.width));
         const dur = player.duration();
         if (!dur || !Number.isFinite(dur)) return;
 
@@ -140,18 +147,32 @@ export default function VideoPlayer({
         const cue = findCue(cuesRef.current, time);
         if (!cue) return;
 
-        const half = cue.w / 2;
-        const left = Math.min(rootRect.width - half, Math.max(half, e.clientX - rootRect.left));
+        const scale = Math.min(1, (rootRect.width - 16) / cue.w);
+        const half = (cue.w * scale) / 2;
+        const left = Math.min(rootRect.width - half, Math.max(half, clientX - rootRect.left));
         const bottom = rootRect.bottom - seekRect.top + 12;
-        setPreview({ left, bottom, cue, time });
+        setPreview({ left, bottom, cue, time, scale });
       };
+
+      const onMove = (e: MouseEvent) => updatePreview(e.clientX);
       const onLeave = () => setPreview(null);
+      const onTouchMove = (e: TouchEvent) => {
+        const touch = e.touches[0];
+        if (touch) updatePreview(touch.clientX);
+      };
+      const onTouchEnd = () => setPreview(null);
 
       seekBar.addEventListener("mousemove", onMove);
       seekBar.addEventListener("mouseleave", onLeave);
+      seekBar.addEventListener("touchmove", onTouchMove, { passive: true });
+      seekBar.addEventListener("touchend", onTouchEnd);
+      seekBar.addEventListener("touchcancel", onTouchEnd);
       scrubCleanupRef.current = () => {
         seekBar.removeEventListener("mousemove", onMove);
         seekBar.removeEventListener("mouseleave", onLeave);
+        seekBar.removeEventListener("touchmove", onTouchMove);
+        seekBar.removeEventListener("touchend", onTouchEnd);
+        seekBar.removeEventListener("touchcancel", onTouchEnd);
       };
     };
 
@@ -320,11 +341,16 @@ export default function VideoPlayer({
   }
 
   return (
-    <div ref={rootRef} className="relative video-player-root video-player-themed">
+    <div
+      ref={rootRef}
+      className={`relative w-full video-player-root video-player-themed ${
+        status !== "playing" ? "video-player-preplay" : ""
+      }`}
+    >
 
       {heatmap.length > 0 && status === "playing" && (
         <div
-          className={`pointer-events-none absolute inset-x-0 bottom-[4.5rem] z-10 px-3 transition-opacity duration-300 ${
+          className={`pointer-events-none absolute inset-x-0 z-10 px-3 transition-opacity duration-300 video-player-heatmap ${
             controlsVisible ? "opacity-100" : "opacity-0"
           }`}
         >
@@ -332,8 +358,8 @@ export default function VideoPlayer({
         </div>
       )}
 
-      <div data-vjs-player className="overflow-hidden rounded-xl border border-zinc-800/80 bg-black shadow-[0_0_0_1px_rgba(212,175,55,0.08)]">
-        <div ref={videoRef} />
+      <div data-vjs-player className="w-full overflow-hidden rounded-xl border border-zinc-800/80 bg-black shadow-[0_0_0_1px_rgba(212,175,55,0.08)]">
+        <div ref={videoRef} className="w-full" />
       </div>
 
       <div className={`absolute inset-0 z-20 flex flex-col bg-black ${status === "ad" ? "" : "hidden"}`}>
@@ -367,8 +393,8 @@ export default function VideoPlayer({
           ) : status === "error" ? (
             <span className="rounded bg-red-600/90 px-4 py-2 text-sm text-white">Playback error — tap to retry</span>
           ) : (
-            <span className="flex h-24 w-24 items-center justify-center rounded-full bg-brand-600/95 shadow-[0_0_40px_rgba(212,175,55,0.35)] ring-2 ring-brand-400/40">
-              <svg className="ml-1.5 h-10 w-10 text-zinc-950" fill="currentColor" viewBox="0 0 20 20">
+            <span className="flex h-16 w-16 items-center justify-center rounded-full bg-brand-600/95 shadow-[0_0_40px_rgba(212,175,55,0.35)] ring-2 ring-brand-400/40 sm:h-24 sm:w-24">
+              <svg className="ml-1 h-8 w-8 text-zinc-950 sm:ml-1.5 sm:h-10 sm:w-10" fill="currentColor" viewBox="0 0 20 20">
                 <path d="M6.3 2.8A1.5 1.5 0 004 4.1v11.8a1.5 1.5 0 002.3 1.3l9.3-5.9a1.5 1.5 0 000-2.6L6.3 2.8z" />
               </svg>
             </span>
@@ -378,8 +404,13 @@ export default function VideoPlayer({
 
       {preview && storyboard && (
         <div
-          className="pointer-events-none absolute z-40 -translate-x-1/2"
-          style={{ left: preview.left, bottom: preview.bottom }}
+          className="pointer-events-none absolute z-40"
+          style={{
+            left: preview.left,
+            bottom: preview.bottom,
+            transform: `translateX(-50%) scale(${preview.scale})`,
+            transformOrigin: "bottom center",
+          }}
         >
           <div
             className="overflow-hidden rounded border border-zinc-500 bg-black shadow-2xl"

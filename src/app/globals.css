@@ -9,6 +9,25 @@
   --player-bar-height: 4rem;
   --player-progress-height: 1rem;
   --player-controls-height: 2.25rem;
+  --player-heatmap-bottom: 4.5rem;
+}
+
+@media (max-width: 640px) {
+  :root {
+    --player-bar-height: 3.25rem;
+    --player-progress-height: 0.625rem;
+    --player-controls-height: 2rem;
+    --player-heatmap-bottom: 3.75rem;
+  }
+}
+
+/* Hide Video.js chrome until playback starts — custom pre-play overlay only. */
+.video-player-root.video-player-preplay .vjs-control-bar {
+  display: none !important;
+}
+
+.video-player-root .video-player-heatmap {
+  bottom: var(--player-heatmap-bottom);
 }
 
 /* ── Video.js — Pisster golden control bar ─────────────────────────── */
@@ -138,4 +157,47 @@
 .video-player-root.video-player-themed .vjs-scrubber-preview .vjs-mouse-display,
 .video-player-root.video-player-themed .vjs-scrubber-preview .vjs-time-tooltip {
   display: none !important;
+}
+
+@media (max-width: 640px) {
+  .video-player-root.video-player-themed .vjs-control-bar {
+    padding: 0 0.5rem 0.25rem;
+  }
+
+  .video-player-root.video-player-themed .vjs-control-bar > .vjs-button {
+    width: 2rem;
+  }
+
+  .video-player-root.video-player-themed .vjs-volume-panel .vjs-volume-control {
+    display: none;
+  }
+
+  .video-player-root.video-player-themed .vjs-volume-panel {
+    min-width: 2rem;
+    width: 2rem;
+  }
+
+  .video-player-root.video-player-themed .vjs-duration,
+  .video-player-root.video-player-themed .vjs-time-divider {
+    display: none !important;
+  }
+
+  .video-player-root.video-player-themed .vjs-current-time {
+    font-size: 0.8125rem;
+    padding: 0 0.2rem;
+    min-width: 2.5rem;
+  }
+
+  .video-player-root.video-player-themed .vjs-progress-control {
+    padding: 0 0.5rem;
+    height: calc(var(--player-progress-height) + 1rem);
+  }
+
+  .video-player-root.video-player-themed .vjs-progress-holder {
+    margin-top: 0.35rem;
+  }
+
+  .video-player-root.video-player-themed .vjs-button > .vjs-icon-placeholder:before {
+    font-size: 1.35em;
+  }
 }

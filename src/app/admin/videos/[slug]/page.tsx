@@ -65,14 +65,14 @@ export default async function AdminVideoDetail({
         {video.sourceSite ? ` · ${video.sourceSite}` : ""}
       </p>
 
-      <div className="mt-4 overflow-hidden rounded-xl bg-black">
-        <VideoPlayer
-          videoId={video.id}
-          poster={poster}
-          storyboard={storyboard}
-          heatmap={heatmap}
-          adminPreview
-        />
+      <div className="mt-4">
+      <VideoPlayer
+        videoId={video.id}
+        poster={poster}
+        storyboard={storyboard}
+        heatmap={heatmap}
+        adminPreview
+      />
       </div>
 
       {video.sourceUrl && (

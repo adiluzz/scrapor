@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { prisma } from "@/lib/db";
 import { requireAdmin } from "@/lib/session";
-import { AdminVideoCard, AdminVideoRow } from "@/components/admin/AdminVideoRow";
+import AdminVideoRow from "@/components/admin/AdminVideoRow";
 
 export const dynamic = "force-dynamic";
 const PAGE_SIZE = 30;
@@ -44,36 +44,30 @@ export default async function AdminVideosPage({
         />
       </form>
 
-      {videos.length === 0 ? (
-        <p className="py-8 text-center text-zinc-500">No videos.</p>
-      ) : (
-        <>
-          <div className="grid grid-cols-1 gap-3 md:hidden">
-            {videos.map((v) => (
-              <AdminVideoCard key={v.id} video={v} />
-            ))}
-          </div>
-
-          <div className="hidden overflow-x-auto rounded-xl border border-zinc-800 md:block">
-            <table className="w-full min-w-[640px] text-left text-sm">
-              <thead className="bg-zinc-900 text-zinc-400">
-                <tr>
-                  <th className="px-4 py-3">Title</th>
-                  <th className="px-4 py-3">Source</th>
-                  <th className="px-4 py-3">Views</th>
-                  <th className="px-4 py-3">Status</th>
-                  <th className="px-4 py-3" />
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-zinc-800">
-                {videos.map((v) => (
-                  <AdminVideoRow key={v.id} video={v} />
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </>
-      )}
+      <div className="overflow-x-auto rounded-xl border border-zinc-800">
+        <table className="w-full min-w-[640px] text-left text-sm">
+          <thead className="bg-zinc-900 text-zinc-400">
+            <tr>
+              <th className="px-4 py-3">Title</th>
+              <th className="px-4 py-3">Source</th>
+              <th className="px-4 py-3">Views</th>
+              <th className="px-4 py-3">Status</th>
+              <th className="px-4 py-3" />
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-zinc-800">
+            {videos.length === 0 ? (
+              <tr>
+                <td colSpan={5} className="px-4 py-8 text-center text-zinc-500">
+                  No videos.
+                </td>
+              </tr>
+            ) : (
+              videos.map((v) => <AdminVideoRow key={v.id} video={v} />)
+            )}
+          </tbody>
+        </table>
+      </div>
 
       <div className="mt-4 flex items-center justify-center gap-3 text-sm">
         {page > 1 && (

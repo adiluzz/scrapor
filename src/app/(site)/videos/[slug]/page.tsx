@@ -144,68 +144,68 @@ export default async function VideoPage({
         ])}
       />
 
-      <div className="mx-auto w-full max-w-7xl">
+      <div className="mx-auto w-full max-w-7xl space-y-6">
         {adminPreview && (
-          <div className="mb-3 rounded-lg border border-amber-500/40 bg-amber-500/10 px-4 py-2 text-sm text-amber-300">
+          <div className="rounded-lg border border-amber-500/40 bg-amber-500/10 px-4 py-2 text-sm text-amber-300">
             Admin preview — this video is{" "}
             {video.isDeleted ? "deleted" : video.status !== "READY" ? "still processing" : "hidden"} and not
             visible to the public.
           </div>
         )}
-        <div className="overflow-hidden rounded-xl bg-black">
-          <VideoPlayer
-            videoId={video.id}
-            poster={poster}
-            storyboard={storyboard}
-            heatmap={heatmap}
-          />
-        </div>
+        <VideoPlayer
+          videoId={video.id}
+          poster={poster}
+          storyboard={storyboard}
+          heatmap={heatmap}
+        />
 
-        <h1 className="mt-4 text-xl font-bold text-zinc-100">{video.title}</h1>
-        <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-zinc-500">
-          <span>{video.viewCount.toLocaleString()} views</span>
-          {video.durationSec ? <span>· {formatDuration(video.durationSec)}</span> : null}
-        </div>
-
-        {video.pornstars.length > 0 && (
-          <div className="mt-3 flex flex-wrap gap-2">
-            {video.pornstars.map((p) => (
-              <Link
-                key={p.pornstarId}
-                href={`/pornstars/${p.pornstar.slug}`}
-                className="rounded-full bg-brand-600/15 px-3 py-1 text-sm font-medium text-brand-400 hover:bg-brand-600/25"
-              >
-                {p.pornstar.name}
-              </Link>
-            ))}
+        <div className="w-full">
+          <h1 className="text-lg font-bold text-zinc-100 sm:text-xl">{video.title}</h1>
+          <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-zinc-500">
+            <span>{video.viewCount.toLocaleString()} views</span>
+            {video.durationSec ? <span>· {formatDuration(video.durationSec)}</span> : null}
           </div>
-        )}
 
-        {video.tags.length > 0 && (
-          <div className="mt-3 flex flex-wrap gap-2">
-            {video.tags.map((t) => (
-              <Link
-                key={t.tagId}
-                href={`/tags/${t.tag.slug}`}
-                className="rounded-full bg-zinc-800 px-3 py-1 text-xs text-zinc-300 hover:bg-zinc-700"
-              >
-                {t.tag.name}
-              </Link>
-            ))}
-          </div>
-        )}
+          {video.pornstars.length > 0 && (
+            <div className="mt-3 flex flex-wrap gap-2">
+              {video.pornstars.map((p) => (
+                <Link
+                  key={p.pornstarId}
+                  href={`/pornstars/${p.pornstar.slug}`}
+                  className="rounded-full bg-brand-600/15 px-3 py-1 text-sm font-medium text-brand-400 hover:bg-brand-600/25"
+                >
+                  {p.pornstar.name}
+                </Link>
+              ))}
+            </div>
+          )}
 
-        {video.description && (
-          <p className="mt-4 whitespace-pre-line text-sm leading-relaxed text-zinc-400">
-            {video.description}
-          </p>
-        )}
+          {video.tags.length > 0 && (
+            <div className="mt-3 flex flex-wrap gap-2">
+              {video.tags.map((t) => (
+                <Link
+                  key={t.tagId}
+                  href={`/tags/${t.tag.slug}`}
+                  className="rounded-full bg-zinc-800 px-3 py-1 text-xs text-zinc-300 hover:bg-zinc-700"
+                >
+                  {t.tag.name}
+                </Link>
+              ))}
+            </div>
+          )}
 
-        <AdZone zoneId={process.env.EXO_ZONE_UNDER_PLAYER} className="mt-6" />
+          {video.description && (
+            <p className="mt-4 whitespace-pre-line text-sm leading-relaxed text-zinc-400">
+              {video.description}
+            </p>
+          )}
+
+          <AdZone zoneId={process.env.EXO_ZONE_UNDER_PLAYER} className="mt-6" />
+        </div>
       </div>
 
       {related.length > 0 && (
-        <section className="mx-auto w-full max-w-5xl">
+        <section className="mx-auto w-full max-w-7xl">
           <h2 className="mb-3 text-lg font-semibold text-zinc-200">Related videos</h2>
           <VideoGrid videos={related} />
         </section>

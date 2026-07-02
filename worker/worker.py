@@ -90,13 +90,18 @@ CREATOR_QUEUE_KEY = "creator:queue"
 UPLOAD_DIR = os.environ.get("UPLOAD_DIR", os.path.join(ROOT, "uploads"))
 # Optional HTTP(S) proxy for source downloads (or use docker-compose.vpn.yml).
 SCRAPE_PROXY = os.environ.get("SCRAPE_HTTP_PROXY") or os.environ.get("HTTPS_PROXY") or ""
+# Per-file wget / m3u8 attempt timeout (ParadiseHill parts can be 100MB+ on slow links).
+DOWNLOAD_TIMEOUT = int(os.environ.get("SCRAPE_DOWNLOAD_TIMEOUT_SEC", "900"))
+# ffmpeg concat / yt-dlp timeout (full multi-part merge or site extract).
+DOWNLOAD_LONG_TIMEOUT = int(os.environ.get("SCRAPE_DOWNLOAD_LONG_TIMEOUT_SEC", "3600"))
 # yt-dlp: best available video+audio; m3u8 fast path tries highest HLS rung first.
 YTDLP_FORMAT = "bestvideo+bestaudio/best"
 M3U8_QUALITIES = ("1080p", "720p", "480p", "240p")
 
 
-def _download_m3u8(m3u8: str, dest: str, dl_env: dict, timeout: int = 900):
+def _download_m3u8(m3u8: str, dest: str, dl_env: dict, timeout: int | None = None):
     """Download XHamster-style HLS template URLs, preferring highest quality."""
+    timeout = timeout if timeout is not None else DOWNLOAD_TIMEOUT
     last_result = None
     for quality in M3U8_QUALITIES:
         stream_url = m3u8.replace("_TPL_", quality)
@@ -140,7 +145,7 @@ def _download(video, dest_dir) -> tuple[bool, str, dict]:
                     continue
                 pf = os.path.join(dest_dir, f"part_{i:03d}.mp4")
                 cmd = ["wget", "-q", "--no-check-certificate", "-O", pf, str(part_url)]
-                last_result = subprocess.run(cmd, capture_output=True, timeout=900, env=dl_env)
+                last_result = subprocess.run(cmd, capture_output=True, timeout=DOWNLOAD_TIMEOUT, env=dl_env)
                 if not (os.path.exists(pf) and os.path.getsize(pf) > 100_000):
                     size = os.path.getsize(pf) if os.path.exists(pf) else 0
                     return False, f"part {i + 1} missing or too small ({size} bytes)", {
@@ -156,7 +161,7 @@ def _download(video, dest_dir) -> tuple[bool, str, dict]:
                 for pf in part_files:
                     fh.write(f"file '{pf}'\n")
             cmd = ["ffmpeg", "-y", "-f", "concat", "-safe", "0", "-i", list_file, "-c", "copy", dest]
-            last_result = subprocess.run(cmd, capture_output=True, timeout=1800, env=dl_env)
+            last_result = subprocess.run(cmd, capture_output=True, timeout=DOWNLOAD_LONG_TIMEOUT, env=dl_env)
         elif m3u8:
             method = "ffmpeg-m3u8"
             ok, last_result, quality = _download_m3u8(m3u8, dest, dl_env)
@@ -170,7 +175,7 @@ def _download(video, dest_dir) -> tuple[bool, str, dict]:
         elif cdn:
             method = "wget-cdn"
             cmd = ["wget", "-q", "--no-check-certificate", "-O", dest, cdn]
-            last_result = subprocess.run(cmd, capture_output=True, timeout=900, env=dl_env)
+            last_result = subprocess.run(cmd, capture_output=True, timeout=DOWNLOAD_TIMEOUT, env=dl_env)
         else:
             method = "yt-dlp"
             tmp = os.path.join(dest_dir, "dl.%(ext)s")
@@ -179,7 +184,7 @@ def _download(video, dest_dir) -> tuple[bool, str, dict]:
                    "-o", tmp, "--socket-timeout", "30", "--retries", "3", url]
             if SCRAPE_PROXY:
                 cmd[1:1] = ["--proxy", SCRAPE_PROXY]
-            last_result = subprocess.run(cmd, capture_output=True, timeout=1800, env=dl_env)
+            last_result = subprocess.run(cmd, capture_output=True, timeout=DOWNLOAD_LONG_TIMEOUT, env=dl_env)
             if not (os.path.exists(dest) and os.path.getsize(dest) > 100_000):
                 for f in os.listdir(dest_dir):
                     if f.startswith("dl."):

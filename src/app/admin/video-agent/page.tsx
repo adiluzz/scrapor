@@ -1,7 +1,8 @@
 "use client";
 
+import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
-import DetectionClipCard, { type DetectionClip } from "@/components/admin/DetectionClipCard";
 import VideoSelectGrid, { type SelectableVideo } from "@/components/admin/VideoSelectGrid";
 
 type VideoAgentModel = {
@@ -16,14 +17,8 @@ type VideoAgentModel = {
 
 type AgentRun = {
   id: string;
-  userPrompt: string;
-  searchQuery: string;
-  extractTargets: string;
-  analysisModel: string;
   status: string;
   error?: string | null;
-  agent?: { name: string; key: string };
-  detections: DetectionClip[];
 };
 
 type SearchResult = {
@@ -39,13 +34,13 @@ const DEFAULT_PROMPT =
 const POLL_MS = 3000;
 
 export default function VideoAgentPage() {
+  const router = useRouter();
   const [prompt, setPrompt] = useState(DEFAULT_PROMPT);
   const [analysisModel, setAnalysisModel] = useState("pegasus-1-5");
   const [models, setModels] = useState<VideoAgentModel[]>([]);
   const [searching, setSearching] = useState(false);
   const [running, setRunning] = useState(false);
   const [polling, setPolling] = useState(false);
-  const [feedbackBusy, setFeedbackBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [searchResult, setSearchResult] = useState<SearchResult | null>(null);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
@@ -74,7 +69,7 @@ export default function VideoAgentPage() {
     const res = await fetch(`/api/video-agent/runs/${runId}`);
     const data = await res.json();
     if (!res.ok) throw new Error(data.error || "Failed to load run");
-    setRun(data.run);
+    setRun({ id: data.run.id, status: data.run.status, error: data.run.error });
     return data.run as AgentRun;
   }, []);
 
@@ -87,6 +82,7 @@ export default function VideoAgentPage() {
         if (updated.status === "DONE" || updated.status === "ERROR") {
           setPolling(false);
           setRunning(false);
+          router.push(`/admin/video-agent/runs/${id}`);
         }
       } catch (e) {
         setError((e as Error).message);
@@ -95,7 +91,7 @@ export default function VideoAgentPage() {
       }
     }, POLL_MS);
     return () => clearInterval(timer);
-  }, [polling, run?.id, pollRun]);
+  }, [polling, run?.id, pollRun, router]);
 
   async function searchVideos() {
     if (!prompt.trim()) return;
@@ -141,10 +137,12 @@ export default function VideoAgentPage() {
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Analysis failed");
-      setRun(data.run);
-      if (data.run.status === "DONE" || data.run.status === "ERROR") {
+      const created = data.run as AgentRun;
+      setRun(created);
+      if (created.status === "DONE" || created.status === "ERROR") {
         setPolling(false);
         setRunning(false);
+        router.push(`/admin/video-agent/runs/${created.id}`);
       }
     } catch (e) {
       setError((e as Error).message);
@@ -171,50 +169,27 @@ export default function VideoAgentPage() {
     }
   }
 
-  async function submitFeedback(detectionId: string, approved: boolean) {
-    setFeedbackBusy(true);
-    setError(null);
-    try {
-      const res = await fetch("/api/video-agent/feedback", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ detectionId, approved }),
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Feedback failed");
-
-      setRun((prev) => {
-        if (!prev) return prev;
-        return {
-          ...prev,
-          detections: prev.detections.map((d) =>
-            d.id === detectionId ? { ...d, feedback: { approved } } : d
-          ),
-        };
-      });
-    } catch (e) {
-      setError((e as Error).message);
-    } finally {
-      setFeedbackBusy(false);
-    }
-  }
-
-  const targets = run
-    ? (JSON.parse(run.extractTargets) as string[])
-    : searchResult?.extractTargets ?? [];
+  const targets = searchResult?.extractTargets ?? [];
   const selectedModel = models.find((m) => m.id === analysisModel);
   const allSelected =
     searchResult != null && selectedIds.size === searchResult.videos.length && searchResult.videos.length > 0;
 
   return (
     <div className="space-y-8">
-      <div>
-        <h1 className="text-2xl font-bold text-white">Video Content Agent</h1>
-        <p className="mt-1 max-w-2xl text-sm text-zinc-400">
-          Step 1: search the catalog from your prompt. Step 2: pick which videos to analyze.
-          A Python video-analyzer service processes each selected video with native AI models
-          and learns from your approve/reject feedback.
-        </p>
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h1 className="text-2xl font-bold text-white">Video Content Agent</h1>
+          <p className="mt-1 max-w-2xl text-sm text-zinc-400">
+            Step 1: search the catalog from your prompt. Step 2: pick which videos to analyze.
+            Results are saved permanently — review and approve detections on the analysis page.
+          </p>
+        </div>
+        <Link
+          href="/admin/video-agent/runs"
+          className="rounded-lg border border-zinc-700 px-4 py-2 text-sm text-zinc-300 hover:bg-zinc-800 hover:text-white"
+        >
+          Past analyses
+        </Link>
       </div>
 
       <section className="rounded-xl border border-zinc-800 bg-zinc-900/40 p-5 space-y-4">
@@ -277,7 +252,7 @@ export default function VideoAgentPage() {
         </div>
       )}
 
-      {searchResult && !run && (
+      {searchResult && !running && (
         <section className="space-y-4">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div className="text-sm text-zinc-400">
@@ -295,7 +270,7 @@ export default function VideoAgentPage() {
               <button
                 type="button"
                 onClick={toggleAll}
-                disabled={running || searchResult.videos.length === 0}
+                disabled={searchResult.videos.length === 0}
                 className="rounded-lg border border-zinc-700 px-4 py-2 text-sm text-zinc-300 hover:bg-zinc-800 disabled:opacity-50"
               >
                 {allSelected ? "Deselect all" : "Select all"}
@@ -303,12 +278,10 @@ export default function VideoAgentPage() {
               <button
                 type="button"
                 onClick={startAnalysis}
-                disabled={running || selectedIds.size === 0}
+                disabled={selectedIds.size === 0}
                 className="rounded-lg bg-brand-600 px-5 py-2.5 text-sm font-medium text-white hover:bg-brand-500 disabled:opacity-50"
               >
-                {running
-                  ? "Analysis in progress…"
-                  : `Step 2 — Analyze ${selectedIds.size} selected video${selectedIds.size === 1 ? "" : "s"}`}
+                {`Step 2 — Analyze ${selectedIds.size} selected video${selectedIds.size === 1 ? "" : "s"}`}
               </button>
             </div>
           </div>
@@ -321,59 +294,20 @@ export default function VideoAgentPage() {
         </section>
       )}
 
-      {running && (
+      {running && run && (
         <div className="rounded-lg border border-zinc-800 bg-zinc-900/50 px-4 py-8 text-center text-sm text-zinc-400">
-          Analyzing {selectedIds.size} video{selectedIds.size === 1 ? "" : "s"} with{" "}
-          <span className="text-zinc-300">{selectedModel?.label ?? analysisModel}</span>. This may
-          take a while for long videos…
+          <p>
+            Analyzing {selectedIds.size} video{selectedIds.size === 1 ? "" : "s"} with{" "}
+            <span className="text-zinc-300">{selectedModel?.label ?? analysisModel}</span>…
+          </p>
+          <p className="mt-2 text-zinc-500">Status: {run.status}</p>
+          <Link
+            href={`/admin/video-agent/runs/${run.id}`}
+            className="mt-4 inline-block text-brand-400 hover:underline"
+          >
+            Open analysis page →
+          </Link>
         </div>
-      )}
-
-      {run && (
-        <section className="space-y-4">
-          <div className="rounded-lg border border-zinc-800 bg-zinc-950/50 px-4 py-3 text-sm">
-            <p className="text-zinc-300">
-              <span className="text-zinc-500">Status:</span> {run.status}
-            </p>
-            <p className="text-zinc-300">
-              <span className="text-zinc-500">Model:</span> {run.analysisModel}
-            </p>
-            <p className="text-zinc-300">
-              <span className="text-zinc-500">Search query:</span> {run.searchQuery}
-            </p>
-            <p className="mt-1 text-zinc-300">
-              <span className="text-zinc-500">Detecting:</span> {targets.join(", ")}
-            </p>
-            {run.status === "ERROR" && run.error && (
-              <p className="mt-2 text-red-400">{run.error}</p>
-            )}
-          </div>
-
-          {run.status === "DONE" && run.detections.length === 0 && (
-            <p className="text-center text-sm text-zinc-500 py-8">
-              No detections found. Try a different prompt, model, or search terms.
-            </p>
-          )}
-
-          {run.detections.length > 0 && (
-            <>
-              <p className="text-sm text-zinc-400">
-                Review each clip below. Approve correct detections and reject false positives —
-                both are saved as training examples for future runs.
-              </p>
-              <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
-                {run.detections.map((d) => (
-                  <DetectionClipCard
-                    key={d.id}
-                    detection={d}
-                    onFeedback={submitFeedback}
-                    busy={feedbackBusy}
-                  />
-                ))}
-              </div>
-            </>
-          )}
-        </section>
       )}
     </div>
   );

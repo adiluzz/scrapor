@@ -316,12 +316,15 @@ export default function VideoAgentPage() {
             Analyzing {selectedIds.size} video{selectedIds.size === 1 ? "" : "s"} with{" "}
             <span className="text-zinc-300">{selectedModel?.label ?? analysisModel}</span>…
           </p>
-          <p className="mt-2 text-zinc-500">Status: {run.status}</p>
+          <p className="mt-2 text-zinc-500">
+            Status: {run.status}
+            {run.status === "RUNNING" && " — long videos take several minutes; detections appear on the analysis page as chunks finish."}
+          </p>
           <Link
             href={`/admin/video-agent/runs/${run.id}`}
             className="mt-4 inline-block text-brand-400 hover:underline"
           >
-            Open analysis page →
+            Open analysis page (live results) →
           </Link>
         </div>
       )}

@@ -80,13 +80,7 @@ export default function VideoAgentRunReview({
     }
   }
 
-  if (status === "PENDING" || status === "RUNNING") {
-    return (
-      <div className="rounded-lg border border-zinc-800 bg-zinc-900/50 px-4 py-8 text-center text-sm text-zinc-400">
-        Analysis in progress ({status.toLowerCase()})… results will appear here when complete.
-      </div>
-    );
-  }
+  const inProgress = status === "PENDING" || status === "RUNNING";
 
   return (
     <div className="space-y-4">
@@ -96,23 +90,34 @@ export default function VideoAgentRunReview({
         </div>
       )}
 
-      {status === "DONE" && detections.length === 0 && (
+      {inProgress && (
+        <div className="rounded-lg border border-amber-900/40 bg-amber-950/20 px-4 py-3 text-sm text-amber-200/90">
+          Analysis in progress ({status.toLowerCase()})…
+          {detections.length > 0
+            ? ` ${detections.length} detection${detections.length === 1 ? "" : "s"} found so far.`
+            : " Detections will appear here as chunks finish."}
+        </div>
+      )}
+
+      {!inProgress && status === "DONE" && detections.length === 0 && (
         <p className="py-8 text-center text-sm text-zinc-500">No detections found for this run.</p>
       )}
 
       {detections.length > 0 && (
         <>
-          <p className="text-sm text-zinc-400">
-            Review each clip. Approve correct detections and reject false positives — feedback is
-            saved permanently for this analysis and used as training data.
-          </p>
+          {!inProgress && (
+            <p className="text-sm text-zinc-400">
+              Review each clip. Approve correct detections and reject false positives — feedback is
+              saved permanently for this analysis and used as training data.
+            </p>
+          )}
           <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
             {detections.map((d) => (
               <DetectionClipCard
                 key={d.id}
                 detection={d}
                 onFeedback={submitFeedback}
-                busy={feedbackBusy}
+                busy={feedbackBusy || inProgress}
               />
             ))}
           </div>

@@ -54,6 +54,13 @@ def load_run(conn, run_id: str) -> dict[str, Any] | None:
     return dict(zip(cols, row))
 
 
+def touch_run(conn, run_id: str) -> None:
+    conn.execute(
+        'UPDATE "VideoAgentRun" SET "updatedAt" = NOW() WHERE id = %s',
+        (run_id,),
+    )
+
+
 def set_run_status(conn, run_id: str, status: str, error: str | None = None) -> None:
     if error is not None:
         conn.execute(

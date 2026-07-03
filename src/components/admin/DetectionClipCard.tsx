@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 export type DetectionClip = {
   id: string;
@@ -33,52 +33,54 @@ export default function DetectionClipCard({
   busy?: boolean;
 }) {
   const videoRef = useRef<HTMLVideoElement>(null);
-  const [streamUrl, setStreamUrl] = useState<string | null>(null);
-  const [loadingUrl, setLoadingUrl] = useState(false);
+  const [buffering, setBuffering] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  const loadStream = useCallback(async () => {
-    setLoadingUrl(true);
-    setError(null);
-    try {
-      const res = await fetch(`/api/admin/videos/${detection.videoId}/playback`, {
-        method: "POST",
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Failed to load video");
-      setStreamUrl(data.url);
-    } catch (e) {
-      setError((e as Error).message);
-    } finally {
-      setLoadingUrl(false);
-    }
-  }, [detection.videoId]);
-
-  useEffect(() => {
-    loadStream();
-  }, [loadStream]);
+  const streamUrl = `/api/admin/videos/${detection.videoId}/stream#t=${detection.startSec},${detection.endSec}`;
 
   useEffect(() => {
     const el = videoRef.current;
-    if (!el || !streamUrl) return;
+    if (!el) return;
 
-    const onLoaded = () => {
+    setBuffering(true);
+    setError(null);
+
+    const seekToClip = () => {
       el.currentTime = detection.startSec;
       el.play().catch(() => {});
     };
 
     const onTimeUpdate = () => {
       if (el.currentTime >= detection.endSec) {
-        el.pause();
         el.currentTime = detection.startSec;
+        el.play().catch(() => {});
       }
     };
 
-    el.addEventListener("loadedmetadata", onLoaded);
+    const onCanPlay = () => {
+      setBuffering(false);
+      if (Math.abs(el.currentTime - detection.startSec) > 0.5) {
+        seekToClip();
+      }
+    };
+
+    const onWaiting = () => setBuffering(true);
+    const onPlaying = () => setBuffering(false);
+    const onError = () => setError("Failed to load clip preview");
+
+    el.addEventListener("loadedmetadata", seekToClip);
+    el.addEventListener("canplay", onCanPlay);
     el.addEventListener("timeupdate", onTimeUpdate);
+    el.addEventListener("waiting", onWaiting);
+    el.addEventListener("playing", onPlaying);
+    el.addEventListener("error", onError);
     return () => {
-      el.removeEventListener("loadedmetadata", onLoaded);
+      el.removeEventListener("loadedmetadata", seekToClip);
+      el.removeEventListener("canplay", onCanPlay);
       el.removeEventListener("timeupdate", onTimeUpdate);
+      el.removeEventListener("waiting", onWaiting);
+      el.removeEventListener("playing", onPlaying);
+      el.removeEventListener("error", onError);
     };
   }, [streamUrl, detection.startSec, detection.endSec]);
 
@@ -94,9 +96,9 @@ export default function DetectionClipCard({
   return (
     <div className="flex flex-col overflow-hidden rounded-xl border border-zinc-800 bg-zinc-900/60">
       <div className="relative aspect-video bg-black">
-        {loadingUrl && (
+        {buffering && !error && (
           <div className="absolute inset-0 flex items-center justify-center text-sm text-zinc-500">
-            Loading…
+            Loading clip…
           </div>
         )}
         {error && (
@@ -104,7 +106,7 @@ export default function DetectionClipCard({
             {error}
           </div>
         )}
-        {streamUrl && (
+        {!error && (
           <>
             <video
               ref={videoRef}
@@ -112,8 +114,7 @@ export default function DetectionClipCard({
               className="h-full w-full object-contain"
               muted
               playsInline
-              loop
-              preload="metadata"
+              preload="auto"
             />
             {hasBox && (
               <div

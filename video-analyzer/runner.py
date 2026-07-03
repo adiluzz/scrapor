@@ -16,6 +16,7 @@ from db import (
     load_training_examples,
     resolve_run_videos,
     set_run_status,
+    touch_run,
 )
 from learning import build_learning_context
 from media import download_video, probe_duration, resolve_media_source
@@ -117,33 +118,32 @@ def _analyze_video(
     else:
         chunks = build_fixed_chunks(duration)
 
-    all_detections = []
     for chunk in chunks:
         try:
             media = resolve_media_source(
                 site_id, video_id, work_dir, chunk.start_sec, chunk.duration_sec
             )
             hits = analyzer.analyze(media, targets, learning_context)
-            all_detections.extend(hits)
+            for det in hits:
+                insert_detection(
+                    conn,
+                    run_id=run_id,
+                    video_id=video_id,
+                    video_title=title,
+                    label=det.label,
+                    start_sec=det.start_sec,
+                    end_sec=det.end_sec,
+                    screen_x=det.screen_x,
+                    screen_y=det.screen_y,
+                    screen_w=det.screen_w,
+                    screen_h=det.screen_h,
+                    confidence=det.confidence,
+                    frame_sec=det.frame_sec,
+                )
+            touch_run(conn, run_id)
         except Exception as e:  # noqa: BLE001
             log.warning(
                 "chunk_failed video_id=%s start=%s err=%s",
                 video_id, chunk.start_sec, e,
             )
-
-    for det in all_detections:
-        insert_detection(
-            conn,
-            run_id=run_id,
-            video_id=video_id,
-            video_title=title,
-            label=det.label,
-            start_sec=det.start_sec,
-            end_sec=det.end_sec,
-            screen_x=det.screen_x,
-            screen_y=det.screen_y,
-            screen_w=det.screen_w,
-            screen_h=det.screen_h,
-            confidence=det.confidence,
-            frame_sec=det.frame_sec,
-        )
+            touch_run(conn, run_id)

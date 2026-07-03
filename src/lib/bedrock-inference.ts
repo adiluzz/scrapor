@@ -31,6 +31,9 @@ export function resolveBedrockInferenceModelId(
   if (trimmed.startsWith("amazon.") || trimmed.startsWith("twelvelabs.")) {
     return `${prefix}.${trimmed}`;
   }
+  if (trimmed.startsWith("anthropic.")) {
+    return `${prefix}.${trimmed}`;
+  }
   return trimmed;
 }
 

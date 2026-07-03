@@ -1,6 +1,10 @@
 import { NextResponse } from "next/server";
 import { guardAdmin } from "@/lib/admin-guard";
 import { searchAgentVideos } from "@/lib/queries";
+import {
+  DEFAULT_VIDEO_AGENT_MODEL,
+  resolveVideoAgentModel,
+} from "@/lib/video-agent-models";
 import { parseUserPrompt } from "@/lib/video-agent/parse-prompt";
 import { logger } from "@/lib/logger";
 
@@ -13,13 +17,20 @@ export async function POST(request: Request) {
 
   const body = await request.json().catch(() => ({}));
   const userPrompt = typeof body.prompt === "string" ? body.prompt.trim() : "";
+  const analysisModel =
+    typeof body.analysisModel === "string" ? body.analysisModel.trim() : DEFAULT_VIDEO_AGENT_MODEL;
 
   if (!userPrompt) {
     return NextResponse.json({ error: "Prompt is required" }, { status: 400 });
   }
 
+  const model = resolveVideoAgentModel(analysisModel);
+  if (!model) {
+    return NextResponse.json({ error: "Invalid analysis model" }, { status: 400 });
+  }
+
   try {
-    const parsed = await parseUserPrompt(userPrompt);
+    const parsed = await parseUserPrompt(userPrompt, model.id);
     const videos = await searchAgentVideos(auth.siteId, parsed.searchQuery);
     const watchBaseUrl = `https://${PRIMARY_DOMAIN}`;
 

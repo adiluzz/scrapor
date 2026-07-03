@@ -79,7 +79,7 @@ export async function POST(request: Request) {
     let searchQuery = searchQueryFromBody;
     let extractTargets = extractTargetsFromBody;
     if (!searchQuery || !extractTargets?.length) {
-      const parsed = await parseUserPrompt(userPrompt);
+      const parsed = await parseUserPrompt(userPrompt, model.id);
       searchQuery = searchQuery || parsed.searchQuery;
       extractTargets = extractTargets?.length ? extractTargets : parsed.extractTargets;
     }

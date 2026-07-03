@@ -107,7 +107,7 @@ export default function VideoAgentPage() {
       const res = await fetch("/api/video-agent/search", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ prompt: prompt.trim() }),
+        body: JSON.stringify({ prompt: prompt.trim(), analysisModel }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Search failed");
@@ -215,6 +215,12 @@ export default function VideoAgentPage() {
             <p className="mt-1.5 text-xs text-zinc-500">
               {selectedModel.description} Approx. {selectedModel.pricePerHourApprox} per hour of
               video analyzed (2 detection targets).
+              {selectedModel.id === "pegasus-1-5" && (
+                <span className="block mt-1 text-amber-500/90">
+                  Pegasus 1.5 (direct) cannot parse prompts — use Nova 2 Lite or Pegasus 1.2 (Bedrock)
+                  for the search step.
+                </span>
+              )}
             </p>
           )}
         </div>

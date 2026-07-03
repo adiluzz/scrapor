@@ -1,7 +1,11 @@
 import { generateObject } from "ai";
 import { z } from "zod";
-import { DEFAULT_BEDROCK_TEXT_MODEL } from "@/lib/bedrock-inference";
 import { getBedrockProvider } from "@/lib/bedrock";
+import {
+  DEFAULT_VIDEO_AGENT_MODEL,
+  resolveAgentBedrockInferenceId,
+  resolveVideoAgentModel,
+} from "@/lib/video-agent-models";
 
 const parseSchema = z.object({
   searchQuery: z.string().describe("Terms to search the video catalog API"),
@@ -14,12 +18,21 @@ const parseSchema = z.object({
 
 export type ParsedAgentPrompt = z.infer<typeof parseSchema>;
 
-/** Parse agent prompt with a fixed cheap text model (not the user's video analysis pick). */
-export async function parseUserPrompt(userPrompt: string): Promise<ParsedAgentPrompt> {
+/** Parse agent prompt using the same Bedrock model the admin selected for analysis. */
+export async function parseUserPrompt(
+  userPrompt: string,
+  analysisModelId: string = DEFAULT_VIDEO_AGENT_MODEL
+): Promise<ParsedAgentPrompt> {
+  const model = resolveVideoAgentModel(analysisModelId);
+  if (!model) {
+    throw new Error("Invalid analysis model");
+  }
+
+  const bedrockModelId = resolveAgentBedrockInferenceId(analysisModelId);
   const bedrock = getBedrockProvider();
 
   const { object } = await generateObject({
-    model: bedrock(DEFAULT_BEDROCK_TEXT_MODEL),
+    model: bedrock(bedrockModelId),
     schema: parseSchema,
     prompt: `You configure a video analysis agent. The user describes what to search for in a video catalog and what on-screen events to detect.
 

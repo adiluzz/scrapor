@@ -1,3 +1,5 @@
+import { resolveBedrockInferenceModelId } from "@/lib/bedrock-inference";
+
 export type VideoAgentModelId =
   | "pegasus-1-5"
   | "pegasus-1-2"
@@ -120,3 +122,17 @@ export function resolveVideoAgentModel(id: string): VideoAgentModelInfo | null {
 }
 
 export const DEFAULT_VIDEO_AGENT_MODEL: VideoAgentModelId = "nova-2-lite";
+
+/** Bedrock inference profile ID for the admin-selected video agent model. */
+export function resolveAgentBedrockInferenceId(analysisModelId: string): string {
+  const model = resolveVideoAgentModel(analysisModelId);
+  if (!model) {
+    throw new Error("Invalid analysis model");
+  }
+  if (!model.bedrockModelId) {
+    throw new Error(
+      `${model.label} uses the TwelveLabs direct API for video analysis and cannot parse prompts on Bedrock. Choose Nova 2 Lite or Pegasus 1.2 (Bedrock).`
+    );
+  }
+  return resolveBedrockInferenceModelId(model.bedrockModelId);
+}

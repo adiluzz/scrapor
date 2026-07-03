@@ -1,7 +1,7 @@
 import { generateObject } from "ai";
 import { z } from "zod";
-import { getBedrockProvider, resolveBedrockModelId } from "@/lib/bedrock";
-import { loadAssistantSettings } from "@/lib/assistant-settings";
+import { DEFAULT_BEDROCK_TEXT_MODEL } from "@/lib/bedrock-inference";
+import { getBedrockProvider } from "@/lib/bedrock";
 
 const parseSchema = z.object({
   searchQuery: z.string().describe("Terms to search the video catalog API"),
@@ -14,13 +14,12 @@ const parseSchema = z.object({
 
 export type ParsedAgentPrompt = z.infer<typeof parseSchema>;
 
+/** Parse agent prompt with a fixed cheap text model (not the user's video analysis pick). */
 export async function parseUserPrompt(userPrompt: string): Promise<ParsedAgentPrompt> {
-  const settings = await loadAssistantSettings();
   const bedrock = getBedrockProvider();
-  const modelId = resolveBedrockModelId(settings.model);
 
   const { object } = await generateObject({
-    model: bedrock(modelId),
+    model: bedrock(DEFAULT_BEDROCK_TEXT_MODEL),
     schema: parseSchema,
     prompt: `You configure a video analysis agent. The user describes what to search for in a video catalog and what on-screen events to detect.
 

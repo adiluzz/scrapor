@@ -23,7 +23,7 @@ function toContentType(path: string): string {
 }
 
 export async function GET(req: Request) {
-  const g = await guardAdmin();
+  const g = await guardAdmin(req);
   if (g instanceof NextResponse) return g;
   const url = new URL(req.url);
   const rawPath = (url.searchParams.get("path") || "").trim().replace(/^\/+/, "");

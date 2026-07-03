@@ -6,7 +6,7 @@ import { mkdir, rename, rm } from "node:fs/promises";
 import path from "node:path";
 import crypto from "node:crypto";
 import { prisma } from "@/lib/db";
-import { getCurrentUser } from "@/lib/session";
+import { guardCreator, isSessionAuth } from "@/lib/admin-guard";
 import { upsertVideoWithMedia } from "@/lib/videos";
 import { redis, CREATOR_QUEUE_KEY } from "@/lib/redis";
 import { logger } from "@/lib/logger";
@@ -41,11 +41,14 @@ function sizeGuard(max: number) {
  * the body is the raw file and can be streamed to disk without buffering.
  */
 export async function POST(request: Request) {
-  const user = await getCurrentUser();
-  if (!user || (user.role !== "CREATOR" && user.role !== "ADMIN")) {
-    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  const auth = await guardCreator(request, "POST");
+  if (auth instanceof NextResponse) return auth;
+  if (!isSessionAuth(auth)) {
+    return NextResponse.json({ error: "Creator session required" }, { status: 403 });
   }
-  const creator = await prisma.creatorProfile.findUnique({ where: { userId: user.id } });
+  const user = auth;
+
+  const creator = await prisma.creatorProfile.findUnique({ where: { userId: user.userId } });
   if (!creator) return NextResponse.json({ error: "No creator profile" }, { status: 400 });
 
   const { searchParams } = new URL(request.url);

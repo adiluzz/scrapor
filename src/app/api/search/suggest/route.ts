@@ -1,8 +1,9 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
-import { getCurrentSiteId } from "@/lib/site";
+import { getCurrentSiteId, getSiteIdForAuth } from "@/lib/site";
 import { topSearches } from "@/lib/search";
 import { redis } from "@/lib/redis";
+import { guardApiRoute } from "@/lib/admin-guard";
 
 type Suggestion = { type: "pornstar" | "tag" | "search"; label: string; value: string };
 
@@ -26,11 +27,14 @@ async function getTopSearches(siteId: string) {
 }
 
 export async function GET(request: Request) {
+  const auth = await guardApiRoute(request, "GET");
+  if (auth instanceof NextResponse) return auth;
+
   const { searchParams } = new URL(request.url);
   const q = (searchParams.get("q") || "").trim().toLowerCase();
   if (q.length < 2) return NextResponse.json({ suggestions: [] });
 
-  const siteId = await getCurrentSiteId();
+  const siteId = await getSiteIdForAuth(auth);
 
   const [pornstars, tags, top] = await Promise.all([
     prisma.pornstar.findMany({

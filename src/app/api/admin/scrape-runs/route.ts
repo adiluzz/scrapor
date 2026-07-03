@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { prisma } from "@/lib/db";
-import { guardAdmin } from "@/lib/admin-guard";
+import { guardAdmin, authUserId } from "@/lib/admin-guard";
 import { isSourceSite } from "@/lib/source-sites";
 import { redis, SCRAPE_QUEUE_KEY } from "@/lib/redis";
 import { logger } from "@/lib/logger";
@@ -14,8 +14,8 @@ const schema = z.object({
   maxPerSite: z.number().int().min(1).max(10000).nullable().optional(),
 });
 
-export async function GET() {
-  const g = await guardAdmin();
+export async function GET(request: Request) {
+  const g = await guardAdmin(request);
   if (g instanceof NextResponse) return g;
 
   const runs = await prisma.scrapeRun.findMany({
@@ -28,7 +28,7 @@ export async function GET() {
 }
 
 export async function POST(request: Request) {
-  const g = await guardAdmin();
+  const g = await guardAdmin(request);
   if (g instanceof NextResponse) return g;
 
   const parsed = schema.safeParse(await request.json());
@@ -44,7 +44,7 @@ export async function POST(request: Request) {
       selectedSites: JSON.stringify(sources),
       minDurationSec: parsed.data.minDurationSec ?? 600,
       maxPerSite: parsed.data.maxPerSite ?? null,
-      createdById: g.id,
+      createdById: authUserId(g),
       status: "QUEUED",
       siteResults: {
         create: sources.map((sourceSite) => ({ sourceSite, status: "QUEUED" })),

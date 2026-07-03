@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
-import { getCurrentUser } from "@/lib/session";
+import { guardApiRoute, isSessionAuth } from "@/lib/admin-guard";
 
 const MAX_BUCKETS = 2000;
 
@@ -9,6 +9,9 @@ const MAX_BUCKETS = 2000;
  * logged-in users, upserts their personal progress. Accepts sendBeacon text.
  */
 export async function POST(request: Request, { params }: { params: Promise<{ id: string }> }) {
+  const auth = await guardApiRoute(request, "POST");
+  if (auth instanceof NextResponse) return auth;
+
   const { id } = await params;
   let payload: { buckets?: number[]; positionSec?: number; bucketCount?: number };
   try {
@@ -36,21 +39,21 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     create: { videoId: id, buckets: JSON.stringify(agg) },
   });
 
-  const user = await getCurrentUser();
+  const user = isSessionAuth(auth) ? auth : null;
   if (user) {
     const prev = await prisma.watchProgress.findUnique({
-      where: { userId_videoId: { userId: user.id, videoId: id } },
+      where: { userId_videoId: { userId: user.userId, videoId: id } },
     });
     const set = new Set<number>(prev ? (JSON.parse(prev.buckets) as number[]) : []);
     for (const b of watched) set.add(b);
     await prisma.watchProgress.upsert({
-      where: { userId_videoId: { userId: user.id, videoId: id } },
+      where: { userId_videoId: { userId: user.userId, videoId: id } },
       update: {
         positionSec: payload.positionSec ?? prev?.positionSec ?? 0,
         buckets: JSON.stringify(Array.from(set).sort((a, b) => a - b)),
       },
       create: {
-        userId: user.id,
+        userId: user.userId,
         videoId: id,
         positionSec: payload.positionSec ?? 0,
         buckets: JSON.stringify(watched),

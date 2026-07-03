@@ -14,7 +14,7 @@ const patchSchema = z.object({
 });
 
 export async function PATCH(request: Request, { params }: { params: Promise<{ id: string }> }) {
-  const g = await guardAdmin();
+  const g = await guardAdmin(request);
   if (g instanceof NextResponse) return g;
   const { id } = await params;
 
@@ -51,7 +51,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
 
 /** Soft delete (default) — sets isDeleted so CDN access is immediately revoked. */
 export async function DELETE(_request: Request, { params }: { params: Promise<{ id: string }> }) {
-  const g = await guardAdmin();
+  const g = await guardAdmin(_request);
   if (g instanceof NextResponse) return g;
   const { id } = await params;
 

@@ -10,7 +10,7 @@ import { guardAdmin } from "@/lib/admin-guard";
 export const dynamic = "force-dynamic";
 
 export async function GET(request: Request) {
-    const g = await guardAdmin();
+    const g = await guardAdmin(request);
     if (g instanceof NextResponse) return g;
     try {
     const { searchParams } = new URL(request.url);

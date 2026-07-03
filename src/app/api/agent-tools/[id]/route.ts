@@ -3,8 +3,8 @@ import { NextResponse } from "next/server";
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
 
-export async function PUT() {
-  const g = await guardAdmin();
+export async function PUT(request: Request) {
+  const g = await guardAdmin(request);
   if (g instanceof NextResponse) return g;
   return new Response(
     JSON.stringify({

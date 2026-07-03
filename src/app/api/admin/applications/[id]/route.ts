@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { prisma } from "@/lib/db";
-import { guardAdmin } from "@/lib/admin-guard";
+import { guardAdmin, authUserId } from "@/lib/admin-guard";
 import { slugify } from "@/lib/slug";
 import { sendMail } from "@/lib/mailer";
 import { logger } from "@/lib/logger";
@@ -16,7 +16,7 @@ const schema = z.object({
  * Reject → mark rejected with an optional note.
  */
 export async function POST(request: Request, { params }: { params: Promise<{ id: string }> }) {
-  const g = await guardAdmin();
+  const g = await guardAdmin(request);
   if (g instanceof NextResponse) return g;
   const { id } = await params;
 
@@ -49,7 +49,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
       prisma.user.update({ where: { id: app.userId }, data: { role: "CREATOR" } }),
       prisma.creatorApplication.update({
         where: { id },
-        data: { status: "APPROVED", reviewedById: g.id, reviewNote: parsed.data.reviewNote || null },
+        data: { status: "APPROVED", reviewedById: authUserId(g), reviewNote: parsed.data.reviewNote || null },
       }),
     ]);
     if (dbUser?.email) {
@@ -63,7 +63,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
   } else {
     await prisma.creatorApplication.update({
       where: { id },
-      data: { status: "REJECTED", reviewedById: g.id, reviewNote: parsed.data.reviewNote || null },
+      data: { status: "REJECTED", reviewedById: authUserId(g), reviewNote: parsed.data.reviewNote || null },
     });
     if (dbUser?.email) {
       await sendMail({

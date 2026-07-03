@@ -12,7 +12,7 @@ const patchSchema = z.object({
 });
 
 export async function PATCH(request: Request, { params }: { params: Promise<{ id: string }> }) {
-  const g = await guardAdmin();
+  const g = await guardAdmin(request);
   if (g instanceof NextResponse) return g;
   const { id } = await params;
   const creator = await prisma.creatorProfile.findFirst({ where: { id, siteId: g.siteId } });
@@ -38,7 +38,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
  * the user back to USER.
  */
 export async function DELETE(_request: Request, { params }: { params: Promise<{ id: string }> }) {
-  const g = await guardAdmin();
+  const g = await guardAdmin(_request);
   if (g instanceof NextResponse) return g;
   const { id } = await params;
   const creator = await prisma.creatorProfile.findFirst({ where: { id, siteId: g.siteId } });

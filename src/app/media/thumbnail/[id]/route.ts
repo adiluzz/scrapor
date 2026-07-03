@@ -3,8 +3,9 @@ import { existsSync, createReadStream, statSync } from "fs";
 import { join } from "path";
 import { GetObjectCommand } from "@aws-sdk/client-s3";
 import { prisma } from "@/lib/db";
-import { getCurrentSiteId } from "@/lib/site";
+import { getSiteIdForAuth } from "@/lib/site";
 import { isS3Configured, s3, S3_BUCKET, s3Keys } from "@/lib/storage";
+import { guardApiRoute } from "@/lib/admin-guard";
 
 const DOWNLOADS_DIR = join(process.cwd(), "downloads");
 const EXTENSIONS = ["thumbnail.jpg", "thumbnail.jpeg", "thumbnail.png", "thumbnail.webp"];
@@ -14,15 +15,18 @@ const EXTENSIONS = ["thumbnail.jpg", "thumbnail.jpeg", "thumbnail.png", "thumbna
  * Serves from S3 or local downloads — no IP-bound CDN signatures.
  */
 export async function GET(
-  _request: Request,
+  request: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  const auth = await guardApiRoute(request, "GET");
+  if (auth instanceof NextResponse) return auth;
+
   const { id } = await params;
   if (!id || id.includes("..") || id.includes("/")) {
     return NextResponse.json({ error: "Invalid id" }, { status: 400 });
   }
 
-  const siteId = await getCurrentSiteId();
+  const siteId = await getSiteIdForAuth(auth);
   const video = await prisma.video.findFirst({
     where: { id, siteId, isDeleted: false, status: "READY" },
     select: { id: true, siteId: true, s3ThumbKey: true },

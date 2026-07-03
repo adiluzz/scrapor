@@ -8,7 +8,7 @@ type CatalogModel = {
 };
 
 export async function GET(req: Request) {
-  const g = await guardAdmin();
+  const g = await guardAdmin(req);
   if (g instanceof NextResponse) return g;
   try {
     const url = new URL(req.url);
@@ -67,4 +67,3 @@ export async function GET(req: Request) {
     );
   }
 }
-

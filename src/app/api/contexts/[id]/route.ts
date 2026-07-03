@@ -9,7 +9,7 @@ export async function PUT(
   req: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  const g = await guardAdmin();
+  const g = await guardAdmin(req);
   if (g instanceof NextResponse) return g;
   try {
     const { id: idParam } = await params;

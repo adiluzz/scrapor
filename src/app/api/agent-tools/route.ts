@@ -6,7 +6,7 @@ export const dynamic = "force-dynamic";
 export const revalidate = 0;
 
 export async function GET(_req: Request) {
-    const g = await guardAdmin();
+    const g = await guardAdmin(_req);
     if (g instanceof NextResponse) return g;
     try {
     return Response.json({ tools: listAssistantTools() });

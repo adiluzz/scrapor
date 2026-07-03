@@ -73,8 +73,8 @@ async function probeToolSupport(modelName: string): Promise<boolean> {
   }
 }
 
-export async function GET() {
-  const g = await guardAdmin();
+export async function GET(request: Request) {
+  const g = await guardAdmin(request);
   if (g instanceof NextResponse) return g;
   try {
     const res = await fetch(`${baseURL}/tags`, { method: "GET", cache: "no-store" });

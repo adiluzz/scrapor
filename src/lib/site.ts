@@ -58,6 +58,14 @@ export async function getCurrentSiteId(): Promise<string> {
   return (await getCurrentSite()).id;
 }
 
+/** Resolve site id from auth context (API key/session) or Host header (anonymous). */
+export async function getSiteIdForAuth(
+  auth?: { siteId: string } | null
+): Promise<string> {
+  if (auth?.siteId) return auth.siteId;
+  return getCurrentSiteId();
+}
+
 /** Ensure the primary site exists (used by seeds/workers). */
 export async function ensureDefaultSite(): Promise<Site> {
   return prisma.site.upsert({

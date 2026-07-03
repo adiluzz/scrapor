@@ -6,7 +6,7 @@ export const dynamic = "force-dynamic";
 export const revalidate = 0;
 
 export async function GET(req: Request) {
-  const g = await guardAdmin();
+  const g = await guardAdmin(req);
   if (g instanceof NextResponse) return g;
   try {
     const url = new URL(req.url);
@@ -22,7 +22,7 @@ export async function GET(req: Request) {
 }
 
 export async function POST(req: Request) {
-  const g = await guardAdmin();
+  const g = await guardAdmin(req);
   if (g instanceof NextResponse) return g;
   try {
     const body = (await req.json()) as Partial<{

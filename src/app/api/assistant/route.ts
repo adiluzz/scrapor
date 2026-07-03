@@ -129,7 +129,7 @@ function hasImageAttachments(
 }
 
 export async function POST(req: Request) {
-  const g = await guardAdmin();
+  const g = await guardAdmin(req);
   if (g instanceof NextResponse) return g;
 
   let messages: unknown;

@@ -23,6 +23,7 @@ model Site {
   creators     CreatorProfile[]
   searches     SearchQuery[]
   applications CreatorApplication[]
+  apiKeys      ApiKey[]
 }
 
 enum Role {
@@ -41,9 +42,42 @@ model User {
   emailVerifiedAt DateTime? // set when signup code is confirmed
   creator         CreatorProfile?
   applications    CreatorApplication[]
+  createdApiKeys  ApiKey[]             @relation("ApiKeyCreatedBy")
+  updatedApiKeys  ApiKey[]             @relation("ApiKeyUpdatedBy")
   createdAt       DateTime             @default(now())
 
   @@unique([siteId, email])
+}
+
+// ─────────────────────────────────────────────────────────────
+// API keys (external integrations)
+// ─────────────────────────────────────────────────────────────
+
+enum ApiKeyType {
+  READ_ONLY
+  FULL_ACCESS
+}
+
+model ApiKey {
+  id              String     @id @default(cuid())
+  keyNumber       Int        @unique @default(autoincrement())
+  siteId          String
+  site            Site       @relation(fields: [siteId], references: [id])
+  name            String
+  type            ApiKeyType
+  keyHash         String
+  createdByUserId String
+  createdBy       User       @relation("ApiKeyCreatedBy", fields: [createdByUserId], references: [id])
+  updatedByUserId String?
+  updatedBy       User?      @relation("ApiKeyUpdatedBy", fields: [updatedByUserId], references: [id])
+  lastUsedAt      DateTime?
+  revokedAt       DateTime?
+  createdAt       DateTime   @default(now())
+  updatedAt       DateTime   @updatedAt
+
+  @@index([siteId])
+  @@index([type])
+  @@index([revokedAt])
 }
 
 // ─────────────────────────────────────────────────────────────

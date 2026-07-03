@@ -1,10 +1,14 @@
 import { NextResponse } from "next/server";
 import { readdirSync, existsSync } from "fs";
 import { join } from "path";
+import { guardApiRoute } from "@/lib/admin-guard";
 
 const DOWNLOADS_DIR = join(process.cwd(), "downloads");
 
-export async function GET() {
+export async function GET(request: Request) {
+  const auth = await guardApiRoute(request, "GET");
+  if (auth instanceof NextResponse) return auth;
+
   try {
     const ids = new Set<string>();
     if (existsSync(DOWNLOADS_DIR)) {

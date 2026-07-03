@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { prisma } from "@/lib/db";
-import { getCurrentUser } from "@/lib/session";
+import { guardApiRoute, isSessionAuth } from "@/lib/admin-guard";
 import { getCurrentSite } from "@/lib/site";
 import { slugify } from "@/lib/slug";
 import { sendCreatorApplicationReceived, sendAdminNewApplication } from "@/lib/mailer";
@@ -14,8 +14,12 @@ const schema = z.object({
 });
 
 export async function POST(request: Request) {
-  const user = await getCurrentUser();
-  if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const auth = await guardApiRoute(request, "POST");
+  if (auth instanceof NextResponse) return auth;
+  if (!isSessionAuth(auth)) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+  const user = auth;
 
   const parsed = schema.safeParse(await request.json());
   if (!parsed.success) return NextResponse.json({ error: "Invalid input" }, { status: 400 });
@@ -26,13 +30,13 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "You are already a creator" }, { status: 409 });
   }
   const pending = await prisma.creatorApplication.findFirst({
-    where: { userId: user.id, siteId: site.id, status: "PENDING" },
+    where: { userId: user.userId, siteId: site.id, status: "PENDING" },
   });
   if (pending) return NextResponse.json({ error: "You already have a pending application" }, { status: 409 });
 
   const app = await prisma.creatorApplication.create({
     data: {
-      userId: user.id,
+      userId: user.userId,
       siteId: site.id,
       displayName: parsed.data.displayName,
       desiredSlug: slugify(parsed.data.desiredSlug || parsed.data.displayName),
@@ -43,7 +47,7 @@ export async function POST(request: Request) {
   // Fire both notification emails (never block the submit on mail failure).
   const proto = request.headers.get("x-forwarded-proto") || "https";
   const reviewUrl = `${proto}://${process.env.ADMIN_SUBDOMAIN || "admin"}.${site.domain}/admin/applications`;
-  const dbUser = await prisma.user.findUnique({ where: { id: user.id } });
+  const dbUser = await prisma.user.findUnique({ where: { id: user.userId } });
   try {
     await Promise.all([
       dbUser?.email
@@ -60,6 +64,6 @@ export async function POST(request: Request) {
     logger.error({ err: String(err) }, "creator apply emails failed");
   }
 
-  logger.info({ userId: user.id, appId: app.id }, "creator application submitted");
+  logger.info({ userId: user.userId, appId: app.id }, "creator application submitted");
   return NextResponse.json({ ok: true });
 }

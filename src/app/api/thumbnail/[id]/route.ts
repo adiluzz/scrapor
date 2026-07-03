@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { existsSync, createReadStream, statSync } from "fs";
 import { join } from "path";
+import { guardApiRoute } from "@/lib/admin-guard";
 
 const DOWNLOADS_DIR = join(process.cwd(), "downloads");
 
@@ -8,6 +9,9 @@ export async function GET(
   request: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  const auth = await guardApiRoute(request, "GET");
+  if (auth instanceof NextResponse) return auth;
+
   const { id } = await params;
   if (!id || id.includes("..") || id.includes("/")) {
     return NextResponse.json({ error: "Invalid id" }, { status: 400 });

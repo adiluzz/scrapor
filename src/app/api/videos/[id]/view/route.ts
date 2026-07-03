@@ -1,13 +1,17 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { redis } from "@/lib/redis";
+import { guardApiRoute } from "@/lib/admin-guard";
 
 /** Increment viewCount at most once per (ip, video) per hour. */
-export async function POST(_request: Request, { params }: { params: Promise<{ id: string }> }) {
+export async function POST(request: Request, { params }: { params: Promise<{ id: string }> }) {
+  const auth = await guardApiRoute(request, "POST");
+  if (auth instanceof NextResponse) return auth;
+
   const { id } = await params;
   const ip =
-    _request.headers.get("x-forwarded-for")?.split(",")[0].trim() ||
-    _request.headers.get("x-real-ip") ||
+    request.headers.get("x-forwarded-for")?.split(",")[0].trim() ||
+    request.headers.get("x-real-ip") ||
     "0.0.0.0";
   try {
     const key = `view:${id}:${ip}`;

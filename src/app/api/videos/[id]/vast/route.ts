@@ -5,12 +5,16 @@ import { getClientIp } from "@/lib/media";
 import { getCurrentSite } from "@/lib/site";
 import { resolveVastAd } from "@/lib/vast";
 import { headers } from "next/headers";
+import { guardApiRoute } from "@/lib/admin-guard";
 
 /**
  * Resolve the configured VAST tag server-side (ExoClick needs Referer + client IP
  * and often returns Wrapper VAST that must be followed before Inline MediaFile).
  */
 export async function POST(request: Request, { params }: { params: Promise<{ id: string }> }) {
+  const auth = await guardApiRoute(request, "POST");
+  if (auth instanceof NextResponse) return auth;
+
   const { id } = await params;
   const body = await request.json().catch(() => ({}));
   const adSessionId = typeof body.adSessionId === "string" ? body.adSessionId : "";

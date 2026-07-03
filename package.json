@@ -29,7 +29,8 @@
     "test-assistant": "bash scripts/test-assistant-e2e.sh",
     "ollama:docker": "bash scripts/start-ollama-docker.sh",
     "dev:video-assistant": "bash scripts/start-video-assistant.sh",
-    "mcp:browser": "node mcp/browser-automation-server/server.mjs"
+    "mcp:browser": "node mcp/browser-automation-server/server.mjs",
+    "openapi:validate": "swagger-cli validate openapi/openapi.yaml"
   },
   "dependencies": {
     "@ai-sdk/amazon-bedrock": "^3.0.105",
@@ -62,6 +63,7 @@
     "postcss": "$postcss"
   },
   "devDependencies": {
+    "@apidevtools/swagger-cli": "^4.0.4",
     "@eslint/eslintrc": "^3",
     "@types/bcryptjs": "^3.0.0",
     "@types/node": "^20",

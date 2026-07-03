@@ -4,7 +4,7 @@ import { NextResponse } from "next/server";
 const baseURL = (process.env.OLLAMA_BASE_URL || "http://127.0.0.1:11434/api").replace(/\/$/, "");
 
 export async function POST(req: Request) {
-  const g = await guardAdmin();
+  const g = await guardAdmin(req);
   if (g instanceof NextResponse) return g;
   try {
     const body = (await req.json()) as { model?: string };
@@ -50,4 +50,3 @@ export async function POST(req: Request) {
     });
   }
 }
-

@@ -1,13 +1,17 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { openAdSession } from "@/lib/ad-session";
+import { guardApiRoute } from "@/lib/admin-guard";
 
 /**
  * Open a server-side ad session before playback. Returns the VAST tag URL (if
  * ads are configured) plus timing config. The stream token is only minted later
  * by /stream-grant after the ad completes or is confirmed unavailable.
  */
-export async function POST(_request: Request, { params }: { params: Promise<{ id: string }> }) {
+export async function POST(request: Request, { params }: { params: Promise<{ id: string }> }) {
+  const auth = await guardApiRoute(request, "POST");
+  if (auth instanceof NextResponse) return auth;
+
   const { id } = await params;
   const video = await prisma.video.findFirst({ where: { id, isDeleted: false } });
   if (!video) return NextResponse.json({ error: "Not found" }, { status: 404 });

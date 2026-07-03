@@ -11,7 +11,7 @@ import { NextResponse } from "next/server";
 export const maxDuration = 60;
 
 export async function GET(req: NextRequest) {
-  const g = await guardAdmin();
+  const g = await guardAdmin(req);
   if (g instanceof NextResponse) return g;
   const filename = req.nextUrl.searchParams.get("filename") || "test-screenshot";
   try {

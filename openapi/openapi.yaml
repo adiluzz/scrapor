@@ -1,0 +1,869 @@
+openapi: 3.1.0
+info:
+  title: Scrapor API
+  version: 1.0.0
+  description: |
+    Scrapor multi-tenant video platform API.
+
+    ## Authentication
+
+    All documented endpoints accept an API key via:
+    - Header: `Authorization: Bearer spk_ro_{id}_{secret}` or `spk_fa_{id}_{secret}`
+    - Query: `?apiKey=spk_…`
+
+    **Key types:**
+    - `READ_ONLY` (`spk_ro_…`) — GET/HEAD/OPTIONS only, including full video stream via `GET /api/videos/{id}/stream`
+    - `FULL_ACCESS` (`spk_fa_…`) — all HTTP methods on all routes (except `/api/api-keys/*` which is admin-session only)
+
+    Browser sessions (cookies) also work for the admin panel and public site. When an API key is present, its type and method permissions are enforced.
+
+    This spec and `/api/docs` require a valid API key (any type).
+
+servers:
+  - url: /
+    description: Current host
+
+tags:
+  - name: auth
+    description: Registration and login (public, no API key required)
+  - name: search
+    description: Search autocomplete and tracking
+  - name: videos
+    description: Video playback, views, and streaming
+  - name: media
+    description: Public media assets for SEO crawlers
+  - name: creator
+    description: Creator applications and uploads
+  - name: admin
+    description: Admin content management (requires admin session or FULL_ACCESS key)
+  - name: assistant
+    description: AI assistant tooling (admin)
+  - name: internal
+    description: Internal infrastructure endpoints
+  - name: docs
+    description: API documentation
+
+components:
+  securitySchemes:
+    ApiKeyAuth:
+      type: http
+      scheme: bearer
+      description: |
+        Bearer token with format `spk_ro_{keyNumber}_{secret}` or `spk_fa_{keyNumber}_{secret}`.
+        Alternatively pass `apiKey` as a query parameter.
+
+  schemas:
+    Error:
+      type: object
+      properties:
+        error:
+          type: string
+
+security:
+  - ApiKeyAuth: []
+
+paths:
+  /api/auth/register:
+    post:
+      tags: [auth]
+      security: []
+      summary: Register a new user
+      description: Step 1 of signup. Creates user and sends email verification code. No API key required.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email, password]
+              properties:
+                email: { type: string, format: email }
+                password: { type: string, minLength: 8 }
+      responses:
+        "200": { description: Verification code sent }
+        "400": { description: Invalid input }
+        "409": { description: Email already registered }
+
+  /api/auth/login-init:
+    post:
+      tags: [auth]
+      security: []
+      summary: Initiate login
+      description: Step 1 of login. Verifies password and sends email login code. No API key required.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email, password]
+              properties:
+                email: { type: string }
+                password: { type: string }
+      responses:
+        "200": { description: Login code sent }
+        "401": { description: Invalid credentials }
+
+  /api/search/suggest:
+    get:
+      tags: [search]
+      summary: Search autocomplete
+      description: Returns pornstar, tag, and popular search suggestions. Requires session, API key, or anonymous browser access.
+      parameters:
+        - name: q
+          in: query
+          required: true
+          schema: { type: string, minLength: 2 }
+          description: Search query prefix
+      responses:
+        "200":
+          description: Suggestions list
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  suggestions:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        type: { type: string, enum: [pornstar, tag, search] }
+                        label: { type: string }
+                        value: { type: string }
+
+  /api/search/track:
+    post:
+      tags: [search]
+      summary: Track search query
+      description: Records a search query for popularity ranking. FULL_ACCESS key or session required for POST without anonymous access.
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                q: { type: string }
+      responses:
+        "200": { description: Tracked }
+
+  /api/videos/{id}/stream:
+    get:
+      tags: [videos]
+      summary: Get full video stream URL (API consumers)
+      description: |
+        **Primary endpoint for READ_ONLY API keys** to retrieve a complete video.
+        Mints a signed CDN URL without the ad-gated flow. Local dev returns `/api/video/{id}`.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: Stream URL
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  url: { type: string }
+                  videoId: { type: string }
+                  title: { type: string }
+        "404": { description: Video not found }
+
+  /api/videos/{id}/ad-session:
+    post:
+      tags: [videos]
+      summary: Open ad session
+      description: Opens server-side ad session before browser playback. FULL_ACCESS key required for API-only POST.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "200": { description: Ad session opened }
+        "404": { description: Not found }
+
+  /api/videos/{id}/vast:
+    post:
+      tags: [videos]
+      summary: Resolve VAST ad tag
+      description: Server-side VAST resolution for the video player.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                adSessionId: { type: string }
+      responses:
+        "200": { description: VAST ad payload or null }
+
+  /api/videos/{id}/stream-grant:
+    post:
+      tags: [videos]
+      summary: Grant stream URL after ad
+      description: Mints CDN stream URL after ad session is satisfied. FULL_ACCESS key for API POST.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                adSessionId: { type: string }
+                outcome: { type: string, enum: [complete, skip, noad, error] }
+      responses:
+        "200":
+          description: Signed stream URL
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  url: { type: string }
+
+  /api/videos/{id}/view:
+    post:
+      tags: [videos]
+      summary: Increment view count
+      description: Rate-limited view counter (once per IP per hour).
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "200": { description: View recorded }
+
+  /api/videos/{id}/watch:
+    post:
+      tags: [videos]
+      summary: Record watch heatmap
+      description: Records watched segments for heatmap analytics.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                buckets: { type: array, items: { type: integer } }
+                positionSec: { type: integer }
+                bucketCount: { type: integer }
+      responses:
+        "200": { description: Recorded }
+
+  /api/video/{id}:
+    get:
+      tags: [videos]
+      summary: Stream local dev video file
+      description: Serves video from local `downloads/` folder with range request support. READ_ONLY accessible.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "200": { description: Video stream }
+        "206": { description: Partial content (range) }
+        "404": { description: Not found }
+
+  /api/thumbnail/{id}:
+    get:
+      tags: [videos]
+      summary: Local dev thumbnail video
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "200": { description: Thumbnail MP4 }
+
+  /api/thumbnail-img/{id}:
+    get:
+      tags: [videos]
+      summary: Local dev thumbnail image
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "200": { description: Thumbnail image }
+
+  /api/videos/downloaded:
+    get:
+      tags: [videos]
+      summary: List locally downloaded video IDs
+      description: Dev utility listing IDs in the downloads folder.
+      responses:
+        "200":
+          description: ID list
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  downloaded:
+                    type: array
+                    items: { type: string }
+
+  /media/preview/{id}:
+    get:
+      tags: [media]
+      summary: Public preview clip (SEO)
+      description: Serves preview MP4 for Google Video Sitemap crawlers.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "200": { description: Preview MP4 }
+
+  /media/thumbnail/{id}:
+    get:
+      tags: [media]
+      summary: Public thumbnail (SEO)
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "200": { description: Thumbnail image }
+
+  /api/creator/apply:
+    post:
+      tags: [creator]
+      summary: Submit creator application
+      description: Requires logged-in user session (not API key alone).
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [displayName]
+              properties:
+                displayName: { type: string }
+                desiredSlug: { type: string }
+                bio: { type: string }
+      responses:
+        "200": { description: Application submitted }
+        "401": { description: Login required }
+
+  /api/creator/videos:
+    post:
+      tags: [creator]
+      summary: Upload creator video
+      description: Streams raw video body to disk. Metadata via query params. Requires creator session or FULL_ACCESS key with session.
+      parameters:
+        - name: title
+          in: query
+          required: true
+          schema: { type: string }
+        - name: description
+          in: query
+          schema: { type: string }
+        - name: tags
+          in: query
+          schema: { type: string }
+        - name: durationSec
+          in: query
+          schema: { type: integer }
+      responses:
+        "200": { description: Upload accepted }
+        "403": { description: Creator profile required }
+
+  /api/admin/scrape-runs:
+    get:
+      tags: [admin]
+      summary: List scrape runs
+      description: Admin session or FULL_ACCESS API key.
+      responses:
+        "200": { description: Run list }
+        "403": { description: Forbidden }
+    post:
+      tags: [admin]
+      summary: Create scrape run
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [query, sources]
+              properties:
+                query: { type: string }
+                sources: { type: array, items: { type: string } }
+                minDurationSec: { type: integer }
+                maxPerSite: { type: integer, nullable: true }
+      responses:
+        "200": { description: Run created }
+
+  /api/admin/scrape-runs/{id}:
+    get:
+      tags: [admin]
+      summary: Get scrape run detail
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "200": { description: Run detail }
+    post:
+      tags: [admin]
+      summary: Stop or continue scrape run
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                action: { type: string, enum: [stop, continue] }
+      responses:
+        "200": { description: Action applied }
+
+  /api/admin/videos/{id}:
+    patch:
+      tags: [admin]
+      summary: Update video metadata
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                title: { type: string }
+                tags: { type: array, items: { type: string } }
+                pornstars: { type: array, items: { type: string } }
+                isDeleted: { type: boolean }
+      responses:
+        "200": { description: Updated }
+    delete:
+      tags: [admin]
+      summary: Soft-delete video
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "200": { description: Deleted }
+
+  /api/admin/videos/{id}/playback:
+    post:
+      tags: [admin]
+      summary: Admin preview stream
+      description: Mints admin preview CDN URL (bypasses ads and soft-delete gate).
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "200": { description: Preview URL }
+
+  /api/admin/creators:
+    get:
+      tags: [admin]
+      summary: List creators
+      responses:
+        "200": { description: Creator list }
+    post:
+      tags: [admin]
+      summary: Create creator for existing user
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                userEmail: { type: string }
+                displayName: { type: string }
+                slug: { type: string }
+      responses:
+        "200": { description: Created }
+
+  /api/admin/creators/{id}:
+    patch:
+      tags: [admin]
+      summary: Update creator profile
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "200": { description: Updated }
+    delete:
+      tags: [admin]
+      summary: Delete creator
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "200": { description: Deleted }
+
+  /api/admin/applications/{id}:
+    post:
+      tags: [admin]
+      summary: Approve or reject creator application
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                action: { type: string, enum: [approve, reject] }
+                reviewNote: { type: string }
+      responses:
+        "200": { description: Reviewed }
+
+  /api/admin/bedrock/models:
+    get:
+      tags: [assistant]
+      summary: List Bedrock models
+      responses:
+        "200": { description: Model list with capabilities }
+
+  /api/assistant-settings:
+    get:
+      tags: [assistant]
+      summary: Get assistant settings
+      responses:
+        "200": { description: Settings JSON }
+    post:
+      tags: [assistant]
+      summary: Save assistant settings
+      responses:
+        "200": { description: Saved }
+
+  /api/assistant:
+    post:
+      tags: [assistant]
+      summary: Stream chat completion
+      description: Returns streaming AI response for admin assistant.
+      responses:
+        "200": { description: Streamed response }
+
+  /api/chats:
+    get:
+      tags: [assistant]
+      summary: Search chat threads
+      parameters:
+        - name: query
+          in: query
+          schema: { type: string }
+      responses:
+        "200": { description: Thread list }
+    post:
+      tags: [assistant]
+      summary: Sync chat thread
+      responses:
+        "200": { description: Synced }
+
+  /api/chats/{id}:
+    get:
+      tags: [assistant]
+      summary: Load chat thread
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "200": { description: Thread with messages }
+
+  /api/contexts:
+    get:
+      tags: [assistant]
+      summary: List AI contexts
+      responses:
+        "200": { description: Context list }
+    post:
+      tags: [assistant]
+      summary: Create context
+      responses:
+        "200": { description: Created }
+
+  /api/contexts/{id}:
+    put:
+      tags: [assistant]
+      summary: Update context
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "200": { description: Updated }
+
+  /api/agent-tools:
+    get:
+      tags: [assistant]
+      summary: List agent tools
+      responses:
+        "200": { description: Tool list }
+
+  /api/agent-tools/{id}:
+    put:
+      tags: [assistant]
+      summary: Update tool description
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "200": { description: Updated }
+
+  /api/agent-skills:
+    get:
+      tags: [assistant]
+      summary: List agent skills
+      responses:
+        "200": { description: Skill list }
+    post:
+      tags: [assistant]
+      summary: Create skill
+      responses:
+        "200": { description: Created }
+
+  /api/agent-skills/{id}:
+    put:
+      tags: [assistant]
+      summary: Update skill
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "200": { description: Updated }
+
+  /api/agent-scripts:
+    get:
+      tags: [assistant]
+      summary: List agent scripts
+      responses:
+        "200": { description: Script list }
+    post:
+      tags: [assistant]
+      summary: Create script
+      responses:
+        "200": { description: Created }
+
+  /api/agent-scripts/{id}:
+    put:
+      tags: [assistant]
+      summary: Update script
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "200": { description: Updated }
+
+  /api/scrape:
+    get:
+      tags: [admin]
+      summary: Dev scrape tool
+      description: Scrapes XHamster homepage. Admin only.
+      parameters:
+        - name: page
+          in: query
+          schema: { type: integer }
+        - name: full
+          in: query
+          schema: { type: string, enum: ["1"] }
+      responses:
+        "200": { description: Scrape results }
+
+  /api/ollama/models:
+    get:
+      tags: [assistant]
+      summary: List local Ollama models
+      responses:
+        "200": { description: Model list }
+
+  /api/ollama/catalog:
+    get:
+      tags: [assistant]
+      summary: Ollama model catalog
+      responses:
+        "200": { description: Catalog }
+
+  /api/ollama/pull:
+    post:
+      tags: [assistant]
+      summary: Pull Ollama model
+      responses:
+        "200": { description: Pull started }
+
+  /api/ollama/delete:
+    post:
+      tags: [assistant]
+      summary: Delete Ollama model
+      responses:
+        "200": { description: Deleted }
+
+  /api/library-image:
+    get:
+      tags: [assistant]
+      summary: Serve library image
+      parameters:
+        - name: path
+          in: query
+          required: true
+          schema: { type: string }
+      responses:
+        "200": { description: Image bytes }
+
+  /api/test-screenshot:
+    get:
+      tags: [assistant]
+      summary: Dev screenshot test
+      parameters:
+        - name: filename
+          in: query
+          schema: { type: string }
+      responses:
+        "200": { description: Screenshot saved }
+
+  /api/api-keys:
+    get:
+      tags: [admin]
+      security: []
+      summary: List API keys (admin session only)
+      description: Requires admin browser session. API keys cannot manage themselves.
+      responses:
+        "200": { description: Key list }
+        "401": { description: Unauthorized }
+    post:
+      tags: [admin]
+      security: []
+      summary: Create API key (admin session only)
+      description: Returns the raw key once in the response. Admin session required.
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name, type]
+              properties:
+                name: { type: string }
+                type: { type: string, enum: [READ_ONLY, FULL_ACCESS] }
+      responses:
+        "200": { description: Key created with one-time plaintext }
+
+  /api/api-keys/{id}:
+    patch:
+      tags: [admin]
+      security: []
+      summary: Rename API key
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "200": { description: Renamed }
+    delete:
+      tags: [admin]
+      security: []
+      summary: Revoke API key
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "200": { description: Revoked }
+
+  /api/api-keys/{id}/rotate:
+    post:
+      tags: [admin]
+      security: []
+      summary: Rotate API key
+      description: Issues new secret for the same key row. Old key stops working immediately.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "200": { description: New key returned once }
+
+  /api/cdn/authorize:
+    get:
+      tags: [internal]
+      security: []
+      summary: nginx auth_request target
+      description: Internal CDN authorization. Uses stream tokens, not API keys. Called by nginx only.
+      parameters:
+        - name: videoId
+          in: query
+          required: true
+          schema: { type: string }
+        - name: file
+          in: query
+          schema: { type: string }
+        - name: t
+          in: query
+          schema: { type: string }
+      responses:
+        "200": { description: Presigned S3 URL in X-S3-Url header }
+
+  /api/openapi:
+    get:
+      tags: [docs]
+      summary: OpenAPI specification
+      description: Returns this YAML spec. Requires any valid API key.
+      responses:
+        "200": { description: OpenAPI YAML }
+        "401": { description: API key required }
+
+  /api/docs:
+    get:
+      tags: [docs]
+      summary: Swagger UI
+      description: Interactive API documentation. Requires any valid API key.
+      responses:
+        "200": { description: HTML Swagger UI page }
+        "401": { description: API key required }

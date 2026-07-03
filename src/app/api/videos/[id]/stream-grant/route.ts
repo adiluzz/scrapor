@@ -4,6 +4,7 @@ import { getAdSession, consumeAdSession } from "@/lib/ad-session";
 import { mintStreamUrl } from "@/lib/cdn";
 import { isS3Configured } from "@/lib/storage";
 import { logger } from "@/lib/logger";
+import { guardApiRoute } from "@/lib/admin-guard";
 
 /**
  * Grant a short-lived signed CDN stream URL — only after the ad session is
@@ -11,6 +12,9 @@ import { logger } from "@/lib/logger";
  * elapsed server-side; "noad"/"error" auto-grant (no ad was available).
  */
 export async function POST(request: Request, { params }: { params: Promise<{ id: string }> }) {
+  const auth = await guardApiRoute(request, "POST");
+  if (auth instanceof NextResponse) return auth;
+
   const { id } = await params;
   const body = await request.json().catch(() => ({}));
   const { adSessionId, outcome } = body as { adSessionId?: string; outcome?: string };

@@ -10,7 +10,7 @@ import { logger } from "@/lib/logger";
  * including soft-deleted or non-READY rows. Skips ads entirely.
  */
 export async function POST(request: Request, { params }: { params: Promise<{ id: string }> }) {
-  const g = await guardAdmin();
+  const g = await guardAdmin(request);
   if (g instanceof NextResponse) return g;
   const { id } = await params;
 

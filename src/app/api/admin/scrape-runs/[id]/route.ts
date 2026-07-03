@@ -6,7 +6,7 @@ import { redis, SCRAPE_QUEUE_KEY } from "@/lib/redis";
 import { logger } from "@/lib/logger";
 
 export async function GET(_request: Request, { params }: { params: Promise<{ id: string }> }) {
-  const g = await guardAdmin();
+  const g = await guardAdmin(_request);
   if (g instanceof NextResponse) return g;
   const { id } = await params;
 
@@ -24,7 +24,7 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
 const actionSchema = z.object({ action: z.enum(["stop", "continue"]) });
 
 export async function POST(request: Request, { params }: { params: Promise<{ id: string }> }) {
-  const g = await guardAdmin();
+  const g = await guardAdmin(request);
   if (g instanceof NextResponse) return g;
   const { id } = await params;
 

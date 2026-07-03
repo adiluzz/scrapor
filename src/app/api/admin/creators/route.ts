@@ -4,8 +4,8 @@ import { prisma } from "@/lib/db";
 import { guardAdmin } from "@/lib/admin-guard";
 import { slugify } from "@/lib/slug";
 
-export async function GET() {
-  const g = await guardAdmin();
+export async function GET(request: Request) {
+  const g = await guardAdmin(request);
   if (g instanceof NextResponse) return g;
   const creators = await prisma.creatorProfile.findMany({
     where: { siteId: g.siteId },
@@ -24,7 +24,7 @@ const createSchema = z.object({
 
 /** Create a creator profile directly for an existing user (admin power tool). */
 export async function POST(request: Request) {
-  const g = await guardAdmin();
+  const g = await guardAdmin(request);
   if (g instanceof NextResponse) return g;
   const parsed = createSchema.safeParse(await request.json());
   if (!parsed.success) return NextResponse.json({ error: "Invalid input" }, { status: 400 });

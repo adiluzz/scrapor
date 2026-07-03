@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type MutableRefObject } from "react";
 import videojs from "video.js";
 import "video.js/dist/video-js.css";
 import type Player from "video.js/dist/types/player";
@@ -25,6 +25,27 @@ function formatTime(sec: number): string {
 function findCue(cues: StoryboardCue[], time: number): StoryboardCue | null {
   if (!cues.length) return null;
   return cues.find((c) => time >= c.start && time < c.end) ?? cues[cues.length - 1];
+}
+
+function isTouchDevice(): boolean {
+  if (typeof window === "undefined") return false;
+  return "ontouchstart" in window || navigator.maxTouchPoints > 0;
+}
+
+function enterPlayerFullscreen(
+  player: Player,
+  autoRef: MutableRefObject<boolean>
+): void {
+  const tech = player.tech(true) as { el?: () => HTMLVideoElement } | undefined;
+  const videoEl = tech?.el?.();
+  if (videoEl && "webkitEnterFullscreen" in videoEl) {
+    (videoEl as HTMLVideoElement & { webkitEnterFullscreen: () => void }).webkitEnterFullscreen();
+    autoRef.current = true;
+    return;
+  }
+  player.requestFullscreen()?.then(() => {
+    autoRef.current = true;
+  }).catch(() => {});
 }
 
 export default function VideoPlayer({
@@ -56,6 +77,7 @@ export default function VideoPlayer({
   const watchedBuckets = useRef<Set<number>>(new Set());
   const lastFlush = useRef(0);
   const viewCounted = useRef(false);
+  const autoLandscapeFullscreen = useRef(false);
   const [preview, setPreview] = useState<{
     left: number;
     bottom: number;
@@ -63,6 +85,11 @@ export default function VideoPlayer({
     time: number;
     scale: number;
   } | null>(null);
+  const [touchUi, setTouchUi] = useState(false);
+
+  useEffect(() => {
+    setTouchUi(isTouchDevice());
+  }, []);
 
   useEffect(() => {
     cuesRef.current = storyboard?.cues ?? [];
@@ -88,6 +115,7 @@ export default function VideoPlayer({
       playsinline: true,
       bigPlayButton: false,
       textTrackSettings: false,
+      inactivityTimeout: isTouchDevice() ? 0 : 2000,
       controlBar: {
         children: [
           "progressControl",
@@ -104,8 +132,13 @@ export default function VideoPlayer({
     playerRef.current = player;
 
     player.on("useractive", () => setControlsVisible(true));
-    player.on("userinactive", () => setControlsVisible(false));
+    player.on("userinactive", () => {
+      if (!isTouchDevice()) setControlsVisible(false);
+    });
     player.on("pause", () => setControlsVisible(true));
+    player.on("fullscreenchange", () => {
+      if (!player.isFullscreen()) autoLandscapeFullscreen.current = false;
+    });
 
     return () => {
       scrubCleanupRef.current?.();
@@ -120,6 +153,42 @@ export default function VideoPlayer({
     const player = playerRef.current;
     if (!player) return;
     player.controls(status === "playing");
+    if (status === "playing" && isTouchDevice()) {
+      player.userActive(true);
+      setControlsVisible(true);
+    }
+  }, [status]);
+
+  useEffect(() => {
+    if (status !== "playing") return;
+
+    const syncLandscapeFullscreen = () => {
+      const player = playerRef.current;
+      if (!player) return;
+
+      const landscape = window.matchMedia("(orientation: landscape)").matches;
+      if (landscape) {
+        if (!player.isFullscreen()) {
+          enterPlayerFullscreen(player, autoLandscapeFullscreen);
+        }
+        return;
+      }
+
+      if (autoLandscapeFullscreen.current && player.isFullscreen()) {
+        player.exitFullscreen();
+        autoLandscapeFullscreen.current = false;
+      }
+    };
+
+    const mq = window.matchMedia("(orientation: landscape)");
+    mq.addEventListener("change", syncLandscapeFullscreen);
+    window.addEventListener("orientationchange", syncLandscapeFullscreen);
+    syncLandscapeFullscreen();
+
+    return () => {
+      mq.removeEventListener("change", syncLandscapeFullscreen);
+      window.removeEventListener("orientationchange", syncLandscapeFullscreen);
+    };
   }, [status]);
 
   function attachScrubberPreview() {
@@ -344,8 +413,8 @@ export default function VideoPlayer({
     <div
       ref={rootRef}
       className={`relative w-full video-player-root video-player-themed ${
-        status !== "playing" ? "video-player-preplay" : ""
-      }`}
+        touchUi ? "video-player-touch" : ""
+      } ${status !== "playing" ? "video-player-preplay" : ""}`}
     >
 
       {heatmap.length > 0 && status === "playing" && (

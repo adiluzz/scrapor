@@ -34,15 +34,20 @@
 .video-player-root.video-player-themed .video-js {
   font-family: inherit;
   font-size: 1rem;
+  overflow: visible;
 }
 
 .video-player-root.video-player-themed .vjs-control-bar {
   display: flex;
   flex-wrap: nowrap;
   align-items: flex-end;
-  position: relative;
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 2;
   height: var(--player-bar-height);
-  padding: 0 0.75rem 0.375rem;
+  padding: 0 0.75rem calc(0.375rem + env(safe-area-inset-bottom, 0px));
   box-sizing: border-box;
   background: linear-gradient(to top, rgba(9, 9, 11, 0.97) 0%, rgba(9, 9, 11, 0.75) 70%, transparent 100%);
   border-top: 1px solid rgba(212, 175, 55, 0.15);
@@ -189,7 +194,19 @@
 
 @media (max-width: 640px) {
   .video-player-root.video-player-themed .vjs-control-bar {
-    padding: 0 0.5rem 0.25rem;
+    padding: 0 0.5rem calc(0.25rem + env(safe-area-inset-bottom, 0px));
+  }
+
+  /* Keep controls visible on touch — Video.js hides them when user-inactive. */
+  .video-player-root.video-player-themed.video-player-touch
+    .vjs-has-started.vjs-user-inactive.vjs-playing
+    .vjs-control-bar,
+  .video-player-root.video-player-themed
+    .vjs-has-started.vjs-user-inactive.vjs-playing
+    .vjs-control-bar {
+    opacity: 1 !important;
+    visibility: visible !important;
+    pointer-events: auto !important;
   }
 
   .video-player-root.video-player-themed .vjs-control-bar > .vjs-button {

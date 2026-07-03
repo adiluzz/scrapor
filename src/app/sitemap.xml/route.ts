@@ -4,6 +4,7 @@ import { prisma } from "@/lib/db";
 import { getSiteByDomain, normalizeHost } from "@/lib/site";
 import { videoPageDescription } from "@/lib/seo";
 import {
+  publicVideoContentUrl,
   publicVideoThumbnailUrl,
   renderSitemapXml,
   renderUrlOnlySitemapEntry,
@@ -37,11 +38,10 @@ export async function GET() {
         tags: { include: { tag: { select: { name: true } } } },
       },
       orderBy: { createdAt: "desc" },
-      take: 5000,
     }),
-    prisma.pornstar.findMany({ where: { siteId: site.id }, select: { slug: true }, take: 5000 }),
-    prisma.creatorProfile.findMany({ where: { siteId: site.id }, select: { slug: true }, take: 5000 }),
-    prisma.tag.findMany({ where: { siteId: site.id }, select: { slug: true }, take: 5000 }),
+    prisma.pornstar.findMany({ where: { siteId: site.id }, select: { slug: true } }),
+    prisma.creatorProfile.findMany({ where: { siteId: site.id }, select: { slug: true } }),
+    prisma.tag.findMany({ where: { siteId: site.id }, select: { slug: true } }),
   ]);
 
   const staticUrls = [
@@ -62,9 +62,9 @@ export async function GET() {
       return renderVideoSitemapUrl({
         pageUrl,
         thumbnailUrl: publicVideoThumbnailUrl(base, video.id),
+        contentUrl: publicVideoContentUrl(base, video.id),
         title: sitemapVideoTitle(video.title),
         description: sitemapVideoDescription(video.description || "", fallbackDescription),
-        playerUrl: pageUrl,
         durationSec: video.durationSec,
         publicationDate: video.sourceUploadDate || video.createdAt,
         viewCount: video.viewCount,

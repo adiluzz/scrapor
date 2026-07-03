@@ -18,6 +18,7 @@ import {
   videoObjectJsonLd,
   videoPageDescription,
 } from "@/lib/seo";
+import { publicVideoContentUrl } from "@/lib/video-sitemap";
 import AdZone from "@/components/ads/AdZone";
 import ExoFullscreenOverlay from "@/components/ads/ExoFullscreenOverlay";
 
@@ -129,6 +130,7 @@ export default async function VideoPage({
           title: video.title,
           description: video.description,
           thumbnailUrl: poster,
+          contentUrl: publicVideoContentUrl(base, video.id),
           uploadDate: (video.sourceUploadDate || video.createdAt).toISOString(),
           durationIso: isoDuration(video.durationSec),
           pageUrl,

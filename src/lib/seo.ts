@@ -150,6 +150,7 @@ export function videoObjectJsonLd(input: {
   title: string;
   description?: string | null;
   thumbnailUrl?: string | null;
+  contentUrl?: string | null;
   uploadDate: string;
   durationIso?: string;
   pageUrl: string;
@@ -164,6 +165,7 @@ export function videoObjectJsonLd(input: {
     name: input.title,
     description: input.description || videoPageDescription(input.title, "Pisster"),
     thumbnailUrl: input.thumbnailUrl || undefined,
+    contentUrl: input.contentUrl || undefined,
     uploadDate: input.uploadDate,
     duration: input.durationIso,
     url: input.pageUrl,

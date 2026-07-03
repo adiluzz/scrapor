@@ -24,6 +24,11 @@ export function publicVideoThumbnailUrl(base: string, videoId: string): string {
   return `${base}/media/thumbnail/${videoId}`;
 }
 
+/** Stable, crawler-friendly preview MP4 for video:content_loc (not signed CDN URLs). */
+export function publicVideoContentUrl(base: string, videoId: string): string {
+  return `${base}/media/preview/${videoId}`;
+}
+
 export function iso8601(date: Date): string {
   return date.toISOString();
 }
@@ -33,7 +38,8 @@ export type VideoSitemapEntry = {
   thumbnailUrl: string;
   title: string;
   description: string;
-  playerUrl: string;
+  /** Direct link to raw video bytes (preview clip). Required by Google; must differ from pageUrl. */
+  contentUrl: string;
   durationSec?: number | null;
   publicationDate: Date;
   viewCount?: number;
@@ -55,9 +61,7 @@ export function renderVideoSitemapUrl(entry: VideoSitemapEntry): string {
   lines.push(`      <video:thumbnail_loc>${escapeXml(entry.thumbnailUrl)}</video:thumbnail_loc>`);
   lines.push(`      <video:title>${escapeXml(entry.title)}</video:title>`);
   lines.push(`      <video:description>${escapeXml(entry.description)}</video:description>`);
-  lines.push(
-    `      <video:player_loc allow_embed="yes">${escapeXml(entry.playerUrl)}</video:player_loc>`
-  );
+  lines.push(`      <video:content_loc>${escapeXml(entry.contentUrl)}</video:content_loc>`);
 
   if (entry.durationSec && entry.durationSec > 0) {
     lines.push(`      <video:duration>${Math.floor(entry.durationSec)}</video:duration>`);

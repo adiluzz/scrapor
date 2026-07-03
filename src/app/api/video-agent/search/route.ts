@@ -45,10 +45,13 @@ export async function POST(request: Request) {
       total: videos.length,
     });
   } catch (err) {
-    logger.error({ err }, "video-agent search failed");
-    return NextResponse.json(
-      { error: err instanceof Error ? err.message : "Search failed" },
-      { status: 500 }
-    );
+    logger.error({ err, analysisModel }, "video-agent search failed");
+    const message = err instanceof Error ? err.message : "Search failed";
+    const hint = message.includes("AWS_ACCESS_KEY_ID")
+      ? " Set AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY on the web container."
+      : message.includes("Forbidden") || message.includes("AccessDenied")
+        ? " The web IAM user needs bedrock:InvokeModel on inference profiles."
+        : "";
+    return NextResponse.json({ error: message + hint }, { status: 500 });
   }
 }

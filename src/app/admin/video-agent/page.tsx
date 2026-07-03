@@ -217,8 +217,14 @@ export default function VideoAgentPage() {
               video analyzed (2 detection targets).
               {selectedModel.id === "pegasus-1-5" && (
                 <span className="block mt-1 text-amber-500/90">
-                  Pegasus 1.5 (direct) cannot parse prompts — use Nova 2 Lite or Pegasus 1.2 (Bedrock)
-                  for the search step.
+                  Step 1 prompt parsing uses Nova 2 Lite (Pegasus 1.5 is video-only via
+                  TwelveLabs).
+                </span>
+              )}
+              {selectedModel.id === "pegasus-1-2" && (
+                <span className="block mt-1 text-amber-500/90">
+                  Step 1 prompt parsing uses Nova 2 Lite (Pegasus 1.2 is video-only on
+                  Bedrock).
                 </span>
               )}
             </p>

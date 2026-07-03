@@ -123,6 +123,21 @@ export function resolveVideoAgentModel(id: string): VideoAgentModelInfo | null {
 
 export const DEFAULT_VIDEO_AGENT_MODEL: VideoAgentModelId = "nova-2-lite";
 
+/** Foundation model used to parse prompts (text-only; never Pegasus). */
+export const PROMPT_PARSE_BEDROCK_MODEL = "amazon.nova-2-lite-v1:0";
+
+/**
+ * Bedrock model for Step 1 prompt parsing.
+ * Pegasus models are video-only on Bedrock and cannot run text JSON extraction.
+ */
+export function resolvePromptParseBedrockInferenceId(analysisModelId: string): string {
+  const model = resolveVideoAgentModel(analysisModelId);
+  if (model?.bedrockModelId?.startsWith("amazon.")) {
+    return resolveBedrockInferenceModelId(model.bedrockModelId);
+  }
+  return resolveBedrockInferenceModelId(PROMPT_PARSE_BEDROCK_MODEL);
+}
+
 /** Bedrock inference profile ID for the admin-selected video agent model. */
 export function resolveAgentBedrockInferenceId(analysisModelId: string): string {
   const model = resolveVideoAgentModel(analysisModelId);

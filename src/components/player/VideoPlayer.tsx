@@ -36,8 +36,7 @@ function enterPlayerFullscreen(
   player: Player,
   autoRef: MutableRefObject<boolean>
 ): void {
-  const tech = player.tech(true) as { el?: () => HTMLVideoElement } | undefined;
-  const videoEl = tech?.el?.();
+  const videoEl = player.el().querySelector("video") as HTMLVideoElement | null;
   if (videoEl && "webkitEnterFullscreen" in videoEl) {
     (videoEl as HTMLVideoElement & { webkitEnterFullscreen: () => void }).webkitEnterFullscreen();
     autoRef.current = true;

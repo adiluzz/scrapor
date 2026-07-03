@@ -135,3 +135,22 @@ export async function listVideos(
   const videos = await Promise.all(rows.map(toCard));
   return { videos, total, totalPages: Math.max(1, Math.ceil(total / PAGE_SIZE)) };
 }
+
+const AGENT_SEARCH_LIMIT = 100;
+
+/** Search catalog for the video agent (up to 100 popular matches). */
+export async function searchAgentVideos(
+  siteId: string,
+  query: string,
+  limit = AGENT_SEARCH_LIMIT
+): Promise<VideoCardData[]> {
+  const params: DiscoveryParams = { q: query.trim(), sort: "popular", page: 1 };
+  const where = buildWhere(siteId, params);
+  const rows = await prisma.video.findMany({
+    where,
+    orderBy: { viewCount: "desc" },
+    take: limit,
+    include: { pornstars: { include: { pornstar: true }, take: 3 } },
+  });
+  return Promise.all(rows.map(toCard));
+}

@@ -39,7 +39,7 @@ def load_run(conn, run_id: str) -> dict[str, Any] | None:
     row = conn.execute(
         '''
         SELECT id, "siteId", "agentId", "userPrompt", "searchQuery",
-               "extractTargets", "analysisModel", status, error
+               "extractTargets", "selectedVideoIds", "analysisModel", status, error
         FROM "VideoAgentRun"
         WHERE id = %s
         ''',
@@ -49,7 +49,7 @@ def load_run(conn, run_id: str) -> dict[str, Any] | None:
         return None
     cols = [
         "id", "siteId", "agentId", "userPrompt", "searchQuery",
-        "extractTargets", "analysisModel", "status", "error",
+        "extractTargets", "selectedVideoIds", "analysisModel", "status", "error",
     ]
     return dict(zip(cols, row))
 
@@ -143,6 +143,35 @@ def search_videos(conn, site_id: str, query: str) -> list[dict[str, Any]]:
         (site_id, pattern, pattern, pattern, pattern),
     ).fetchall()
     return [{"id": r[0], "title": r[1], "durationSec": r[2]} for r in rows]
+
+
+def fetch_videos_by_ids(conn, site_id: str, video_ids: list[str]) -> list[dict[str, Any]]:
+    if not video_ids:
+        return []
+    rows = conn.execute(
+        '''
+        SELECT id, title, "durationSec"
+        FROM "Video"
+        WHERE "siteId" = %s
+          AND "isDeleted" = false
+          AND status = 'READY'
+          AND id = ANY(%s)
+        ORDER BY "viewCount" DESC
+        ''',
+        (site_id, video_ids),
+    ).fetchall()
+    return [{"id": r[0], "title": r[1], "durationSec": r[2]} for r in rows]
+
+
+def resolve_run_videos(conn, site_id: str, search_query: str, selected_raw: str | None) -> list[dict[str, Any]]:
+    if selected_raw:
+        try:
+            selected_ids = json.loads(selected_raw)
+            if isinstance(selected_ids, list) and selected_ids:
+                return fetch_videos_by_ids(conn, site_id, [str(v) for v in selected_ids])
+        except json.JSONDecodeError:
+            pass
+    return search_videos(conn, site_id, search_query)
 
 
 def load_training_examples(conn, site_id: str, labels: list[str]) -> list[dict[str, Any]]:

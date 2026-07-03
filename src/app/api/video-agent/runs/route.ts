@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { guardAdmin, authUserId } from "@/lib/admin-guard";
 import { prisma } from "@/lib/db";
 import { parseUserPrompt } from "@/lib/video-agent/parse-prompt";
+import { ensureDefaultVideoAgent } from "@/lib/video-agent-agent";
 import {
   DEFAULT_VIDEO_AGENT_MODEL,
   resolveVideoAgentModel,
@@ -35,9 +36,19 @@ export async function POST(request: Request) {
   const agentKey = typeof body.agentKey === "string" ? body.agentKey : "content-detector";
   const analysisModel =
     typeof body.analysisModel === "string" ? body.analysisModel.trim() : DEFAULT_VIDEO_AGENT_MODEL;
+  const videoIds = Array.isArray(body.videoIds)
+    ? body.videoIds.filter((id: unknown) => typeof id === "string" && id.trim()).map((id: string) => id.trim())
+    : [];
+  const searchQueryFromBody = typeof body.searchQuery === "string" ? body.searchQuery.trim() : "";
+  const extractTargetsFromBody = Array.isArray(body.extractTargets)
+    ? body.extractTargets.filter((t: unknown) => typeof t === "string" && t.trim())
+    : null;
 
   if (!userPrompt) {
     return NextResponse.json({ error: "Prompt is required" }, { status: 400 });
+  }
+  if (videoIds.length === 0) {
+    return NextResponse.json({ error: "Select at least one video to analyze" }, { status: 400 });
   }
 
   const model = resolveVideoAgentModel(analysisModel);
@@ -51,22 +62,44 @@ export async function POST(request: Request) {
   }
 
   try {
-    const agent = await prisma.videoAgent.findUnique({
-      where: { key: agentKey },
+    const validVideos = await prisma.video.findMany({
+      where: {
+        siteId: auth.siteId,
+        id: { in: videoIds },
+        isDeleted: false,
+        status: "READY",
+      },
+      select: { id: true },
     });
+    if (validVideos.length === 0) {
+      return NextResponse.json({ error: "No valid videos selected" }, { status: 400 });
+    }
+    const validIds = validVideos.map((v) => v.id);
+
+    let searchQuery = searchQueryFromBody;
+    let extractTargets = extractTargetsFromBody;
+    if (!searchQuery || !extractTargets?.length) {
+      const parsed = await parseUserPrompt(userPrompt);
+      searchQuery = searchQuery || parsed.searchQuery;
+      extractTargets = extractTargets?.length ? extractTargets : parsed.extractTargets;
+    }
+
+    const agent =
+      agentKey === "content-detector"
+        ? await ensureDefaultVideoAgent()
+        : await prisma.videoAgent.findUnique({ where: { key: agentKey } });
     if (!agent) {
       return NextResponse.json({ error: "Agent not found" }, { status: 404 });
     }
-
-    const parsed = await parseUserPrompt(userPrompt);
 
     const run = await prisma.videoAgentRun.create({
       data: {
         siteId: auth.siteId,
         agentId: agent.id,
         userPrompt,
-        searchQuery: parsed.searchQuery,
-        extractTargets: JSON.stringify(parsed.extractTargets),
+        searchQuery,
+        extractTargets: JSON.stringify(extractTargets),
+        selectedVideoIds: JSON.stringify(validIds),
         analysisModel: model.id,
         createdByUserId: userId,
         status: "PENDING",
@@ -78,9 +111,10 @@ export async function POST(request: Request) {
     return NextResponse.json({ runId: run.id, run });
   } catch (err) {
     logger.error({ err }, "video-agent enqueue failed");
-    return NextResponse.json(
-      { error: err instanceof Error ? err.message : "Failed to start analysis" },
-      { status: 500 }
-    );
+    const message = err instanceof Error ? err.message : "Failed to start analysis";
+    const hint = message.includes("VideoAgent")
+      ? " Database migrations may be pending — run: docker compose run --rm migrate"
+      : "";
+    return NextResponse.json({ error: message + hint }, { status: 500 });
   }
 }

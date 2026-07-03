@@ -14,7 +14,7 @@ from db import (
     insert_detection,
     load_run,
     load_training_examples,
-    search_videos,
+    resolve_run_videos,
     set_run_status,
 )
 from learning import build_learning_context
@@ -54,7 +54,9 @@ def process_run(conn, run_id: str) -> None:
         learning_context = build_learning_context(examples)
         analyzer = create_analyzer(run.get("analysisModel") or "pegasus-1-5")
 
-        videos = search_videos(conn, run["siteId"], run["searchQuery"])
+        videos = resolve_run_videos(
+            conn, run["siteId"], run["searchQuery"], run.get("selectedVideoIds")
+        )
         if not videos:
             set_run_status(conn, run_id, "DONE")
             return

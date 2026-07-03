@@ -433,9 +433,10 @@ model VideoAgentRun {
   agent           VideoAgent            @relation(fields: [agentId], references: [id])
   userPrompt      String
   searchQuery     String
-  extractTargets  String // JSON string[]
-  analysisModel   String                @default("pegasus-1-5")
-  status          VideoAgentRunStatus   @default(PENDING)
+  extractTargets    String // JSON string[]
+  selectedVideoIds  String? // JSON string[] — when set, only these videos are analyzed
+  analysisModel     String                @default("pegasus-1-5")
+  status            VideoAgentRunStatus   @default(PENDING)
   error           String?
   createdByUserId String?
   createdAt       DateTime              @default(now())

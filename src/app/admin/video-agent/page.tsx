@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import DetectionClipCard, { type DetectionClip } from "@/components/admin/DetectionClipCard";
+import VideoSelectGrid, { type SelectableVideo } from "@/components/admin/VideoSelectGrid";
 
 type VideoAgentModel = {
   id: string;
@@ -25,6 +26,13 @@ type AgentRun = {
   detections: DetectionClip[];
 };
 
+type SearchResult = {
+  searchQuery: string;
+  extractTargets: string[];
+  videos: SelectableVideo[];
+  total: number;
+};
+
 const DEFAULT_PROMPT =
   "Search for videos related to golden shower and watersports content. Detect exactly where piss drinking happens and exactly where piss swallowing happens. Return the time range and on-screen location for each occurrence.";
 
@@ -34,10 +42,13 @@ export default function VideoAgentPage() {
   const [prompt, setPrompt] = useState(DEFAULT_PROMPT);
   const [analysisModel, setAnalysisModel] = useState("pegasus-1-5");
   const [models, setModels] = useState<VideoAgentModel[]>([]);
+  const [searching, setSearching] = useState(false);
   const [running, setRunning] = useState(false);
   const [polling, setPolling] = useState(false);
   const [feedbackBusy, setFeedbackBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [searchResult, setSearchResult] = useState<SearchResult | null>(null);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [run, setRun] = useState<AgentRun | null>(null);
 
   useEffect(() => {
@@ -86,8 +97,32 @@ export default function VideoAgentPage() {
     return () => clearInterval(timer);
   }, [polling, run?.id, pollRun]);
 
-  async function startAnalysis() {
+  async function searchVideos() {
     if (!prompt.trim()) return;
+    setSearching(true);
+    setError(null);
+    setSearchResult(null);
+    setSelectedIds(new Set());
+    setRun(null);
+    try {
+      const res = await fetch("/api/video-agent/search", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ prompt: prompt.trim() }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Search failed");
+      setSearchResult(data);
+      setSelectedIds(new Set(data.videos.map((v: SelectableVideo) => v.id)));
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setSearching(false);
+    }
+  }
+
+  async function startAnalysis() {
+    if (!prompt.trim() || !searchResult || selectedIds.size === 0) return;
     setRunning(true);
     setPolling(true);
     setError(null);
@@ -96,7 +131,13 @@ export default function VideoAgentPage() {
       const res = await fetch("/api/video-agent/runs", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ prompt: prompt.trim(), analysisModel }),
+        body: JSON.stringify({
+          prompt: prompt.trim(),
+          analysisModel,
+          searchQuery: searchResult.searchQuery,
+          extractTargets: searchResult.extractTargets,
+          videoIds: Array.from(selectedIds),
+        }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Analysis failed");
@@ -109,6 +150,24 @@ export default function VideoAgentPage() {
       setError((e as Error).message);
       setPolling(false);
       setRunning(false);
+    }
+  }
+
+  function toggleVideo(id: string) {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }
+
+  function toggleAll() {
+    if (!searchResult) return;
+    if (selectedIds.size === searchResult.videos.length) {
+      setSelectedIds(new Set());
+    } else {
+      setSelectedIds(new Set(searchResult.videos.map((v) => v.id)));
     }
   }
 
@@ -140,17 +199,21 @@ export default function VideoAgentPage() {
     }
   }
 
-  const targets = run ? (JSON.parse(run.extractTargets) as string[]) : [];
+  const targets = run
+    ? (JSON.parse(run.extractTargets) as string[])
+    : searchResult?.extractTargets ?? [];
   const selectedModel = models.find((m) => m.id === analysisModel);
+  const allSelected =
+    searchResult != null && selectedIds.size === searchResult.videos.length && searchResult.videos.length > 0;
 
   return (
     <div className="space-y-8">
       <div>
         <h1 className="text-2xl font-bold text-white">Video Content Agent</h1>
         <p className="mt-1 max-w-2xl text-sm text-zinc-400">
-          Describe what to search in the catalog and what on-screen events to detect. A Python
-          video-analyzer service processes full video clips with native AI models (Pegasus, Nova),
-          returns time ranges and screen regions, and learns from your approve/reject feedback.
+          Step 1: search the catalog from your prompt. Step 2: pick which videos to analyze.
+          A Python video-analyzer service processes each selected video with native AI models
+          and learns from your approve/reject feedback.
         </p>
       </div>
 
@@ -160,7 +223,7 @@ export default function VideoAgentPage() {
           <select
             value={analysisModel}
             onChange={(e) => setAnalysisModel(e.target.value)}
-            disabled={running}
+            disabled={searching || running}
             className="w-full max-w-xl rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm text-white"
           >
             {models.map((m) => (
@@ -182,7 +245,7 @@ export default function VideoAgentPage() {
           <textarea
             value={prompt}
             onChange={(e) => setPrompt(e.target.value)}
-            disabled={running}
+            disabled={searching || running}
             rows={5}
             placeholder="Search for … and detect exactly where … happens"
             className="w-full rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm text-white placeholder:text-zinc-600"
@@ -195,25 +258,74 @@ export default function VideoAgentPage() {
 
         <button
           type="button"
-          onClick={startAnalysis}
-          disabled={running || !prompt.trim()}
-          className="rounded-lg bg-brand-600 px-5 py-2.5 text-sm font-medium text-white hover:bg-brand-500 disabled:opacity-50"
+          onClick={searchVideos}
+          disabled={searching || running || !prompt.trim()}
+          className="rounded-lg bg-zinc-700 px-5 py-2.5 text-sm font-medium text-white hover:bg-zinc-600 disabled:opacity-50"
         >
-          {running ? "Analysis in progress…" : "Run analysis"}
+          {searching ? "Searching…" : "Step 1 — Search videos"}
         </button>
       </section>
 
       {error && (
         <div className="rounded-lg border border-red-900/50 bg-red-950/40 px-4 py-3 text-sm text-red-300">
           {error}
+          {error.includes("VideoAgent") && (
+            <p className="mt-2 text-xs text-red-400/80">
+              On the server run: <code className="text-red-200">docker compose run --rm migrate</code>
+            </p>
+          )}
         </div>
+      )}
+
+      {searchResult && !run && (
+        <section className="space-y-4">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div className="text-sm text-zinc-400">
+              <p>
+                <span className="text-zinc-500">Search query:</span> {searchResult.searchQuery}
+              </p>
+              <p className="mt-1">
+                <span className="text-zinc-500">Detecting:</span> {targets.join(", ")}
+              </p>
+              <p className="mt-1">
+                Found {searchResult.total} video{searchResult.total === 1 ? "" : "s"}
+              </p>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              <button
+                type="button"
+                onClick={toggleAll}
+                disabled={running || searchResult.videos.length === 0}
+                className="rounded-lg border border-zinc-700 px-4 py-2 text-sm text-zinc-300 hover:bg-zinc-800 disabled:opacity-50"
+              >
+                {allSelected ? "Deselect all" : "Select all"}
+              </button>
+              <button
+                type="button"
+                onClick={startAnalysis}
+                disabled={running || selectedIds.size === 0}
+                className="rounded-lg bg-brand-600 px-5 py-2.5 text-sm font-medium text-white hover:bg-brand-500 disabled:opacity-50"
+              >
+                {running
+                  ? "Analysis in progress…"
+                  : `Step 2 — Analyze ${selectedIds.size} selected video${selectedIds.size === 1 ? "" : "s"}`}
+              </button>
+            </div>
+          </div>
+
+          <VideoSelectGrid
+            videos={searchResult.videos}
+            selectedIds={selectedIds}
+            onToggle={toggleVideo}
+          />
+        </section>
       )}
 
       {running && (
         <div className="rounded-lg border border-zinc-800 bg-zinc-900/50 px-4 py-8 text-center text-sm text-zinc-400">
-          Job queued — searching all matching videos and analyzing each in segments with{" "}
+          Analyzing {selectedIds.size} video{selectedIds.size === 1 ? "" : "s"} with{" "}
           <span className="text-zinc-300">{selectedModel?.label ?? analysisModel}</span>. This may
-          take a while for long videos or large result sets…
+          take a while for long videos…
         </div>
       )}
 

@@ -403,3 +403,95 @@ model ContextSkill {
   @@id([contextId, skillId])
   @@index([skillId])
 }
+
+// ─────────────────────────────────────────────────────────────
+// Video analysis agents (search → detect → learn from feedback)
+// ─────────────────────────────────────────────────────────────
+
+enum VideoAgentRunStatus {
+  PENDING
+  RUNNING
+  DONE
+  ERROR
+}
+
+model VideoAgent {
+  id            String          @id @default(cuid())
+  key           String          @unique
+  name          String
+  description   String?
+  defaultPrompt String?
+  createdAt     DateTime        @default(now())
+  updatedAt     DateTime        @updatedAt
+  runs          VideoAgentRun[]
+}
+
+model VideoAgentRun {
+  id              String                @id @default(cuid())
+  siteId          String
+  agentId         String
+  agent           VideoAgent            @relation(fields: [agentId], references: [id])
+  userPrompt      String
+  searchQuery     String
+  extractTargets  String // JSON string[]
+  analysisModel   String                @default("pegasus-1-5")
+  status          VideoAgentRunStatus   @default(PENDING)
+  error           String?
+  createdByUserId String?
+  createdAt       DateTime              @default(now())
+  updatedAt       DateTime              @updatedAt
+  detections      VideoAgentDetection[]
+
+  @@index([siteId, createdAt])
+  @@index([status])
+}
+
+model VideoAgentDetection {
+  id         String               @id @default(cuid())
+  runId      String
+  run        VideoAgentRun        @relation(fields: [runId], references: [id], onDelete: Cascade)
+  videoId    String
+  videoTitle String
+  label      String
+  startSec   Float
+  endSec     Float
+  screenX    Float? // normalized 0-1
+  screenY    Float?
+  screenW    Float?
+  screenH    Float?
+  confidence Float?
+  frameSec   Float?
+  createdAt  DateTime             @default(now())
+  feedback   VideoAgentFeedback?
+
+  @@index([runId])
+  @@index([videoId])
+}
+
+model VideoAgentFeedback {
+  id          String              @id @default(cuid())
+  detectionId String              @unique
+  detection   VideoAgentDetection @relation(fields: [detectionId], references: [id], onDelete: Cascade)
+  approved    Boolean
+  userId      String
+  createdAt   DateTime            @default(now())
+}
+
+model VideoAgentTrainingExample {
+  id                String   @id @default(cuid())
+  siteId            String
+  label             String
+  approved          Boolean
+  startSec          Float
+  endSec            Float
+  screenX           Float?
+  screenY           Float?
+  screenW           Float?
+  screenH           Float?
+  contextPrompt     String?
+  videoId           String?
+  sourceDetectionId String?
+  createdAt         DateTime @default(now())
+
+  @@index([siteId, label, approved])
+}

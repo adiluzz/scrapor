@@ -38,6 +38,20 @@ services:
       - uploads:/app/uploads
     logging: { driver: json-file, options: { max-size: "10m", max-file: "3" } }
 
+  # ── Python video analyzer (native video AI models) ────────────────
+  video-analyzer:
+    build: { context: ., dockerfile: video-analyzer/Dockerfile }
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      DOWNLOADS_DIR: /app/downloads
+    depends_on:
+      postgres: { condition: service_healthy }
+      redis: { condition: service_started }
+    volumes:
+      - downloads:/app/downloads
+    logging: { driver: json-file, options: { max-size: "10m", max-file: "3" } }
+
   # ── Internal edge: app router + protecting CDN edge ────────────────
   # TLS + public routing are handled by the EXISTING dockerized Caddy
   # (chiro-caddy) which already owns host :80/:443 and does automatic HTTPS.
@@ -86,50 +100,9 @@ services:
     volumes:
       - redisdata:/data
 
-  # ── ELK logging stack ─────────────────────────────────────────────
-  elasticsearch:
-    image: docker.elastic.co/elasticsearch/elasticsearch:8.15.3
-    restart: unless-stopped
-    environment:
-      discovery.type: single-node
-      xpack.security.enabled: "false"
-      ES_JAVA_OPTS: "-Xms512m -Xmx512m"
-    volumes:
-      - esdata:/usr/share/elasticsearch/data
-    expose: ["9200"]
-
-  logstash:
-    image: docker.elastic.co/logstash/logstash:8.15.3
-    restart: unless-stopped
-    depends_on: [elasticsearch]
-    volumes:
-      - ./logstash/logstash.conf:/usr/share/logstash/pipeline/logstash.conf:ro
-    expose: ["5044"]
-
-  kibana:
-    image: docker.elastic.co/kibana/kibana:8.15.3
-    restart: unless-stopped
-    depends_on: [elasticsearch]
-    environment:
-      ELASTICSEARCH_HOSTS: http://elasticsearch:9200
-    # Localhost only — reach it via SSH tunnel; it has no auth.
-    ports: ["127.0.0.1:5601:5601"]
-
-  filebeat:
-    image: docker.elastic.co/beats/filebeat:8.15.3
-    restart: unless-stopped
-    user: root
-    depends_on: [logstash]
-    volumes:
-      - ./filebeat/filebeat.yml:/usr/share/filebeat/filebeat.yml:ro
-      - /var/lib/docker/containers:/var/lib/docker/containers:ro
-      - /var/run/docker.sock:/var/run/docker.sock:ro
-    command: ["--strict.perms=false"]
-
 volumes:
   pgdata:
   redisdata:
-  esdata:
   downloads:
   uploads:
   nginx-cache:

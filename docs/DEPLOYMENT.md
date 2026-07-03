@@ -134,11 +134,18 @@ The compose file joins the edge `nginx` to Caddy's **external** network
 Caddy/chiro stack is up (`docker network ls | grep chiro_default`).
 
 ```bash
-docker compose up -d --build
+docker compose up -d --build web worker video-analyzer nginx postgres redis
 ```
 
-Services: `web`, `worker`, `nginx` (internal edge), `postgres`, `redis`,
-`elasticsearch`, `logstash`, `kibana`, `filebeat`.
+Services: `web`, `worker`, `video-analyzer`, `nginx` (internal edge), `postgres`, `redis`.
+
+The ELK stack (`elasticsearch`, `logstash`, `kibana`, `filebeat`) lives in
+`docker-compose.elk.yml` and is **not** started by the command above. Only
+enable it explicitly if you need centralized logs:
+
+```bash
+docker compose -f docker-compose.yml -f docker-compose.elk.yml up -d elasticsearch logstash kibana filebeat
+```
 
 Check they're healthy and the edge is answering locally:
 
@@ -256,7 +263,7 @@ automatic — nothing else to configure.
   ```bash
   cd pisster
   git pull
-  docker compose up -d --build
+  docker compose up -d --build web worker video-analyzer nginx postgres redis
   docker compose run --rm migrate      # apply any new migrations
   ```
 - **Logs:** `docker compose logs -f web worker nginx`

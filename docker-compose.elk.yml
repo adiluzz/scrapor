@@ -1,0 +1,44 @@
+# Optional ELK stack — NOT started by default.
+# Enable explicitly: docker compose -f docker-compose.yml -f docker-compose.elk.yml up -d elasticsearch logstash kibana filebeat
+
+services:
+  elasticsearch:
+    image: docker.elastic.co/elasticsearch/elasticsearch:8.15.3
+    restart: unless-stopped
+    environment:
+      discovery.type: single-node
+      xpack.security.enabled: "false"
+      ES_JAVA_OPTS: "-Xms512m -Xmx512m"
+    volumes:
+      - esdata:/usr/share/elasticsearch/data
+    expose: ["9200"]
+
+  logstash:
+    image: docker.elastic.co/logstash/logstash:8.15.3
+    restart: unless-stopped
+    depends_on: [elasticsearch]
+    volumes:
+      - ./logstash/logstash.conf:/usr/share/logstash/pipeline/logstash.conf:ro
+    expose: ["5044"]
+
+  kibana:
+    image: docker.elastic.co/kibana/kibana:8.15.3
+    restart: unless-stopped
+    depends_on: [elasticsearch]
+    environment:
+      ELASTICSEARCH_HOSTS: http://elasticsearch:9200
+    ports: ["127.0.0.1:5601:5601"]
+
+  filebeat:
+    image: docker.elastic.co/beats/filebeat:8.15.3
+    restart: unless-stopped
+    user: root
+    depends_on: [logstash]
+    volumes:
+      - ./filebeat/filebeat.yml:/usr/share/filebeat/filebeat.yml:ro
+      - /var/lib/docker/containers:/var/lib/docker/containers:ro
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    command: ["--strict.perms=false"]
+
+volumes:
+  esdata:

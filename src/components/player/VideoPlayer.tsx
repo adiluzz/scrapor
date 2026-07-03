@@ -32,6 +32,12 @@ function isTouchDevice(): boolean {
   return "ontouchstart" in window || navigator.maxTouchPoints > 0;
 }
 
+/** Phones/tablets held in the hand — not desktop mice or touch laptops. */
+function isMobileCoarsePointer(): boolean {
+  if (typeof window === "undefined") return false;
+  return window.matchMedia("(hover: none) and (pointer: coarse)").matches;
+}
+
 function enterPlayerFullscreen(
   player: Player,
   autoRef: MutableRefObject<boolean>
@@ -161,20 +167,32 @@ export default function VideoPlayer({
   useEffect(() => {
     if (status !== "playing") return;
 
+    const player = playerRef.current;
+    if (!player) return;
+
+    // Desktop: never auto-fullscreen; undo if a prior build entered it on landscape.
+    if (!isMobileCoarsePointer()) {
+      if (autoLandscapeFullscreen.current && player.isFullscreen()) {
+        player.exitFullscreen();
+        autoLandscapeFullscreen.current = false;
+      }
+      return;
+    }
+
     const syncLandscapeFullscreen = () => {
-      const player = playerRef.current;
-      if (!player) return;
+      const p = playerRef.current;
+      if (!p) return;
 
       const landscape = window.matchMedia("(orientation: landscape)").matches;
       if (landscape) {
-        if (!player.isFullscreen()) {
-          enterPlayerFullscreen(player, autoLandscapeFullscreen);
+        if (!p.isFullscreen()) {
+          enterPlayerFullscreen(p, autoLandscapeFullscreen);
         }
         return;
       }
 
-      if (autoLandscapeFullscreen.current && player.isFullscreen()) {
-        player.exitFullscreen();
+      if (autoLandscapeFullscreen.current && p.isFullscreen()) {
+        p.exitFullscreen();
         autoLandscapeFullscreen.current = false;
       }
     };

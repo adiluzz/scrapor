@@ -36,7 +36,15 @@ def s3_client():
 def bedrock_client():
     global _bedrock
     if _bedrock is None:
-        _bedrock = boto3.client("bedrock-runtime", region_name=CONFIG.aws_region)
+        _bedrock = boto3.client(
+            "bedrock-runtime",
+            region_name=CONFIG.aws_region,
+            config=Config(
+                read_timeout=CONFIG.bedrock_read_timeout_sec,
+                connect_timeout=60,
+                retries={"max_attempts": 3},
+            ),
+        )
     return _bedrock
 
 
@@ -46,6 +54,20 @@ def video_s3_key(site_id: str, video_id: str) -> str:
 
 def video_s3_uri(site_id: str, video_id: str) -> str:
     return f"s3://{CONFIG.s3_bucket}/{video_s3_key(site_id, video_id)}"
+
+
+def chunk_s3_key(site_id: str, video_id: str, chunk_start: float) -> str:
+    return f"video-agent/chunks/{site_id}/{video_id}/chunk_{int(chunk_start)}.mp4"
+
+
+def chunk_s3_uri(site_id: str, video_id: str, chunk_start: float) -> str:
+    return f"s3://{CONFIG.s3_bucket}/{chunk_s3_key(site_id, video_id, chunk_start)}"
+
+
+def upload_chunk(site_id: str, video_id: str, chunk_path: Path, chunk_start: float) -> str:
+    key = chunk_s3_key(site_id, video_id, chunk_start)
+    s3_client().upload_file(str(chunk_path), CONFIG.s3_bucket, key)
+    return chunk_s3_uri(site_id, video_id, chunk_start)
 
 
 def presign_video_url(site_id: str, video_id: str, expires: int = 3600) -> str:
@@ -166,15 +188,6 @@ def resolve_media_source(
     chunk_duration: float,
 ) -> MediaSource:
     """Resolve how to pass a video chunk to a model."""
-    if CONFIG.bedrock_s3_available():
-        return MediaSource(
-            kind="s3",
-            s3_uri=video_s3_uri(site_id, video_id),
-            bucket_owner=CONFIG.aws_account_id or None,
-            chunk_start_sec=chunk_start,
-            chunk_duration_sec=chunk_duration,
-        )
-
     cache = work_dir / f"{video_id}.mp4"
     if not cache.exists():
         if not download_video(site_id, video_id, cache):
@@ -183,6 +196,26 @@ def resolve_media_source(
     chunk_path = work_dir / video_id / f"chunk_{int(chunk_start)}.mp4"
     if not chunk_path.exists():
         cut_chunk(cache, chunk_path, chunk_start, chunk_duration)
+
+    if CONFIG.bedrock_s3_available():
+        try:
+            s3_uri = upload_chunk(site_id, video_id, chunk_path, chunk_start)
+            log.info(
+                "chunk_uploaded video_id=%s start=%s bytes=%s",
+                video_id,
+                chunk_start,
+                chunk_path.stat().st_size,
+            )
+            return MediaSource(
+                kind="s3",
+                s3_uri=s3_uri,
+                bucket_owner=CONFIG.aws_account_id or None,
+                path=chunk_path,
+                chunk_start_sec=chunk_start,
+                chunk_duration_sec=chunk_duration,
+            )
+        except Exception as e:  # noqa: BLE001
+            log.warning("chunk_upload_failed video_id=%s start=%s err=%s", video_id, chunk_start, e)
 
     if os.environ.get("AWS_ACCESS_KEY_ID"):
         try:

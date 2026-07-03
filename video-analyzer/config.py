@@ -15,6 +15,7 @@ class Config:
     twelvelabs_api_key: str | None
     chunk_sec: int
     use_scene_chunking: bool
+    bedrock_read_timeout_sec: int
     queue_key: str
     work_dir: str
     downloads_dir: str
@@ -30,6 +31,9 @@ class Config:
             chunk_sec=int(os.environ.get("VIDEO_AGENT_CHUNK_SEC", "180")),
             use_scene_chunking=os.environ.get("VIDEO_AGENT_USE_SCENE_CHUNKING", "").lower()
             in ("1", "true", "yes"),
+            bedrock_read_timeout_sec=int(
+                os.environ.get("VIDEO_AGENT_BEDROCK_READ_TIMEOUT_SEC", "600")
+            ),
             queue_key=os.environ.get("VIDEO_AGENT_QUEUE_KEY", "video-agent:queue"),
             work_dir=os.environ.get("VIDEO_AGENT_WORK_DIR", "/tmp/video-agent"),
             downloads_dir=os.environ.get("DOWNLOADS_DIR", "/app/downloads"),

@@ -52,7 +52,7 @@ def process_run(conn, run_id: str) -> None:
         targets: list[str] = json.loads(run["extractTargets"])
         examples = load_training_examples(conn, run["siteId"], targets)
         learning_context = build_learning_context(examples)
-        analyzer = create_analyzer(run.get("analysisModel") or "pegasus-1-5")
+        analyzer = create_analyzer(run.get("analysisModel") or "nova-2-lite")
 
         videos = resolve_run_videos(
             conn, run["siteId"], run["searchQuery"], run.get("selectedVideoIds")

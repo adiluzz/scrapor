@@ -43,6 +43,7 @@ class NovaBedrockAnalyzer:
             targets, learning_context, media.chunk_start_sec, media.chunk_duration_sec
         )
         client = bedrock_client()
+        log.info("nova_invoke model_id=%s chunk_start=%s", self.model_id, media.chunk_start_sec)
         response = client.converse(
             modelId=self.model_id,
             messages=[{

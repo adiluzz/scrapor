@@ -15,7 +15,13 @@ export type VideoAgentModelInfo = {
   costTier: "$" | "$$" | "$$$";
   /** Approx. USD per hour of source video (2 detection targets, 3-min chunks). */
   pricePerHourApprox: string;
+  /** Foundation model ID (resolved to geo inference profile at call time). */
   bedrockModelId?: string;
+  /** When true, hidden from the default picker unless explicitly allowlisted. */
+  deprecated?: boolean;
+  /** Recommended replacement model id. */
+  successor?: VideoAgentModelId;
+  lifecycle?: "active" | "legacy" | "eol";
 };
 
 export const VIDEO_AGENT_MODEL_CATALOG: VideoAgentModelInfo[] = [
@@ -24,65 +30,79 @@ export const VIDEO_AGENT_MODEL_CATALOG: VideoAgentModelInfo[] = [
     label: "Pegasus 1.5 (segmentation)",
     provider: "TwelveLabs direct",
     description:
-      "Best for structured event detection with native timestamped segments. Requires TWELVELABS_API_KEY.",
+      "Best for structured event detection with native timestamped segments. Requires TWELVELABS_API_KEY (not Bedrock).",
     supportsBbox: false,
     costTier: "$$$",
     pricePerHourApprox: "~$3.50/hr",
+    lifecycle: "active",
   },
   {
     id: "pegasus-1-2",
     label: "Pegasus 1.2 (Bedrock)",
     provider: "Amazon Bedrock",
-    description: "Strong temporal grounding via Bedrock InvokeModel with JSON schema output.",
+    description:
+      "TwelveLabs video understanding on Bedrock. Active — uses inference profile twelvelabs.pegasus-1-2-v1:0.",
     supportsBbox: false,
     costTier: "$$",
     pricePerHourApprox: "~$2/hr",
-    bedrockModelId: "us.twelvelabs.pegasus-1-2-v1:0",
+    bedrockModelId: "twelvelabs.pegasus-1-2-v1:0",
+    lifecycle: "active",
   },
   {
     id: "nova-2-lite",
-    label: "Nova 2 Lite",
+    label: "Nova 2 Lite (recommended)",
     provider: "Amazon Bedrock",
-    description: "Cost-efficient native video analysis with timestamps and bounding boxes.",
+    description:
+      "Current-generation Nova with native video input, timestamps, and bounding boxes. Replaces Nova 1 Lite/Pro.",
     supportsBbox: true,
     costTier: "$",
     pricePerHourApprox: "~$0.40/hr",
     bedrockModelId: "amazon.nova-2-lite-v1:0",
-  },
-  {
-    id: "nova-pro",
-    label: "Nova Pro",
-    provider: "Amazon Bedrock",
-    description: "Higher-accuracy Nova multimodal video understanding.",
-    supportsBbox: true,
-    costTier: "$$",
-    pricePerHourApprox: "~$1/hr",
-    bedrockModelId: "amazon.nova-pro-v1:0",
+    lifecycle: "active",
   },
   {
     id: "nova-lite",
-    label: "Nova Lite",
+    label: "Nova Lite (Nova 1 — deprecated)",
     provider: "Amazon Bedrock",
-    description: "Fast, low-cost Nova video analysis.",
+    description:
+      "Legacy Nova 1 model. Migrate to Nova 2 Lite — Nova 1 may return 'end of life' errors on some accounts.",
     supportsBbox: true,
     costTier: "$",
     pricePerHourApprox: "~$0.10/hr",
     bedrockModelId: "amazon.nova-lite-v1:0",
+    deprecated: true,
+    successor: "nova-2-lite",
+    lifecycle: "legacy",
+  },
+  {
+    id: "nova-pro",
+    label: "Nova Pro (Nova 1 — deprecated)",
+    provider: "Amazon Bedrock",
+    description: "Legacy Nova 1 Pro. Use Nova 2 Lite instead for video analysis.",
+    supportsBbox: true,
+    costTier: "$$",
+    pricePerHourApprox: "~$1/hr",
+    bedrockModelId: "amazon.nova-pro-v1:0",
+    deprecated: true,
+    successor: "nova-2-lite",
+    lifecycle: "legacy",
   },
   {
     id: "nova-premier",
-    label: "Nova Premier",
+    label: "Nova Premier (Legacy — EOL Sep 2026)",
     provider: "Amazon Bedrock",
-    description: "Highest Nova 1 accuracy (legacy, EOL Sep 2026).",
+    description: "Nova 1 Premier is Legacy with EOL 2026-09-14. Use Nova 2 Lite.",
     supportsBbox: true,
     costTier: "$$$",
     pricePerHourApprox: "~$4/hr",
     bedrockModelId: "amazon.nova-premier-v1:0",
+    deprecated: true,
+    successor: "nova-2-lite",
+    lifecycle: "legacy",
   },
 ];
 
-const DEFAULT_ALLOWLIST =
-  "pegasus-1-5,pegasus-1-2,nova-2-lite,nova-pro,nova-lite,nova-premier";
+const DEFAULT_ALLOWLIST = "pegasus-1-5,pegasus-1-2,nova-2-lite";
 
 export function listVideoAgentModels(): VideoAgentModelInfo[] {
   const raw = process.env.VIDEO_AGENT_MODELS || DEFAULT_ALLOWLIST;
@@ -99,4 +119,4 @@ export function resolveVideoAgentModel(id: string): VideoAgentModelInfo | null {
   return listVideoAgentModels().find((m) => m.id === id) ?? null;
 }
 
-export const DEFAULT_VIDEO_AGENT_MODEL: VideoAgentModelId = "pegasus-1-5";
+export const DEFAULT_VIDEO_AGENT_MODEL: VideoAgentModelId = "nova-2-lite";

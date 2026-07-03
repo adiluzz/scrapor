@@ -1,6 +1,7 @@
 import { createAmazonBedrock } from "@ai-sdk/amazon-bedrock";
+import { DEFAULT_BEDROCK_TEXT_MODEL } from "@/lib/bedrock-inference";
 
-const DEFAULT_MODEL = "anthropic.claude-3-5-sonnet-20241022-v2:0";
+const DEFAULT_MODEL = DEFAULT_BEDROCK_TEXT_MODEL;
 
 let _provider: ReturnType<typeof createAmazonBedrock> | null = null;
 

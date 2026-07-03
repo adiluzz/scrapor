@@ -13,6 +13,9 @@ type VideoAgentModel = {
   supportsBbox: boolean;
   costTier: string;
   pricePerHourApprox: string;
+  deprecated?: boolean;
+  successor?: string;
+  lifecycle?: string;
 };
 
 type AgentRun = {
@@ -36,7 +39,7 @@ const POLL_MS = 3000;
 export default function VideoAgentPage() {
   const router = useRouter();
   const [prompt, setPrompt] = useState(DEFAULT_PROMPT);
-  const [analysisModel, setAnalysisModel] = useState("pegasus-1-5");
+  const [analysisModel, setAnalysisModel] = useState("nova-2-lite");
   const [models, setModels] = useState<VideoAgentModel[]>([]);
   const [searching, setSearching] = useState(false);
   const [running, setRunning] = useState(false);
@@ -203,7 +206,8 @@ export default function VideoAgentPage() {
           >
             {models.map((m) => (
               <option key={m.id} value={m.id}>
-                {m.label} — {m.pricePerHourApprox} ({m.provider})
+                {m.label}
+                {m.deprecated ? " ⚠" : ""} — {m.pricePerHourApprox} ({m.provider})
               </option>
             ))}
           </select>

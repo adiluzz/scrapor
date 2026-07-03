@@ -49,6 +49,7 @@ class PegasusBedrockAnalyzer:
         }
 
         client = bedrock_client()
+        log.info("pegasus_invoke model_id=%s chunk_start=%s", self.model_id, media.chunk_start_sec)
         response = client.invoke_model(
             modelId=self.model_id,
             body=json.dumps(body),

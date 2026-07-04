@@ -13,6 +13,8 @@ const nav = [
   { href: "/admin/applications", label: "Applications" },
   { href: "/admin/api-keys", label: "API Keys" },
   { href: "/admin/video-agent", label: "Video Agent" },
+  { href: "/admin/ad-clips", label: "Ad clips" },
+  { href: "/admin/ads", label: "Promo ads" },
   { href: "/admin/assistant", label: "Assistant" },
   { href: "/admin/settings", label: "Settings" },
 ];

@@ -464,6 +464,7 @@ model VideoAgentDetection {
   frameSec   Float?
   createdAt  DateTime             @default(now())
   feedback   VideoAgentFeedback?
+  promoClips PromoAdClip[]
 
   @@index([runId])
   @@index([videoId])
@@ -495,4 +496,81 @@ model VideoAgentTrainingExample {
   createdAt         DateTime @default(now())
 
   @@index([siteId, label, approved])
+}
+
+// ─────────────────────────────────────────────────────────────
+// Promo ads (clip compose + generative AI)
+// ─────────────────────────────────────────────────────────────
+
+enum PromoAdStatus {
+  DRAFT
+  GENERATING
+  DONE
+  ERROR
+}
+
+enum PromoAdGenerationMode {
+  CLIP_COMPOSE
+  GENERATIVE
+}
+
+enum PromoAdIterationStatus {
+  PENDING
+  GENERATING
+  DONE
+  ERROR
+}
+
+model PromoAd {
+  id                String                @id @default(cuid())
+  siteId            String
+  title             String?
+  status            PromoAdStatus         @default(DRAFT)
+  generationMode    PromoAdGenerationMode @default(CLIP_COMPOSE)
+  generativeModelId String?
+  showcaseVideoId   String?
+  prompt            String?
+  modelParams       String? // JSON: duration, seed, taskType, logoPosition, audioEnabled, etc.
+  createdByUserId   String?
+  createdAt         DateTime              @default(now())
+  updatedAt         DateTime              @updatedAt
+  clips             PromoAdClip[]
+  iterations        PromoAdIteration[]
+
+  @@index([siteId, createdAt])
+  @@index([status])
+}
+
+model PromoAdClip {
+  id          String              @id @default(cuid())
+  promoAdId   String
+  promoAd     PromoAd             @relation(fields: [promoAdId], references: [id], onDelete: Cascade)
+  detectionId String
+  detection   VideoAgentDetection @relation(fields: [detectionId], references: [id], onDelete: Restrict)
+  sortOrder   Int                 @default(0)
+
+  @@unique([promoAdId, detectionId])
+  @@index([promoAdId])
+}
+
+model PromoAdIteration {
+  id                String                 @id @default(cuid())
+  promoAdId         String
+  promoAd           PromoAd                @relation(fields: [promoAdId], references: [id], onDelete: Cascade)
+  iterationNumber   Int
+  userPrompt        String?
+  modelParams       String?
+  status            PromoAdIterationStatus @default(PENDING)
+  s3Key             String?
+  providerJobId     String?
+  parentIterationId String?
+  userFeedback      String?
+  estimatedCostUsd  Float?
+  actualCostUsd     Float?
+  error             String?
+  createdAt         DateTime               @default(now())
+  updatedAt         DateTime               @updatedAt
+
+  @@unique([promoAdId, iterationNumber])
+  @@index([promoAdId])
 }

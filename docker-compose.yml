@@ -52,6 +52,20 @@ services:
       - downloads:/app/downloads
     logging: { driver: json-file, options: { max-size: "10m", max-file: "3" } }
 
+  # ── Python promo ad generator (clip compose + generative AI) ─────
+  ad-generator:
+    build: { context: ., dockerfile: ad-generator/Dockerfile }
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      DOWNLOADS_DIR: /app/downloads
+    depends_on:
+      postgres: { condition: service_healthy }
+      redis: { condition: service_started }
+    volumes:
+      - downloads:/app/downloads
+    logging: { driver: json-file, options: { max-size: "10m", max-file: "3" } }
+
   # ── Internal edge: app router + protecting CDN edge ────────────────
   # TLS + public routing are handled by the EXISTING dockerized Caddy
   # (chiro-caddy) which already owns host :80/:443 and does automatic HTTPS.

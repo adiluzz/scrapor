@@ -1,0 +1,20 @@
+-- AlterTable
+ALTER TABLE "Pornstar" ADD COLUMN "tpdbId" TEXT;
+ALTER TABLE "Pornstar" ADD COLUMN "disambiguation" TEXT;
+ALTER TABLE "Pornstar" ADD COLUMN "aliases" TEXT;
+ALTER TABLE "Pornstar" ADD COLUMN "gender" TEXT;
+ALTER TABLE "Pornstar" ADD COLUMN "birthDate" TEXT;
+ALTER TABLE "Pornstar" ADD COLUMN "deathDate" TEXT;
+ALTER TABLE "Pornstar" ADD COLUMN "ethnicity" TEXT;
+ALTER TABLE "Pornstar" ADD COLUMN "country" TEXT;
+ALTER TABLE "Pornstar" ADD COLUMN "eyeColor" TEXT;
+ALTER TABLE "Pornstar" ADD COLUMN "hairColor" TEXT;
+ALTER TABLE "Pornstar" ADD COLUMN "heightCm" INTEGER;
+ALTER TABLE "Pornstar" ADD COLUMN "measurements" TEXT;
+ALTER TABLE "Pornstar" ADD COLUMN "breastType" TEXT;
+ALTER TABLE "Pornstar" ADD COLUMN "careerStartYear" INTEGER;
+ALTER TABLE "Pornstar" ADD COLUMN "careerEndYear" INTEGER;
+ALTER TABLE "Pornstar" ADD COLUMN "tattoos" TEXT;
+ALTER TABLE "Pornstar" ADD COLUMN "piercings" TEXT;
+ALTER TABLE "Pornstar" ADD COLUMN "urls" TEXT;
+ALTER TABLE "Pornstar" ADD COLUMN "tpdbSyncedAt" TIMESTAMP(3);

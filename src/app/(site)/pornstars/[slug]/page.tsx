@@ -8,6 +8,7 @@ import Filters from "@/components/site/Filters";
 import Pagination from "@/components/site/Pagination";
 import InPageSearch from "@/components/site/InPageSearch";
 import PornstarAvatar from "@/components/site/PornstarAvatar";
+import PornstarProfile from "@/components/site/PornstarProfile";
 import JsonLd from "@/components/site/JsonLd";
 import {
   buildOpenGraph,
@@ -79,6 +80,7 @@ export default async function PornstarPage({
           <h1 className="text-2xl font-bold text-zinc-100">{star.name}</h1>
           <p className="text-sm text-zinc-500">{total} videos</p>
           {star.bio && <p className="mt-1 max-w-2xl text-sm text-zinc-400">{star.bio}</p>}
+          <PornstarProfile star={star} />
         </div>
       </div>
 

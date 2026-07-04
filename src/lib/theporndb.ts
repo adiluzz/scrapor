@@ -13,25 +13,92 @@ export type TpdbImage = {
   height?: number | null;
 };
 
+export type TpdbUrl = {
+  url: string;
+  type: string;
+};
+
+export type TpdbMeasurements = {
+  band_size?: number | null;
+  cup_size?: string | null;
+  waist?: number | null;
+  hip?: number | null;
+};
+
+export type TpdbBodyModification = {
+  location: string;
+  description?: string | null;
+};
+
 export type TpdbPerformer = {
   id: string;
   name: string;
   disambiguation?: string | null;
+  aliases?: string[];
+  gender?: string | null;
+  birth_date?: string | null;
+  death_date?: string | null;
+  ethnicity?: string | null;
+  country?: string | null;
+  eye_color?: string | null;
+  hair_color?: string | null;
+  height?: number | null;
+  measurements?: TpdbMeasurements | null;
+  breast_type?: string | null;
+  career_start_year?: number | null;
+  career_end_year?: number | null;
+  tattoos?: TpdbBodyModification[];
+  piercings?: TpdbBodyModification[];
+  urls?: TpdbUrl[];
   images: TpdbImage[];
 };
+
+const PERFORMER_FIELDS = `
+  id
+  name
+  disambiguation
+  aliases
+  gender
+  birth_date
+  death_date
+  ethnicity
+  country
+  eye_color
+  hair_color
+  height
+  measurements {
+    band_size
+    cup_size
+    waist
+    hip
+  }
+  breast_type
+  career_start_year
+  career_end_year
+  tattoos {
+    location
+    description
+  }
+  piercings {
+    location
+    description
+  }
+  urls {
+    url
+    type
+  }
+  images {
+    id
+    url
+    width
+    height
+  }
+`;
 
 const SEARCH_PERFORMER_QUERY = `
   query SearchPerformer($term: String!) {
     searchPerformer(term: $term) {
-      id
-      name
-      disambiguation
-      images {
-        id
-        url
-        width
-        height
-      }
+      ${PERFORMER_FIELDS}
     }
   }
 `;
@@ -39,15 +106,7 @@ const SEARCH_PERFORMER_QUERY = `
 const FIND_PERFORMER_QUERY = `
   query FindPerformer($id: ID!) {
     findPerformer(id: $id) {
-      id
-      name
-      disambiguation
-      images {
-        id
-        url
-        width
-        height
-      }
+      ${PERFORMER_FIELDS}
     }
   }
 `;
@@ -107,7 +166,7 @@ export async function searchTpdbPerformers(term: string): Promise<TpdbPerformer[
     term: trimmed,
   });
 
-  return (data.searchPerformer ?? []).filter((p) => p.images?.length > 0);
+  return data.searchPerformer ?? [];
 }
 
 /** Fetch a single performer by ThePornDB id. */

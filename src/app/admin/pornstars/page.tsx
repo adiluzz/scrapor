@@ -23,6 +23,25 @@ export default async function AdminPornstarsPage() {
     videoCount: s._count.videos,
     hasImage: Boolean(s.s3Image),
     imageUrl: pornstarImageUrl(s),
+    tpdbId: s.tpdbId,
+    tpdbSyncedAt: s.tpdbSyncedAt?.toISOString() ?? null,
+    gender: s.gender,
+    country: s.country,
+    ethnicity: s.ethnicity,
+    birthDate: s.birthDate,
+    heightCm: s.heightCm,
+    measurements: s.measurements,
+    aliases: s.aliases,
+    disambiguation: s.disambiguation,
+    deathDate: s.deathDate,
+    eyeColor: s.eyeColor,
+    hairColor: s.hairColor,
+    breastType: s.breastType,
+    careerStartYear: s.careerStartYear,
+    careerEndYear: s.careerEndYear,
+    tattoos: s.tattoos,
+    piercings: s.piercings,
+    urls: s.urls,
   }));
 
   return (
@@ -30,7 +49,7 @@ export default async function AdminPornstarsPage() {
       <div>
         <h1 className="text-xl font-bold text-white sm:text-2xl">Pornstars</h1>
         <p className="mt-1 max-w-2xl text-sm text-zinc-400">
-          Upload portrait images or fetch them from{" "}
+          Upload portrait images or fetch profile data and images from{" "}
           <a
             href="https://theporndb.net"
             target="_blank"
@@ -39,7 +58,7 @@ export default async function AdminPornstarsPage() {
           >
             ThePornDB
           </a>{" "}
-          (stash-box GraphQL API). Images appear on the public pornstars directory.
+          (stash-box GraphQL API). Images and metadata appear on public pornstar pages.
         </p>
         {!isTpdbConfigured() && (
           <p className="mt-2 text-xs text-amber-500/90">

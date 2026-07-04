@@ -2,14 +2,16 @@
 
 import Image from "next/image";
 import { useCallback, useEffect, useState } from "react";
+import { pornstarProfileFields, type PornstarProfileData } from "@/lib/pornstar-profile";
 
-type PornstarRow = {
+type PornstarRow = Omit<PornstarProfileData, "tpdbSyncedAt"> & {
   id: string;
   name: string;
   slug: string;
   videoCount: number;
   hasImage: boolean;
   imageUrl: string | null;
+  tpdbSyncedAt: string | null;
 };
 
 type TpdbMatch = {
@@ -32,7 +34,7 @@ function PornstarImageEditor({
 }: {
   star: PornstarRow;
   tpdbConfigured: boolean;
-  onUpdated: (id: string, imageUrl: string | null) => void;
+  onUpdated: (id: string, patch: Partial<PornstarRow>) => void;
 }) {
   const [imageUrl, setImageUrl] = useState(star.imageUrl);
   const [busy, setBusy] = useState(false);
@@ -60,7 +62,7 @@ function PornstarImageEditor({
       if (!res.ok) throw new Error(data.error || "Upload failed");
       const url = cacheBust(`/media/pornstar/${star.id}`);
       setImageUrl(url);
-      onUpdated(star.id, url);
+      onUpdated(star.id, { hasImage: true, imageUrl: url });
     } catch (e) {
       setError(e instanceof Error ? e.message : "Upload failed");
     } finally {
@@ -79,9 +81,20 @@ function PornstarImageEditor({
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Fetch failed");
-      const url = cacheBust(`/media/pornstar/${star.id}`);
-      setImageUrl(url);
-      onUpdated(star.id, url);
+      const url = data.imageSaved ? cacheBust(`/media/pornstar/${star.id}`) : imageUrl;
+      if (data.imageSaved) setImageUrl(url);
+      onUpdated(star.id, {
+        hasImage: Boolean(data.imageSaved) || star.hasImage,
+        imageUrl: data.imageSaved ? url : star.imageUrl,
+        tpdbId: data.tpdbId ?? star.tpdbId,
+        tpdbSyncedAt: data.syncedAt ?? new Date().toISOString(),
+      });
+      if (data.metadataSynced) {
+        const refresh = await fetch(`/api/admin/pornstars?limit=100&q=${encodeURIComponent(star.name)}`);
+        const refreshed = await refresh.json();
+        const row = refreshed.pornstars?.find((p: PornstarRow) => p.id === star.id);
+        if (row) onUpdated(star.id, row);
+      }
       setTpdbOpen(false);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Fetch failed");
@@ -118,7 +131,7 @@ function PornstarImageEditor({
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Delete failed");
       setImageUrl(null);
-      onUpdated(star.id, null);
+      onUpdated(star.id, { hasImage: false, imageUrl: null });
     } catch (e) {
       setError(e instanceof Error ? e.message : "Delete failed");
     } finally {
@@ -210,6 +223,22 @@ function PornstarImageEditor({
           )}
 
           {error && <p className="mt-2 text-xs text-red-400">{error}</p>}
+
+          {star.tpdbSyncedAt && (
+            <div className="mt-3 rounded-lg border border-zinc-800 bg-zinc-950/50 p-3">
+              <p className="text-xs font-medium text-zinc-400">
+                TPDB profile · {new Date(star.tpdbSyncedAt).toLocaleString()}
+              </p>
+              <dl className="mt-2 grid gap-1 text-xs sm:grid-cols-2">
+                {pornstarProfileFields(star).map((f) => (
+                  <div key={f.label} className="contents">
+                    <dt className="text-zinc-600">{f.label}</dt>
+                    <dd className="text-zinc-300">{f.value}</dd>
+                  </div>
+                ))}
+              </dl>
+            </div>
+          )}
         </div>
       </div>
 
@@ -233,7 +262,7 @@ function PornstarImageEditor({
           </div>
 
           {tpdbMatches.length === 0 && !tpdbSearching && (
-            <p className="text-xs text-zinc-500">No performers with images found.</p>
+            <p className="text-xs text-zinc-500">No performers found.</p>
           )}
 
           <ul className="max-h-48 space-y-2 overflow-y-auto">
@@ -303,11 +332,9 @@ export default function AdminPornstars({
     return () => clearTimeout(t);
   }, [q, load]);
 
-  function handleUpdated(id: string, imageUrl: string | null) {
+  function handleUpdated(id: string, patch: Partial<PornstarRow>) {
     setRows((prev) =>
-      prev.map((r) =>
-        r.id === id ? { ...r, hasImage: Boolean(imageUrl), imageUrl } : r
-      )
+      prev.map((r) => (r.id === id ? { ...r, ...patch } : r))
     );
   }
 

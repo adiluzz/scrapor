@@ -97,6 +97,8 @@ export default forwardRef(function VideoPlayer(
   const playerRef = useRef<Player | null>(null);
   const cuesRef = useRef<StoryboardCue[]>(storyboard?.cues ?? []);
   const scrubCleanupRef = useRef<(() => void) | null>(null);
+  const progressSeekCleanupRef = useRef<(() => void) | null>(null);
+  const trackingAttachedRef = useRef(false);
   const [status, setStatus] = useState<"idle" | "ad" | "loading" | "playing" | "error">("idle");
   const [controlsVisible, setControlsVisible] = useState(true);
   const [adSkipIn, setAdSkipIn] = useState<number | null>(null);
@@ -187,6 +189,8 @@ export default forwardRef(function VideoPlayer(
 
     return () => {
       scrubCleanupRef.current?.();
+      progressSeekCleanupRef.current?.();
+      trackingAttachedRef.current = false;
       flushWatch(true);
       player.dispose();
       playerRef.current = null;
@@ -247,6 +251,80 @@ export default forwardRef(function VideoPlayer(
       window.removeEventListener("orientationchange", syncLandscapeFullscreen);
     };
   }, [status]);
+
+  function seekTo(timeSec: number) {
+    const player = playerRef.current;
+    if (!player) return;
+    const dur = player.duration();
+    if (!dur || !Number.isFinite(dur)) return;
+    player.userActive(true);
+    player.currentTime(Math.min(dur, Math.max(0, timeSec)));
+  }
+
+  function skipBy(deltaSec: number) {
+    const player = playerRef.current;
+    if (!player) return;
+    const dur = player.duration();
+    const cur = player.currentTime() || 0;
+    if (!dur || !Number.isFinite(dur)) return;
+    seekTo(cur + deltaSec);
+  }
+
+  function attachProgressSeek() {
+    progressSeekCleanupRef.current?.();
+    progressSeekCleanupRef.current = null;
+
+    const player = playerRef.current;
+    if (!player) return;
+
+    const bind = () => {
+      const progressControl = player.el().querySelector(".vjs-progress-control") as HTMLElement | null;
+      const seekBar = player.el().querySelector(".vjs-progress-holder") as HTMLElement | null;
+      if (!progressControl || !seekBar) return;
+
+      const seekFromClientX = (clientX: number) => {
+        const rect = seekBar.getBoundingClientRect();
+        if (rect.width <= 0) return;
+        const pct = Math.min(1, Math.max(0, (clientX - rect.left) / rect.width));
+        const dur = player.duration();
+        if (!dur || !Number.isFinite(dur)) return;
+        player.userActive(true);
+        player.currentTime(pct * dur);
+      };
+
+      const onPointerDown = (e: MouseEvent | TouchEvent) => {
+        if ("button" in e && e.button !== 0) return;
+        const clientX = "touches" in e ? e.touches[0]?.clientX : e.clientX;
+        if (clientX == null) return;
+        e.preventDefault();
+        seekFromClientX(clientX);
+      };
+
+      const onPointerMove = (e: MouseEvent | TouchEvent) => {
+        if (!("buttons" in e) || e.buttons !== 1) {
+          if (!("touches" in e)) return;
+        }
+        const clientX = "touches" in e ? e.touches[0]?.clientX : e.clientX;
+        if (clientX == null) return;
+        seekFromClientX(clientX);
+      };
+
+      progressControl.addEventListener("mousedown", onPointerDown);
+      progressControl.addEventListener("touchstart", onPointerDown, { passive: false });
+      progressControl.addEventListener("mousemove", onPointerMove);
+      progressControl.addEventListener("touchmove", onPointerMove, { passive: false });
+
+      progressSeekCleanupRef.current = () => {
+        progressControl.removeEventListener("mousedown", onPointerDown);
+        progressControl.removeEventListener("touchstart", onPointerDown);
+        progressControl.removeEventListener("mousemove", onPointerMove);
+        progressControl.removeEventListener("touchmove", onPointerMove);
+      };
+    };
+
+    if (player.readyState() >= 1) bind();
+    else player.one("loadedmetadata", bind);
+  }
 
   function attachScrubberPreview() {
     scrubCleanupRef.current?.();
@@ -323,6 +401,14 @@ export default forwardRef(function VideoPlayer(
   function attachContentTracking() {
     const player = playerRef.current;
     if (!player) return;
+
+    attachProgressSeek();
+
+    if (trackingAttachedRef.current) {
+      attachScrubberPreview();
+      return;
+    }
+    trackingAttachedRef.current = true;
 
     player.on("timeupdate", () => {
       const t = player.currentTime() || 0;
@@ -528,17 +614,36 @@ export default forwardRef(function VideoPlayer(
 
       {heatmap.length > 0 && status === "playing" && (
         <div
-          className={`pointer-events-none absolute inset-x-0 z-10 px-3 transition-opacity duration-300 video-player-heatmap ${
-            controlsVisible ? "opacity-100" : "opacity-0"
+          className={`absolute inset-x-0 px-3 transition-opacity duration-300 video-player-heatmap ${
+            controlsVisible ? "opacity-100" : "pointer-events-none opacity-0"
           }`}
         >
-          <Heatmap buckets={heatmap} />
+          <Heatmap buckets={heatmap} bucketSec={BUCKET_SEC} onSeek={seekTo} />
         </div>
       )}
 
       <div data-vjs-player className="w-full overflow-hidden rounded-xl border border-zinc-800/80 bg-black shadow-[0_0_0_1px_rgba(212,175,55,0.08)]">
         <div ref={videoRef} className="w-full" />
       </div>
+
+      {status === "playing" && (
+        <>
+          <button
+            type="button"
+            aria-label="Skip back 7 seconds"
+            onClick={() => skipBy(-SKIP_SEC)}
+            className="absolute left-0 top-0 z-[5] w-[38%] bg-transparent"
+            style={{ bottom: "var(--player-bar-height)" }}
+          />
+          <button
+            type="button"
+            aria-label="Skip forward 7 seconds"
+            onClick={() => skipBy(SKIP_SEC)}
+            className="absolute right-0 top-0 z-[5] w-[38%] bg-transparent"
+            style={{ bottom: "var(--player-bar-height)" }}
+          />
+        </>
+      )}
 
       <div className={`absolute inset-0 z-20 flex flex-col bg-black ${status === "ad" ? "" : "hidden"}`}>
         <video ref={adVideoRef} className="h-full w-full" playsInline />

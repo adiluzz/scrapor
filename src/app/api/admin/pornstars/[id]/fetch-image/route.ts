@@ -10,6 +10,7 @@ import {
 } from "@/lib/theporndb";
 import { savePornstarImage } from "@/lib/pornstar-image-store";
 import { pornstarImageUrl } from "@/lib/pornstar-image";
+import { tpdbPerformerToPornstarData } from "@/lib/tpdb-pornstar-sync";
 
 export async function POST(
   request: Request,
@@ -48,25 +49,33 @@ export async function POST(
 
     if (!performer) {
       return NextResponse.json(
-        { error: `No performer with images found on ThePornDB for "${star.name}"` },
+        { error: `No performer found on ThePornDB for "${star.name}"` },
         { status: 404 }
       );
     }
 
-    const image = pickBestTpdbImage(performer.images);
-    if (!image?.url) {
-      return NextResponse.json({ error: "Performer has no usable images" }, { status: 404 });
-    }
+    const updated = await prisma.pornstar.update({
+      where: { id: star.id },
+      data: tpdbPerformerToPornstarData(performer),
+    });
 
-    const { buffer, contentType } = await downloadTpdbImage(image.url);
-    await savePornstarImage(star.siteId, star.id, buffer, contentType);
+    const image = pickBestTpdbImage(performer.images);
+    let imageSaved = false;
+    if (image?.url) {
+      const { buffer, contentType } = await downloadTpdbImage(image.url);
+      await savePornstarImage(star.siteId, star.id, buffer, contentType);
+      imageSaved = true;
+    }
 
     return NextResponse.json({
       ok: true,
       source: "theporndb",
       tpdbId: performer.id,
       tpdbName: performer.name,
-      imageUrl: `/media/pornstar/${star.id}`,
+      metadataSynced: true,
+      imageSaved,
+      imageUrl: imageSaved ? `/media/pornstar/${star.id}` : pornstarImageUrl(updated),
+      syncedAt: updated.tpdbSyncedAt,
     });
   } catch (err) {
     const message = err instanceof Error ? err.message : "Fetch failed";

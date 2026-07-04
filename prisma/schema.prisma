@@ -129,14 +129,33 @@ model Video {
 }
 
 model Pornstar {
-  id      String          @id @default(cuid())
-  siteId  String
-  site    Site            @relation(fields: [siteId], references: [id])
-  name    String
-  slug    String
-  bio     String?
-  s3Image String?
-  videos  VideoPornstar[]
+  id               String          @id @default(cuid())
+  siteId           String
+  site             Site            @relation(fields: [siteId], references: [id])
+  name             String
+  slug             String
+  bio              String?
+  s3Image          String?
+  tpdbId           String?
+  disambiguation   String?
+  aliases          String? // JSON string[]
+  gender           String?
+  birthDate        String?
+  deathDate        String?
+  ethnicity        String?
+  country          String?
+  eyeColor         String?
+  hairColor        String?
+  heightCm         Int?
+  measurements     String? // JSON { band_size?, cup_size?, waist?, hip?, display? }
+  breastType       String?
+  careerStartYear  Int?
+  careerEndYear    Int?
+  tattoos          String? // JSON { location, description? }[]
+  piercings        String? // JSON { location, description? }[]
+  urls             String? // JSON { url, type }[]
+  tpdbSyncedAt     DateTime?
+  videos           VideoPornstar[]
 
   @@unique([siteId, slug])
 }

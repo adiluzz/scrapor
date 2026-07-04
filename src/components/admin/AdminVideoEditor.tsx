@@ -23,6 +23,9 @@ type VideoForm = {
   tags: string[];
   pornstars: string[];
   tagDetails: { name: string; slug: string; icon: string | null }[];
+  previewVersion: number | null;
+  hasPreview: boolean;
+  hasVideoSource: boolean;
 };
 
 const STATUSES = ["PENDING", "PROCESSING", "READY", "FAILED"] as const;
@@ -41,6 +44,7 @@ export default function AdminVideoEditor({ videoId }: { videoId: string }) {
   const [pornstarsText, setPornstarsText] = useState("");
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [regenerating, setRegenerating] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
   const [taxonomyTags, setTaxonomyTags] = useState<string[]>([]);
@@ -73,6 +77,9 @@ export default function AdminVideoEditor({ videoId }: { videoId: string }) {
         tags: v.tags ?? [],
         pornstars: v.pornstars ?? [],
         tagDetails: v.tagDetails ?? [],
+        previewVersion: v.previewVersion ?? null,
+        hasPreview: Boolean(v.hasPreview),
+        hasVideoSource: Boolean(v.hasVideoSource),
       });
       setTagsText((v.tags ?? []).join(", "));
       setPornstarsText((v.pornstars ?? []).join(", "));
@@ -104,6 +111,27 @@ export default function AdminVideoEditor({ videoId }: { videoId: string }) {
   const hasVerifiedTag = parseList(tagsText).some(
     (t) => t.toLowerCase() === PISS_SWALLOW_VERIFIED_NAME
   );
+
+  async function regeneratePreview() {
+    if (!form) return;
+    if (!confirm("Regenerate hover preview and storyboard for this video? This may take a minute.")) {
+      return;
+    }
+    setRegenerating(true);
+    setError(null);
+    setSuccess(null);
+    try {
+      const res = await fetch(`/api/admin/videos/${videoId}/regenerate-preview`, { method: "POST" });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Regeneration failed");
+      setSuccess("Preview regeneration queued — refresh in about a minute to see v2 preview.");
+      await load();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Regeneration failed");
+    } finally {
+      setRegenerating(false);
+    }
+  }
 
   async function save() {
     if (!form) return;
@@ -161,7 +189,18 @@ export default function AdminVideoEditor({ videoId }: { videoId: string }) {
   return (
     <section className="mt-8 rounded-xl border border-zinc-800 bg-zinc-900/40 p-4 sm:p-6">
       <h2 className="text-lg font-semibold text-white">Edit video</h2>
-      <p className="mt-1 text-xs text-zinc-500">Update metadata, taxonomy, and publication state.</p>
+      <p className="mt-1 text-xs text-zinc-500">
+        Update metadata, taxonomy, and publication state.
+        {form.hasPreview && (
+          <>
+            {" "}
+            Hover preview:{" "}
+            <span className="text-zinc-400">
+              {form.previewVersion === 2 ? "v2 (scene montage)" : "legacy"}
+            </span>
+          </>
+        )}
+      </p>
 
       {error && <p className="mt-3 text-sm text-red-400">{error}</p>}
       {success && <p className="mt-3 text-sm text-emerald-400">{success}</p>}
@@ -327,7 +366,7 @@ export default function AdminVideoEditor({ videoId }: { videoId: string }) {
         </label>
       </div>
 
-      <div className="mt-6 flex gap-3">
+      <div className="mt-6 flex flex-wrap gap-3">
         <button
           type="button"
           disabled={saving}
@@ -335,6 +374,15 @@ export default function AdminVideoEditor({ videoId }: { videoId: string }) {
           className="rounded-lg bg-brand-600 px-4 py-2 text-sm font-medium text-white hover:bg-brand-500 disabled:opacity-50"
         >
           {saving ? "Saving…" : "Save changes"}
+        </button>
+        <button
+          type="button"
+          disabled={regenerating || !form.hasVideoSource}
+          onClick={regeneratePreview}
+          className="rounded-lg border border-zinc-700 px-4 py-2 text-sm text-zinc-300 hover:bg-zinc-800 disabled:opacity-50"
+          title="Rebuild ~4s scene montage hover preview and adaptive storyboard"
+        >
+          {regenerating ? "Queuing…" : "Regenerate preview (v2)"}
         </button>
         <button
           type="button"

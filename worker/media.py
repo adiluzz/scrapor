@@ -6,10 +6,18 @@ import os
 import subprocess
 import urllib.request
 
-STORYBOARD_INTERVAL = 10   # seconds between storyboard frames
+# ── Preview (grid hover) ──────────────────────────────────────────────
+PREVIEW_VERSION = 2
+PREVIEW_TARGET_SEC = 4.0
+PREVIEW_MAX_SEGMENTS = 8
+PREVIEW_SEGMENT_SEC = 0.5
+PREVIEW_MAX_WIDTH = 480
+
+# ── Storyboard (player scrub) ─────────────────────────────────────────
 STORYBOARD_COLS = 5
-TILE_W = 160
-TILE_H = 90
+STORYBOARD_MAX_TILES = 100
+STORYBOARD_TILE_W = 160
+STORYBOARD_TILE_H = 90
 
 
 def probe_duration(video_path: str) -> int:
@@ -42,17 +50,144 @@ def transcode_to_mp4(src: str, dest: str, timeout=7200) -> bool:
         return False
 
 
-def make_preview(video_path: str, dest: str, timeout=1800) -> bool:
-    """Muted hover-preview clip: first 5s of every minute, downscaled."""
-    if os.path.exists(dest) and os.path.getsize(dest) > 10_000:
-        return True
-    vf = "select='lt(mod(t,60),5)',setpts=N/FRAME_RATE/TB,scale=trunc(iw/2)*2:trunc(ih/2)*2"
-    cmd = ["ffmpeg", "-i", video_path, "-vf", vf, "-an", "-c:v", "libx264",
-           "-crf", "28", "-preset", "veryfast", "-y", dest]
+def _evenly_spaced_times(duration: int, count: int) -> list[float]:
+    if duration <= 0 or count <= 0:
+        return []
+    step = duration / count
+    return [min(duration - 0.1, step * (i + 0.5)) for i in range(count)]
+
+
+def _scene_midpoints(video_path: str, duration: int, max_scenes: int) -> list[float]:
+    """Scene-aware sample points; falls back to evenly spaced times."""
+    try:
+        from scenedetect import ContentDetector, SceneManager, open_video
+    except ImportError:
+        return _evenly_spaced_times(duration, max_scenes)
+
+    try:
+        video = open_video(video_path)
+        scene_manager = SceneManager()
+        scene_manager.add_detector(ContentDetector(threshold=27.0))
+        scene_manager.detect_scenes(video)
+        scene_list = scene_manager.get_scene_list()
+    except Exception:
+        return _evenly_spaced_times(duration, max_scenes)
+
+    if not scene_list:
+        return _evenly_spaced_times(duration, max_scenes)
+
+    midpoints = [
+        s.get_seconds() + (e.get_seconds() - s.get_seconds()) / 2
+        for s, e in scene_list
+    ]
+    if len(midpoints) <= max_scenes:
+        return midpoints
+
+    # Subsample scenes evenly across the timeline.
+    picked: list[float] = []
+    step = len(midpoints) / max_scenes
+    for i in range(max_scenes):
+        picked.append(midpoints[min(len(midpoints) - 1, int(i * step))])
+    return picked
+
+
+def _extract_preview_segment(
+    video_path: str, start: float, dest: str, timeout: int
+) -> bool:
+    cmd = [
+        "ffmpeg", "-y",
+        "-ss", f"{max(0.0, start):.3f}", "-i", video_path,
+        "-t", str(PREVIEW_SEGMENT_SEC),
+        "-vf", f"scale={PREVIEW_MAX_WIDTH}:-2:flags=lanczos",
+        "-an", "-c:v", "libx264", "-crf", "28", "-preset", "veryfast",
+        "-movflags", "+faststart", dest,
+    ]
+    try:
+        ok = subprocess.run(cmd, capture_output=True, timeout=timeout).returncode == 0
+        return ok and os.path.exists(dest) and os.path.getsize(dest) > 500
+    except Exception:
+        return False
+
+
+def _fallback_preview_clip(video_path: str, dest: str, duration: int, timeout: int) -> bool:
+    """Single short clip from ~10% into the video (YouTube-style fallback)."""
+    start = max(0.0, duration * 0.1)
+    cmd = [
+        "ffmpeg", "-y",
+        "-ss", f"{start:.3f}", "-i", video_path,
+        "-t", str(PREVIEW_TARGET_SEC),
+        "-vf", f"scale={PREVIEW_MAX_WIDTH}:-2:flags=lanczos",
+        "-an", "-c:v", "libx264", "-crf", "28", "-preset", "veryfast",
+        "-movflags", "+faststart", dest,
+    ]
     try:
         return subprocess.run(cmd, capture_output=True, timeout=timeout).returncode == 0
     except Exception:
         return False
+
+
+def make_preview(
+    video_path: str,
+    dest: str,
+    duration: int = 0,
+    force: bool = False,
+    timeout: int = 1800,
+) -> bool:
+    """
+    Muted grid-hover preview: scene montage capped at PREVIEW_TARGET_SEC.
+
+    v2 (default): up to 8 × 0.5s scene snippets (~4s total), width ≤480px.
+    Legacy v1 previews remain valid until regenerated (force=True).
+    """
+    if not force and os.path.exists(dest) and os.path.getsize(dest) > 10_000:
+        return True
+
+    if duration <= 0:
+        duration = probe_duration(video_path)
+    if duration <= 0:
+        return False
+
+    tmp_dir = os.path.dirname(os.path.abspath(dest)) or "."
+    times = _scene_midpoints(video_path, duration, PREVIEW_MAX_SEGMENTS)
+    segments: list[str] = []
+
+    for i, midpoint in enumerate(times):
+        seg_path = os.path.join(tmp_dir, f"preview_seg_{i:02d}.mp4")
+        start = max(0.0, midpoint - PREVIEW_SEGMENT_SEC / 2)
+        if _extract_preview_segment(video_path, start, seg_path, timeout):
+            segments.append(seg_path)
+
+    if not segments:
+        return _fallback_preview_clip(video_path, dest, duration, timeout)
+
+    list_path = os.path.join(tmp_dir, "preview_concat.txt")
+    try:
+        with open(list_path, "w", encoding="utf-8") as f:
+            for path in segments:
+                f.write(f"file '{path}'\n")
+        cmd = [
+            "ffmpeg", "-y", "-f", "concat", "-safe", "0", "-i", list_path,
+            "-t", str(PREVIEW_TARGET_SEC),
+            "-an", "-c:v", "libx264", "-crf", "28", "-preset", "veryfast",
+            "-movflags", "+faststart", dest,
+        ]
+        ok = subprocess.run(cmd, capture_output=True, timeout=timeout).returncode == 0
+    except Exception:
+        ok = False
+    finally:
+        for path in segments:
+            try:
+                os.remove(path)
+            except OSError:
+                pass
+        try:
+            os.remove(list_path)
+        except OSError:
+            pass
+
+    if ok and os.path.exists(dest) and os.path.getsize(dest) > 10_000:
+        return True
+    return _fallback_preview_clip(video_path, dest, duration, timeout)
 
 
 def make_thumbnail(video_path: str, dest: str, thumbnail_url: str = "") -> bool:
@@ -79,22 +214,43 @@ def make_thumbnail(video_path: str, dest: str, thumbnail_url: str = "") -> bool:
         return False
 
 
-def make_storyboard(video_path: str, sprite_dest: str, vtt_dest: str, duration: int) -> bool:
+def _storyboard_interval(duration: int) -> int:
+    """Adaptive interval — keeps tile count ≤ STORYBOARD_MAX_TILES on one sheet."""
+    interval = 10
+    while max(1, math.ceil(duration / interval)) > STORYBOARD_MAX_TILES:
+        interval += 5
+    return min(interval, 60)
+
+
+def make_storyboard(
+    video_path: str,
+    sprite_dest: str,
+    vtt_dest: str,
+    duration: int,
+    force: bool = False,
+) -> bool:
     """
-    Build a sprite sheet (grid of frames every STORYBOARD_INTERVAL s) and a WebVTT
-    file mapping timecodes -> sprite regions (#xywh=x,y,w,h).
+    Build a sprite sheet + WebVTT for scrubber thumbnails.
+    Interval adapts to video length (10s–60s) so long videos stay on one sheet.
     """
+    if not force and os.path.exists(sprite_dest) and os.path.exists(vtt_dest):
+        return True
+
     if duration <= 0:
         duration = probe_duration(video_path)
     if duration <= 0:
         return False
 
-    count = max(1, math.ceil(duration / STORYBOARD_INTERVAL))
+    interval = _storyboard_interval(duration)
+    count = max(1, math.ceil(duration / interval))
     rows = math.ceil(count / STORYBOARD_COLS)
-    fps = 1.0 / STORYBOARD_INTERVAL
+    fps = 1.0 / interval
 
-    vf = f"fps={fps},scale={TILE_W}:{TILE_H},tile={STORYBOARD_COLS}x{rows}"
-    cmd = ["ffmpeg", "-y", "-i", video_path, "-vf", vf, "-frames:v", "1", "-q:v", "4", sprite_dest]
+    vf = (
+        f"fps={fps},scale={STORYBOARD_TILE_W}:{STORYBOARD_TILE_H},"
+        f"tile={STORYBOARD_COLS}x{rows}"
+    )
+    cmd = ["ffmpeg", "-y", "-i", video_path, "-vf", vf, "-frames:v", "1", "-q:v", "5", sprite_dest]
     try:
         if subprocess.run(cmd, capture_output=True, timeout=1800).returncode != 0:
             return False
@@ -110,13 +266,13 @@ def make_storyboard(video_path: str, sprite_dest: str, vtt_dest: str, duration: 
     sprite_name = os.path.basename(sprite_dest)
     lines = ["WEBVTT", ""]
     for i in range(count):
-        start = i * STORYBOARD_INTERVAL
-        end = min(duration, start + STORYBOARD_INTERVAL)
-        x = (i % STORYBOARD_COLS) * TILE_W
-        y = (i // STORYBOARD_COLS) * TILE_H
+        start = i * interval
+        end = min(duration, start + interval)
+        x = (i % STORYBOARD_COLS) * STORYBOARD_TILE_W
+        y = (i // STORYBOARD_COLS) * STORYBOARD_TILE_H
         lines.append(f"{ts(start)} --> {ts(end)}")
-        lines.append(f"{sprite_name}#xywh={x},{y},{TILE_W},{TILE_H}")
+        lines.append(f"{sprite_name}#xywh={x},{y},{STORYBOARD_TILE_W},{STORYBOARD_TILE_H}")
         lines.append("")
-    with open(vtt_dest, "w") as f:
+    with open(vtt_dest, "w", encoding="utf-8") as f:
         f.write("\n".join(lines))
     return True

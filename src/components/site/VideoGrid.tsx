@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import type { VideoCardData } from "@/lib/queries";
+import VideoCardPreview from "@/components/site/VideoCardPreview";
 
 function timeAgo(date: Date | string) {
   const d = new Date(date);
@@ -34,18 +35,7 @@ function Card({
   onLeave: () => void;
   register: (el: HTMLElement | null) => void;
 }) {
-  const videoRef = useRef<HTMLVideoElement>(null);
-
-  useEffect(() => {
-    const el = videoRef.current;
-    if (!el) return;
-    if (playing) {
-      el.play().catch(() => {});
-    } else {
-      el.pause();
-      try { el.currentTime = 0; } catch {}
-    }
-  }, [playing]);
+  const hasPreview = Boolean(v.preview.previewMp4 || v.preview.previewSprite);
 
   return (
     <Link
@@ -62,21 +52,10 @@ function Card({
           alt={v.title}
           loading="lazy"
           className={`absolute inset-0 h-full w-full object-cover transition-opacity duration-200 ${
-            playing ? "opacity-0" : "opacity-100"
+            playing && hasPreview ? "opacity-0" : "opacity-100"
           }`}
         />
-        <video
-          ref={videoRef}
-          muted
-          loop
-          playsInline
-          preload="none"
-          className={`absolute inset-0 h-full w-full object-cover transition-opacity duration-200 ${
-            playing ? "opacity-100" : "opacity-0"
-          }`}
-        >
-          {playing && <source src={v.preview} type="video/mp4" />}
-        </video>
+        <VideoCardPreview data={v.preview} playing={playing && hasPreview} />
         {v.durationLabel && (
           <span className="absolute bottom-1.5 right-1.5 rounded bg-black/80 px-1.5 py-0.5 text-[11px] text-white">
             {v.durationLabel}
@@ -99,7 +78,7 @@ function Card({
 }
 
 /**
- * Responsive grid. Desktop: hover swaps in the muted looping preview clip.
+ * Responsive grid. Desktop: hover swaps in muted looping preview clip.
  * Mobile (no hover): an IntersectionObserver plays the single most in-view
  * card's preview at a time.
  */

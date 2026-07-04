@@ -1,16 +1,14 @@
 import type { Pornstar } from "@prisma/client";
 import {
   hasTpdbProfile,
-  parsePornstarUrls,
   pornstarProfileFields,
   type PornstarProfileData,
 } from "@/lib/pornstar-profile";
 
 export default function PornstarProfile({ star }: { star: PornstarProfileData & Pick<Pornstar, "bio"> }) {
   const fields = pornstarProfileFields(star);
-  const urls = parsePornstarUrls(star.urls);
 
-  if (!star.bio && fields.length === 0 && urls.length === 0) return null;
+  if (!star.bio && fields.length === 0 && !hasTpdbProfile(star)) return null;
 
   return (
     <div className="mt-3 space-y-3">
@@ -23,22 +21,6 @@ export default function PornstarProfile({ star }: { star: PornstarProfileData & 
             </div>
           ))}
         </dl>
-      )}
-
-      {urls.length > 0 && (
-        <div className="flex flex-wrap gap-2">
-          {urls.map((u) => (
-            <a
-              key={`${u.type}-${u.url}`}
-              href={u.url}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="rounded-full border border-zinc-700 px-2.5 py-0.5 text-xs text-zinc-400 hover:border-brand-500/50 hover:text-brand-300"
-            >
-              {u.type || "Link"}
-            </a>
-          ))}
-        </div>
       )}
 
       {hasTpdbProfile(star) && (

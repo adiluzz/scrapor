@@ -49,6 +49,9 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
       sourceUploadDate: video.sourceUploadDate?.toISOString() ?? null,
       createdAt: video.createdAt.toISOString(),
       updatedAt: video.updatedAt.toISOString(),
+      previewVersion: video.previewVersion,
+      hasPreview: Boolean(video.s3PreviewKey),
+      hasVideoSource: Boolean(video.s3VideoKey),
       tags: video.tags.map((t) => t.tag.name),
       tagDetails: video.tags.map((t) => ({
         name: t.tag.name,

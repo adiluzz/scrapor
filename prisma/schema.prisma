@@ -106,6 +106,7 @@ model Video {
   s3VideoKey         String?
   s3ThumbKey         String? // static jpg
   s3PreviewKey       String? // hover mp4
+  previewVersion     Int?    // 1=legacy montage, 2=scene-capped montage; null=legacy
   s3StoryboardKey    String? // sprite sheet for scrubber thumbnails
   s3StoryboardVttKey String? // WebVTT mapping timecodes -> sprite
   sourceUploadDate   DateTime? // original upload date when scraped (for date sort)

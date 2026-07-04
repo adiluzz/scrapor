@@ -2,6 +2,8 @@ import { headers } from "next/headers";
 import { isS3Configured, presignGet, s3Keys } from "@/lib/storage";
 import { mintAssetUrl } from "@/lib/cdn";
 import { parseStoryboardVtt, type StoryboardCue } from "@/lib/storyboard";
+import { storyboardHoverFrameIndices, storyboardRowCount } from "@/lib/preview";
+import type { VideoCardPreviewData } from "@/components/site/VideoCardPreview";
 
 /** Best-effort client IP from proxy headers (for IP-bound signed URLs). */
 export async function getClientIp(): Promise<string> {
@@ -30,12 +32,31 @@ export async function thumbUrl(video: VideoMediaFields): Promise<string> {
   return `/api/thumbnail-img/${video.id}`;
 }
 
-/** Hover-preview clip URL. */
+/** Hover-preview clip URL (signed CDN — used by sitemap / external refs). */
 export async function previewUrl(video: VideoMediaFields): Promise<string> {
   if (isS3Configured() && video.s3PreviewKey) {
     return mintAssetUrl({ videoId: video.id, file: "preview.mp4", clientIp: await getClientIp() });
   }
   return `/api/thumbnail/${video.id}`;
+}
+
+/**
+ * Grid card hover preview: same-origin MP4 (legacy + v2) with storyboard sprite fallback.
+ * Avoids IP-bound CDN URLs that break in-browser video hover playback.
+ */
+export async function gridCardPreview(
+  video: VideoMediaFields & { durationSec?: number | null }
+): Promise<VideoCardPreviewData> {
+  const previewMp4 = video.s3PreviewKey ? `/media/preview/${video.id}` : null;
+  const previewSprite = video.s3StoryboardKey ? `/media/storyboard/${video.id}` : null;
+  return {
+    previewMp4,
+    previewSprite,
+    previewSpriteFrames: previewSprite
+      ? storyboardHoverFrameIndices(video.durationSec)
+      : [],
+    previewSpriteRows: previewSprite ? storyboardRowCount(video.durationSec) : 0,
+  };
 }
 
 /** Storyboard sprite + WebVTT URLs for scrubber thumbnails (null when unavailable). */

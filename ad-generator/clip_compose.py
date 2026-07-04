@@ -74,9 +74,9 @@ def compose_promo_ad(
     raw_path = work / "raw_concat.mp4"
     concat_simple(parts, raw_path)
 
-    lockup_png = Path(CONFIG.intro_path).parent / "pisster-lockup.png"
+    lockup_png = Path(CONFIG.brand_lockup_path)
     final_path = work / "final.mp4"
-    if lockup_png.exists():
+    if lockup_png.exists() and lockup_png.suffix.lower() == ".png":
         overlay_logo(raw_path, final_path, lockup_png, logo_position, logo_opacity)
     else:
         final_path.write_bytes(raw_path.read_bytes())

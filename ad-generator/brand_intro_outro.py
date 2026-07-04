@@ -21,9 +21,11 @@ def ensure_brand_assets() -> None:
         log.warning("brand_lockup_missing path=%s", lockup)
         return
 
-    png_path = assets_dir / "pisster-lockup.png"
-    if not png_path.exists():
+    png_path = lockup if lockup.suffix.lower() == ".png" else assets_dir / "pisster-lockup.png"
+    if png_path != lockup and not png_path.exists():
         _svg_to_png(lockup, png_path)
+    elif lockup.suffix.lower() == ".png":
+        png_path = lockup
 
     if not Path(CONFIG.intro_path).exists():
         _render_intro(png_path, Path(CONFIG.intro_path))

@@ -88,11 +88,11 @@ def process_iteration(conn, iteration_id: str) -> None:
             work_dir=work_dir,
         )
 
-        lockup_png = Path(CONFIG.intro_path).parent / "pisster-lockup.png"
+        lockup_png = Path(CONFIG.brand_lockup_path)
         final_path = work_dir / "final.mp4"
         logo_position = model_params.get("logoPosition") or "bottom-right"
         logo_opacity = float(model_params.get("logoOpacity") or 0.85)
-        if lockup_png.exists():
+        if lockup_png.exists() and lockup_png.suffix.lower() == ".png":
             overlay_logo(raw_path, final_path, lockup_png, logo_position, logo_opacity)
         else:
             final_path.write_bytes(raw_path.read_bytes())

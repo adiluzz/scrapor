@@ -15,7 +15,7 @@ COPY public/brand ./public/brand
 ENV PYTHONUNBUFFERED=1
 ENV PYTHONPATH=/app/ad-generator
 ENV AD_GENERATOR_ASSETS_DIR=/app/ad-generator/assets
-ENV PROMO_AD_BRAND_LOCKUP=/app/public/brand/pisster-lockup.svg
+ENV PROMO_AD_BRAND_LOCKUP=/app/public/brand/pisster-lockup.png
 
 RUN mkdir -p /app/ad-generator/assets \
     && python -c "from brand_intro_outro import ensure_brand_assets; ensure_brand_assets()" \

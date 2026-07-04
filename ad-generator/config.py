@@ -40,7 +40,7 @@ class Config:
             ).rstrip("/") + "/",
             brand_lockup_path=os.environ.get(
                 "PROMO_AD_BRAND_LOCKUP",
-                "/app/public/brand/pisster-lockup.svg",
+                "/app/public/brand/pisster-lockup.png",
             ),
             intro_path=os.path.join(assets, "intro_1080p.mp4"),
             outro_path=os.path.join(assets, "outro_1080p.mp4"),

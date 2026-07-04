@@ -4,7 +4,7 @@ import { useEffect, useRef, useState, forwardRef, useImperativeHandle, type Muta
 import videojs from "video.js";
 import "video.js/dist/video-js.css";
 import type Player from "video.js/dist/types/player";
-import Heatmap from "@/components/player/Heatmap";
+import Heatmap, { heatmapHasData } from "@/components/player/Heatmap";
 import { fireImpressions, type VastAd } from "@/lib/vast";
 import type { StoryboardCue } from "@/lib/storyboard";
 
@@ -612,7 +612,7 @@ export default forwardRef(function VideoPlayer(
       } ${status !== "playing" ? "video-player-preplay" : ""}`}
     >
 
-      {heatmap.length > 0 && status === "playing" && (
+      {heatmapHasData(heatmap) && status === "playing" && (
         <div
           className={`absolute inset-x-0 px-3 transition-opacity duration-300 video-player-heatmap ${
             controlsVisible ? "opacity-100" : "pointer-events-none opacity-0"

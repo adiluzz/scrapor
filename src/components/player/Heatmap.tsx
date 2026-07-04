@@ -4,6 +4,10 @@
  * "Most replayed" bar rendered above the scrubber. `buckets` is the aggregate
  * per-N-second watch counter array; values are normalized to bar heights.
  */
+export function heatmapHasData(buckets: number[] | null | undefined): boolean {
+  return Array.isArray(buckets) && buckets.some((b) => b > 0);
+}
+
 export default function Heatmap({
   buckets,
   bucketSec = 5,
@@ -14,8 +18,8 @@ export default function Heatmap({
   /** Seek to the start of a bucket when a bar is clicked. */
   onSeek?: (timeSec: number) => void;
 }) {
-  if (!buckets || buckets.length === 0) return null;
-  const max = Math.max(...buckets, 1);
+  if (!heatmapHasData(buckets)) return null;
+  const max = Math.max(...buckets);
 
   return (
     <div className="flex h-8 w-full items-end gap-px overflow-hidden rounded-t bg-black/30">

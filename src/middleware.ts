@@ -47,12 +47,15 @@ export default auth((req) => {
     return NextResponse.redirect(url);
   }
 
+  // Public media routes (thumbnails, pornstar portraits, etc.) — same handlers on both hosts.
+  const isMediaRoute = pathname.startsWith("/media/");
+
   if (isAdminHost && !isInternal) {
     const role = req.auth?.user?.role;
     const isAdmin = role === "ADMIN";
     const onLogin = pathname === "/login" || pathname.startsWith("/api/");
 
-    if (!isAdmin && !onLogin) {
+    if (!isAdmin && !onLogin && !isMediaRoute) {
       const url = req.nextUrl.clone();
       url.pathname = "/login";
       url.searchParams.set("callbackUrl", pathname);
@@ -60,7 +63,13 @@ export default auth((req) => {
     }
 
     // Rewrite admin-host root paths into the /admin section.
-    if (isAdmin && !pathname.startsWith("/admin") && !pathname.startsWith("/api") && pathname !== "/login") {
+    if (
+      isAdmin &&
+      !pathname.startsWith("/admin") &&
+      !pathname.startsWith("/api") &&
+      !isMediaRoute &&
+      pathname !== "/login"
+    ) {
       const url = req.nextUrl.clone();
       url.pathname = `/admin${pathname === "/" ? "" : pathname}`;
       return NextResponse.rewrite(url, { request: { headers: requestHeaders } });

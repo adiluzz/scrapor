@@ -1,6 +1,7 @@
 import type { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/db";
-import { thumbUrl, previewUrl } from "@/lib/media";
+import { thumbUrl, gridCardPreview } from "@/lib/media";
+import type { VideoCardPreviewData } from "@/components/site/VideoCardPreview";
 import { formatDuration } from "@/lib/videos";
 
 export const PAGE_SIZE = 24;
@@ -87,7 +88,7 @@ export interface VideoCardData {
   viewCount: number;
   createdAt: Date;
   thumb: string;
-  preview: string;
+  preview: VideoCardPreviewData;
   pornstars: { name: string; slug: string }[];
 }
 
@@ -100,6 +101,7 @@ async function toCard(v: {
   createdAt: Date;
   s3ThumbKey: string | null;
   s3PreviewKey: string | null;
+  s3StoryboardKey: string | null;
   pornstars?: { pornstar: { name: string; slug: string } }[];
 }): Promise<VideoCardData> {
   return {
@@ -110,7 +112,7 @@ async function toCard(v: {
     viewCount: v.viewCount,
     createdAt: v.createdAt,
     thumb: await thumbUrl(v),
-    preview: await previewUrl(v),
+    preview: await gridCardPreview(v),
     pornstars: (v.pornstars || []).map((p) => p.pornstar),
   };
 }

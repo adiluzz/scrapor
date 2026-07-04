@@ -256,21 +256,30 @@ class FalProvider(VideoProvider):
 
     @staticmethod
     def _result_url(endpoint: str, request_id: str, raw_url: str | None = None) -> str:
-        """Normalize fal queue result URL (must end with /response)."""
-        url = (raw_url or f"https://queue.fal.run/{endpoint}/requests/{request_id}").rstrip("/")
-        if not url.endswith("/response"):
-            url = f"{url}/response"
-        return url
+        """Build fal queue result URL (GET, no /response suffix for Kling)."""
+        if raw_url:
+            return raw_url.rstrip("/")
+        # Kling/Seedance queue responses use a shortened app prefix in response_url.
+        app_prefix = "/".join(endpoint.split("/")[:2])
+        return f"https://queue.fal.run/{app_prefix}/requests/{request_id}"
 
     @staticmethod
-    def _fal_http_error(err: httpx.HTTPStatusError) -> str:
+    def _parse_fal_error(response: httpx.Response) -> str:
         try:
-            body = err.response.text.strip()
+            payload = response.json()
         except Exception:  # noqa: BLE001
-            body = ""
-        if body:
-            return f"{err}. Response: {body[:800]}"
-        return str(err)
+            return response.text.strip()[:800]
+        if isinstance(payload, dict):
+            detail = payload.get("detail")
+            if isinstance(detail, list) and detail:
+                first = detail[0]
+                if isinstance(first, dict):
+                    msg = first.get("msg") or first.get("type")
+                    if msg:
+                        return str(msg)
+            if payload.get("error"):
+                return str(payload["error"])
+        return str(payload)[:800]
 
     def generate(
         self,
@@ -310,8 +319,9 @@ class FalProvider(VideoProvider):
             request_id = data.get("request_id")
             if not request_id:
                 raise RuntimeError(f"fal response missing request_id: {data}")
+            app_prefix = "/".join(endpoint.split("/")[:2])
             status_url = data.get("status_url") or (
-                f"https://queue.fal.run/{endpoint}/requests/{request_id}/status"
+                f"https://queue.fal.run/{app_prefix}/requests/{request_id}/status"
             )
             result_url = self._result_url(endpoint, request_id, data.get("response_url"))
 
@@ -330,7 +340,12 @@ class FalProvider(VideoProvider):
                     try:
                         result.raise_for_status()
                     except httpx.HTTPStatusError as err:
-                        raise RuntimeError(self._fal_http_error(err)) from err
+                        detail = self._parse_fal_error(err.response)
+                        if err.response.status_code == 422 and "content" in detail.lower():
+                            raise RuntimeError(
+                                f"fal content filter blocked this prompt: {detail}"
+                            ) from err
+                        raise RuntimeError(f"fal result fetch failed: {detail}") from err
                     video_url = result.json().get("video", {}).get("url")
                     if not video_url:
                         raise RuntimeError(f"fal response missing video url: {result.text[:500]}")

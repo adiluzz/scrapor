@@ -254,6 +254,24 @@ class FalProvider(VideoProvider):
         "seedance-2": "fal-ai/bytedance/seedance/v1/pro/text-to-video",
     }
 
+    @staticmethod
+    def _result_url(endpoint: str, request_id: str, raw_url: str | None = None) -> str:
+        """Normalize fal queue result URL (must end with /response)."""
+        url = (raw_url or f"https://queue.fal.run/{endpoint}/requests/{request_id}").rstrip("/")
+        if not url.endswith("/response"):
+            url = f"{url}/response"
+        return url
+
+    @staticmethod
+    def _fal_http_error(err: httpx.HTTPStatusError) -> str:
+        try:
+            body = err.response.text.strip()
+        except Exception:  # noqa: BLE001
+            body = ""
+        if body:
+            return f"{err}. Response: {body[:800]}"
+        return str(err)
+
     def generate(
         self,
         prompt: str,
@@ -290,22 +308,36 @@ class FalProvider(VideoProvider):
             submit.raise_for_status()
             data = submit.json()
             request_id = data.get("request_id")
-            status_url = data.get("status_url") or f"https://queue.fal.run/{endpoint}/requests/{request_id}/status"
-            response_url = data.get("response_url") or f"https://queue.fal.run/{endpoint}/requests/{request_id}"
+            if not request_id:
+                raise RuntimeError(f"fal response missing request_id: {data}")
+            status_url = data.get("status_url") or (
+                f"https://queue.fal.run/{endpoint}/requests/{request_id}/status"
+            )
+            result_url = self._result_url(endpoint, request_id, data.get("response_url"))
 
             for _ in range(180):
                 st = client.get(status_url, headers=headers)
                 st.raise_for_status()
                 st_data = st.json()
-                if st_data.get("status") == "COMPLETED":
-                    result = client.get(response_url, headers=headers)
-                    result.raise_for_status()
+                status = st_data.get("status")
+                if status == "COMPLETED":
+                    result_url = self._result_url(
+                        endpoint,
+                        request_id,
+                        st_data.get("response_url") or result_url,
+                    )
+                    result = client.get(result_url, headers=headers)
+                    try:
+                        result.raise_for_status()
+                    except httpx.HTTPStatusError as err:
+                        raise RuntimeError(self._fal_http_error(err)) from err
                     video_url = result.json().get("video", {}).get("url")
                     if not video_url:
-                        raise RuntimeError("fal response missing video url")
+                        raise RuntimeError(f"fal response missing video url: {result.text[:500]}")
                     return self._download(video_url, work_dir), request_id, None
-                if st_data.get("status") in ("FAILED", "ERROR"):
-                    raise RuntimeError(str(st_data))
+                if status in ("FAILED", "ERROR"):
+                    detail = st_data.get("error") or st_data.get("detail") or st_data
+                    raise RuntimeError(f"fal job failed: {detail}")
                 time.sleep(4)
 
         raise TimeoutError("fal.ai job timed out")

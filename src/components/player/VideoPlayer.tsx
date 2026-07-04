@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState, type MutableRefObject } from "react";
+import { useEffect, useRef, useState, forwardRef, useImperativeHandle, type MutableRefObject } from "react";
 import videojs from "video.js";
 import "video.js/dist/video-js.css";
 import type Player from "video.js/dist/types/player";
@@ -11,8 +11,16 @@ import type { StoryboardCue } from "@/lib/storyboard";
 type Storyboard = { sprite: string; cues: StoryboardCue[] } | null;
 
 const BUCKET_SEC = 5;
-const SKIP_FORWARD_SEC = 7;
-const SKIP_BACK_SEC = 78;
+const SKIP_SEC = 7;
+
+export type VideoPlayerHandle = {
+  getCurrentTime: () => number;
+  getDuration: () => number;
+  seek: (seconds: number) => void;
+  play: () => Promise<void>;
+  pause: () => void;
+  ensurePlaying: () => Promise<void>;
+};
 
 function formatTime(sec: number): string {
   const s = Math.max(0, Math.floor(sec));
@@ -53,22 +61,37 @@ function enterPlayerFullscreen(
   }).catch(() => {});
 }
 
-export default function VideoPlayer({
-  videoId,
-  poster,
-  storyboard,
-  heatmap,
-  initialPositionSec = 0,
-  adminPreview = false,
-}: {
-  videoId: string;
-  poster: string;
-  storyboard: Storyboard;
-  heatmap: number[];
-  initialPositionSec?: number;
-  /** Admin panel: skip ads and allow playback of soft-deleted videos. */
-  adminPreview?: boolean;
-}) {
+export default forwardRef(function VideoPlayer(
+  {
+    videoId,
+    poster,
+    storyboard,
+    heatmap,
+    initialPositionSec = 0,
+    adminPreview = false,
+    clipLoop,
+    onTimeUpdate,
+    onDuration,
+    muted = false,
+    autoStart = false,
+  }: {
+    videoId: string;
+    poster: string;
+    storyboard: Storyboard;
+    heatmap: number[];
+    initialPositionSec?: number;
+    /** Admin panel: skip ads and allow playback of soft-deleted videos. */
+    adminPreview?: boolean;
+    /** Loop playback between start and end (admin clip review). */
+    clipLoop?: { startSec: number; endSec: number };
+    onTimeUpdate?: (currentTime: number) => void;
+    onDuration?: (duration: number) => void;
+    muted?: boolean;
+    /** Admin: start playback automatically on mount. */
+    autoStart?: boolean;
+  },
+  ref
+) {
   const videoRef = useRef<HTMLDivElement>(null);
   const rootRef = useRef<HTMLDivElement>(null);
   const playerRef = useRef<Player | null>(null);
@@ -91,6 +114,23 @@ export default function VideoPlayer({
     scale: number;
   } | null>(null);
   const [touchUi, setTouchUi] = useState(false);
+  const clipLoopRef = useRef(clipLoop);
+  const onTimeUpdateRef = useRef(onTimeUpdate);
+  const onDurationRef = useRef(onDuration);
+  const statusRef = useRef(status);
+
+  useEffect(() => {
+    clipLoopRef.current = clipLoop;
+  }, [clipLoop]);
+  useEffect(() => {
+    onTimeUpdateRef.current = onTimeUpdate;
+  }, [onTimeUpdate]);
+  useEffect(() => {
+    onDurationRef.current = onDuration;
+  }, [onDuration]);
+  useEffect(() => {
+    statusRef.current = status;
+  }, [status]);
 
   useEffect(() => {
     setTouchUi(isTouchDevice());
@@ -286,36 +326,48 @@ export default function VideoPlayer({
 
     player.on("timeupdate", () => {
       const t = player.currentTime() || 0;
-      watchedBuckets.current.add(Math.floor(t / BUCKET_SEC));
-      const now = Date.now();
-      if (now - lastFlush.current > 10_000) {
-        lastFlush.current = now;
-        flushWatch();
+      onTimeUpdateRef.current?.(t);
+      const loop = clipLoopRef.current;
+      if (loop && t >= loop.endSec) {
+        player.currentTime(loop.startSec);
+      }
+      if (!adminPreview) {
+        watchedBuckets.current.add(Math.floor(t / BUCKET_SEC));
+        const now = Date.now();
+        if (now - lastFlush.current > 10_000) {
+          lastFlush.current = now;
+          flushWatch();
+        }
       }
     });
-    player.on("play", () => {
-      if (!viewCounted.current) {
-        viewCounted.current = true;
-        fetch(`/api/videos/${videoId}/view`, { method: "POST" }).catch(() => {});
-      }
-    });
-    player.on("pause", () => flushWatch());
-    player.on("ended", () => flushWatch());
-
-    if (initialPositionSec > 0) {
-      player.one("loadedmetadata", () => player.currentTime(initialPositionSec));
+    if (!adminPreview) {
+      player.on("play", () => {
+        if (!viewCounted.current) {
+          viewCounted.current = true;
+          fetch(`/api/videos/${videoId}/view`, { method: "POST" }).catch(() => {});
+        }
+      });
+      player.on("pause", () => flushWatch());
+      player.on("ended", () => flushWatch());
     }
+
+    player.one("loadedmetadata", () => {
+      const d = player.duration();
+      if (d && Number.isFinite(d)) onDurationRef.current?.(d);
+      if (initialPositionSec > 0) player.currentTime(initialPositionSec);
+    });
 
     attachScrubberPreview();
   }
 
   useEffect(() => {
+    if (adminPreview) return;
     const onUnload = () => flushWatch(true);
     window.addEventListener("beforeunload", onUnload);
     document.addEventListener("visibilitychange", () => document.hidden && flushWatch(true));
     return () => window.removeEventListener("beforeunload", onUnload);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [adminPreview]);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -326,10 +378,10 @@ export default function VideoPlayer({
       const cur = player.currentTime() || 0;
       if (e.key === "ArrowRight") {
         e.preventDefault();
-        player.currentTime(Math.min(player.duration() || cur, cur + SKIP_FORWARD_SEC));
+        player.currentTime(Math.min(player.duration() || cur, cur + SKIP_SEC));
       } else if (e.key === "ArrowLeft") {
         e.preventDefault();
-        player.currentTime(Math.max(0, cur - SKIP_BACK_SEC));
+        player.currentTime(Math.max(0, cur - SKIP_SEC));
       }
     };
     window.addEventListener("keydown", onKey);
@@ -409,6 +461,7 @@ export default function VideoPlayer({
         const { url } = await res.json();
         const player = playerRef.current!;
         player.src({ src: url, type: "video/mp4" });
+        if (muted) player.muted(true);
         attachContentTracking();
         await player.play()?.catch(() => {});
         setStatus("playing");
@@ -425,6 +478,45 @@ export default function VideoPlayer({
       setStatus("error");
     }
   }
+
+  useImperativeHandle(
+    ref,
+    () => ({
+      getCurrentTime: () => playerRef.current?.currentTime() || 0,
+      getDuration: () => playerRef.current?.duration() || 0,
+      seek: (seconds: number) => {
+        playerRef.current?.currentTime(seconds);
+      },
+      play: async () => {
+        await playerRef.current?.play()?.catch(() => {});
+      },
+      pause: () => {
+        playerRef.current?.pause();
+      },
+      ensurePlaying: async () => {
+        if (statusRef.current !== "playing" && statusRef.current !== "loading") {
+          await start();
+        }
+        for (let i = 0; i < 50 && statusRef.current === "loading"; i++) {
+          await new Promise((r) => setTimeout(r, 100));
+        }
+      },
+    }),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [videoId, adminPreview]
+  );
+
+  useEffect(() => {
+    if (!adminPreview || !autoStart) return;
+    start();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [adminPreview, autoStart, videoId]);
+
+  useEffect(() => {
+    const player = playerRef.current;
+    if (!player) return;
+    player.poster(poster);
+  }, [poster]);
 
   return (
     <div
@@ -516,4 +608,4 @@ export default function VideoPlayer({
       )}
     </div>
   );
-}
+});

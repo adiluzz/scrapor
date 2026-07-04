@@ -170,7 +170,8 @@ export default function VideoAgentRunReview({
 
       {!inProgress && status === "DONE" && detections.length === 0 && (
         <p className="py-8 text-center text-sm text-zinc-500">
-          No detections yet. Add a manual clip above or run analysis again.
+          No detections yet. Use the manual clip tool above to mark clips, or run AI analysis from
+          the video agent page.
         </p>
       )}
 

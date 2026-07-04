@@ -47,6 +47,7 @@ export default function VideoAgentPage() {
   const [error, setError] = useState<string | null>(null);
   const [searchResult, setSearchResult] = useState<SearchResult | null>(null);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [manualOnly, setManualOnly] = useState(false);
   const [run, setRun] = useState<AgentRun | null>(null);
 
   useEffect(() => {
@@ -123,7 +124,7 @@ export default function VideoAgentPage() {
   async function startAnalysis() {
     if (!prompt.trim() || !searchResult || selectedIds.size === 0) return;
     setRunning(true);
-    setPolling(true);
+    setPolling(!manualOnly);
     setError(null);
     setRun(null);
     try {
@@ -136,13 +137,14 @@ export default function VideoAgentPage() {
           searchQuery: searchResult.searchQuery,
           extractTargets: searchResult.extractTargets,
           videoIds: Array.from(selectedIds),
+          manualOnly,
         }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Analysis failed");
       const created = data.run as AgentRun;
       setRun(created);
-      if (created.status === "DONE" || created.status === "ERROR") {
+      if (manualOnly || created.status === "DONE" || created.status === "ERROR") {
         setPolling(false);
         setRunning(false);
         router.push(`/admin/video-agent/runs/${created.id}`);
@@ -291,13 +293,24 @@ export default function VideoAgentPage() {
               >
                 {allSelected ? "Deselect all" : "Select all"}
               </button>
+              <label className="flex items-center gap-2 rounded-lg border border-zinc-700 px-4 py-2 text-sm text-zinc-300">
+                <input
+                  type="checkbox"
+                  checked={manualOnly}
+                  onChange={(e) => setManualOnly(e.target.checked)}
+                  className="rounded border-zinc-600"
+                />
+                Manual detection only (skip AI)
+              </label>
               <button
                 type="button"
                 onClick={startAnalysis}
                 disabled={selectedIds.size === 0}
                 className="rounded-lg bg-brand-600 px-5 py-2.5 text-sm font-medium text-white hover:bg-brand-500 disabled:opacity-50"
               >
-                {`Step 2 — Analyze ${selectedIds.size} selected video${selectedIds.size === 1 ? "" : "s"}`}
+                {manualOnly
+                  ? `Create manual run (${selectedIds.size} video${selectedIds.size === 1 ? "" : "s"})`
+                  : `Step 2 — Analyze ${selectedIds.size} selected video${selectedIds.size === 1 ? "" : "s"}`}
               </button>
             </div>
           </div>

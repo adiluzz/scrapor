@@ -7,6 +7,7 @@ import VideoGrid from "@/components/site/VideoGrid";
 import Filters from "@/components/site/Filters";
 import Pagination from "@/components/site/Pagination";
 import InPageSearch from "@/components/site/InPageSearch";
+import PornstarAvatar from "@/components/site/PornstarAvatar";
 import JsonLd from "@/components/site/JsonLd";
 import {
   buildOpenGraph,
@@ -73,9 +74,7 @@ export default async function PornstarPage({
       />
 
       <div className="mb-6 flex items-center gap-4">
-        <div className="flex h-20 w-20 items-center justify-center rounded-full bg-gradient-to-br from-brand-600 to-purple-600 text-3xl font-bold text-white">
-          {star.name.charAt(0).toUpperCase()}
-        </div>
+        <PornstarAvatar name={star.name} pornstar={star} size="lg" />
         <div>
           <h1 className="text-2xl font-bold text-zinc-100">{star.name}</h1>
           <p className="text-sm text-zinc-500">{total} videos</p>

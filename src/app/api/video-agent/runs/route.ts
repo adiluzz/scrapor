@@ -43,6 +43,7 @@ export async function POST(request: Request) {
   const extractTargetsFromBody = Array.isArray(body.extractTargets)
     ? body.extractTargets.filter((t: unknown) => typeof t === "string" && t.trim())
     : null;
+  const manualOnly = body.manualOnly === true;
 
   if (!userPrompt) {
     return NextResponse.json({ error: "Prompt is required" }, { status: 400 });
@@ -51,9 +52,11 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Select at least one video to analyze" }, { status: 400 });
   }
 
-  const model = resolveVideoAgentModel(analysisModel);
-  if (!model) {
-    return NextResponse.json({ error: "Invalid analysis model" }, { status: 400 });
+  let resolvedModel = resolveVideoAgentModel(analysisModel);
+  if (!manualOnly) {
+    if (!resolvedModel) {
+      return NextResponse.json({ error: "Invalid analysis model" }, { status: 400 });
+    }
   }
 
   const userId = authUserId(auth);
@@ -79,7 +82,8 @@ export async function POST(request: Request) {
     let searchQuery = searchQueryFromBody;
     let extractTargets = extractTargetsFromBody;
     if (!searchQuery || !extractTargets?.length) {
-      const parsed = await parseUserPrompt(userPrompt, model.id);
+      const parseModel = manualOnly ? "nova-2-lite" : analysisModel;
+      const parsed = await parseUserPrompt(userPrompt, parseModel);
       searchQuery = searchQuery || parsed.searchQuery;
       extractTargets = extractTargets?.length ? extractTargets : parsed.extractTargets;
     }
@@ -100,13 +104,16 @@ export async function POST(request: Request) {
         searchQuery,
         extractTargets: JSON.stringify(extractTargets),
         selectedVideoIds: JSON.stringify(validIds),
-        analysisModel: model.id,
+        analysisModel: manualOnly ? "manual" : resolvedModel!.id,
+        manualOnly,
         createdByUserId: userId,
-        status: "PENDING",
+        status: manualOnly ? "DONE" : "PENDING",
       },
     });
 
-    await enqueueVideoAgentRun(run.id);
+    if (!manualOnly) {
+      await enqueueVideoAgentRun(run.id);
+    }
 
     return NextResponse.json({ runId: run.id, run });
   } catch (err) {

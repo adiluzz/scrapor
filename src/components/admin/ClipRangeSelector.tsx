@@ -1,6 +1,8 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import AdminClipPlayer from "@/components/admin/AdminClipPlayer";
+import type { VideoPlayerHandle } from "@/components/player/VideoPlayer";
 
 function formatTime(sec: number) {
   const m = Math.floor(sec / 60);
@@ -34,16 +36,13 @@ export default function ClipRangeSelector({
   initialRange?: ClipRange;
   onRangeChange?: (range: ClipRange) => void;
 }) {
-  const videoRef = useRef<HTMLVideoElement>(null);
+  const playerRef = useRef<VideoPlayerHandle>(null);
   const [duration, setDuration] = useState(0);
   const [current, setCurrent] = useState(0);
   const [startSec, setStartSec] = useState(initialRange?.startSec ?? 0);
   const [endSec, setEndSec] = useState(initialRange?.endSec ?? 0);
   const [startText, setStartText] = useState("");
   const [endText, setEndText] = useState("");
-  const [previewing, setPreviewing] = useState(false);
-
-  const streamUrl = `/api/admin/videos/${videoId}/stream`;
 
   useEffect(() => {
     setStartSec(initialRange?.startSec ?? 0);
@@ -56,64 +55,51 @@ export default function ClipRangeSelector({
     onRangeChange?.({ startSec, endSec });
   }, [startSec, endSec, onRangeChange]);
 
-  const markStart = useCallback(() => {
-    const t = videoRef.current?.currentTime ?? current;
+  const handleDuration = useCallback((d: number) => {
+    setDuration(d);
+    setEndSec((prev) => (prev <= 0 ? Math.min(d, 10) : prev));
+  }, []);
+
+  const markStart = useCallback(async () => {
+    const player = playerRef.current;
+    if (!player) return;
+    await player.ensurePlaying();
+    const t = player.getCurrentTime();
     setStartSec(Math.max(0, t));
+    setCurrent(t);
     if (endSec <= t) setEndSec(Math.min(duration || t + 5, t + 10));
-  }, [current, duration, endSec]);
+  }, [duration, endSec]);
 
-  const markEnd = useCallback(() => {
-    const t = videoRef.current?.currentTime ?? current;
+  const markEnd = useCallback(async () => {
+    const player = playerRef.current;
+    if (!player) return;
+    await player.ensurePlaying();
+    const t = player.getCurrentTime();
     setEndSec(t);
+    setCurrent(t);
     if (startSec >= t) setStartSec(Math.max(0, t - 5));
-  }, [current, startSec]);
-
-  const previewClip = useCallback(() => {
-    const el = videoRef.current;
-    if (!el) return;
-    setPreviewing(true);
-    el.currentTime = startSec;
-    el.play().catch(() => {});
   }, [startSec]);
 
-  useEffect(() => {
-    const el = videoRef.current;
-    if (!el || !previewing) return;
-
-    const onTimeUpdate = () => {
-      setCurrent(el.currentTime);
-      if (el.currentTime >= endSec) {
-        el.pause();
-        setPreviewing(false);
-      }
-    };
-    el.addEventListener("timeupdate", onTimeUpdate);
-    return () => el.removeEventListener("timeupdate", onTimeUpdate);
-  }, [previewing, endSec, videoId]);
+  const previewClip = useCallback(async () => {
+    const player = playerRef.current;
+    if (!player) return;
+    await player.ensurePlaying();
+    player.seek(startSec);
+    await player.play();
+  }, [startSec]);
 
   return (
     <div className="space-y-3">
-      <div className="relative aspect-video overflow-hidden rounded-lg bg-black">
-        <video
-          ref={videoRef}
-          key={streamUrl}
-          src={streamUrl}
-          className="h-full w-full object-contain"
-          controls
-          playsInline
-          preload="metadata"
-          onLoadedMetadata={(e) => {
-            const d = e.currentTarget.duration;
-            if (Number.isFinite(d)) {
-              setDuration(d);
-              if (endSec <= 0) setEndSec(Math.min(d, 10));
-            }
-          }}
-          onTimeUpdate={(e) => setCurrent(e.currentTarget.currentTime)}
+      <div className="relative">
+        <AdminClipPlayer
+          ref={playerRef}
+          videoId={videoId}
+          onTimeUpdate={setCurrent}
+          onDuration={handleDuration}
         />
         {duration > 0 && (
           <div
-            className="pointer-events-none absolute bottom-0 left-0 right-0 h-1 bg-zinc-800"
+            className="pointer-events-none absolute bottom-12 left-0 right-0 z-30 mx-3 h-1 bg-zinc-800/80"
             aria-hidden
           >
             <div
@@ -128,8 +114,8 @@ export default function ClipRangeSelector({
       </div>
 
       <p className="text-xs text-zinc-500">
-        Play the video, pause at the action, then mark start and end. Fine-tune with the inputs
-        below.
+        Use the player controls (including ←/→ to skip 7s), pause at the action, then mark start
+        and end.
       </p>
 
       <div className="flex flex-wrap gap-2">

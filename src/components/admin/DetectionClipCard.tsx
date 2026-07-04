@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
+import AdminClipPlayer from "@/components/admin/AdminClipPlayer";
 
 export type DetectionClip = {
   id: string;
@@ -53,16 +54,12 @@ export default function DetectionClipCard({
   labelOptions?: string[];
   busy?: boolean;
 }) {
-  const videoRef = useRef<HTMLVideoElement>(null);
-  const [buffering, setBuffering] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [editing, setEditing] = useState(false);
   const [editLabel, setEditLabel] = useState(detection.label);
   const [editStart, setEditStart] = useState(formatTime(detection.startSec));
   const [editEnd, setEditEnd] = useState(formatTime(detection.endSec));
   const [editBusy, setEditBusy] = useState(false);
-
-  const streamUrl = `/api/admin/videos/${detection.videoId}/stream#t=${detection.startSec},${detection.endSec}`;
 
   useEffect(() => {
     if (!editing) {
@@ -71,52 +68,6 @@ export default function DetectionClipCard({
       setEditEnd(formatTime(detection.endSec));
     }
   }, [detection, editing]);
-
-  useEffect(() => {
-    const el = videoRef.current;
-    if (!el || editing) return;
-
-    setBuffering(true);
-    setError(null);
-
-    const seekToClip = () => {
-      el.currentTime = detection.startSec;
-      el.play().catch(() => {});
-    };
-
-    const onTimeUpdate = () => {
-      if (el.currentTime >= detection.endSec) {
-        el.currentTime = detection.startSec;
-        el.play().catch(() => {});
-      }
-    };
-
-    const onCanPlay = () => {
-      setBuffering(false);
-      if (Math.abs(el.currentTime - detection.startSec) > 0.5) {
-        seekToClip();
-      }
-    };
-
-    const onWaiting = () => setBuffering(true);
-    const onPlaying = () => setBuffering(false);
-    const onError = () => setError("Failed to load clip preview");
-
-    el.addEventListener("loadedmetadata", seekToClip);
-    el.addEventListener("canplay", onCanPlay);
-    el.addEventListener("timeupdate", onTimeUpdate);
-    el.addEventListener("waiting", onWaiting);
-    el.addEventListener("playing", onPlaying);
-    el.addEventListener("error", onError);
-    return () => {
-      el.removeEventListener("loadedmetadata", seekToClip);
-      el.removeEventListener("canplay", onCanPlay);
-      el.removeEventListener("timeupdate", onTimeUpdate);
-      el.removeEventListener("waiting", onWaiting);
-      el.removeEventListener("playing", onPlaying);
-      el.removeEventListener("error", onError);
-    };
-  }, [streamUrl, detection.startSec, detection.endSec, editing]);
 
   const voted = detection.feedback != null;
   const approved = detection.feedback?.approved;
@@ -154,11 +105,6 @@ export default function DetectionClipCard({
   return (
     <div className="flex flex-col overflow-hidden rounded-xl border border-zinc-800 bg-zinc-900/60">
       <div className="relative aspect-video bg-black">
-        {buffering && !error && !editing && (
-          <div className="absolute inset-0 flex items-center justify-center text-sm text-zinc-500">
-            Loading clip…
-          </div>
-        )}
         {error && (
           <div className="absolute inset-0 z-10 flex items-center justify-center p-3 text-center text-xs text-red-400">
             {error}
@@ -166,25 +112,30 @@ export default function DetectionClipCard({
         )}
         {!editing && (
           <>
-            <video
-              ref={videoRef}
-              src={streamUrl}
-              className="h-full w-full object-contain"
+            <AdminClipPlayer
+              key={`${detection.videoId}-${detection.startSec}-${detection.endSec}`}
+              videoId={detection.videoId}
+              initialPositionSec={detection.startSec}
+              clipLoop={{ startSec: detection.startSec, endSec: detection.endSec }}
+              autoStart
               muted
-              playsInline
-              preload="auto"
             />
             {hasBox && (
               <div
-                className="pointer-events-none absolute border-2 border-amber-400/90 bg-amber-400/10"
-                style={{
-                  left: `${(detection.screenX ?? 0) * 100}%`,
-                  top: `${(detection.screenY ?? 0) * 100}%`,
-                  width: `${(detection.screenW ?? 0) * 100}%`,
-                  height: `${(detection.screenH ?? 0) * 100}%`,
-                }}
-                title="Detected region"
-              />
+                className="pointer-events-none absolute inset-0 z-20 border-2 border-transparent"
+                aria-hidden
+              >
+                <div
+                  className="absolute border-2 border-amber-400/90 bg-amber-400/10"
+                  style={{
+                    left: `${(detection.screenX ?? 0) * 100}%`,
+                    top: `${(detection.screenY ?? 0) * 100}%`,
+                    width: `${(detection.screenW ?? 0) * 100}%`,
+                    height: `${(detection.screenH ?? 0) * 100}%`,
+                  }}
+                  title="Detected region"
+                />
+              </div>
             )}
           </>
         )}

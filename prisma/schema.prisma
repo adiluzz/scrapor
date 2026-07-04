@@ -437,6 +437,7 @@ model VideoAgentRun {
   extractTargets    String // JSON string[]
   selectedVideoIds  String? // JSON string[] — when set, only these videos are analyzed
   analysisModel     String                @default("pegasus-1-5")
+  manualOnly        Boolean               @default(false)
   status            VideoAgentRunStatus   @default(PENDING)
   error           String?
   createdByUserId String?

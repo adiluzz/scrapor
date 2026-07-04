@@ -95,7 +95,14 @@ export default async function VideoAgentRunDetailPage({
           </div>
           <div>
             <p className="text-zinc-500">Model</p>
-            <p className="text-zinc-200">{modelLabel(run.analysisModel)}</p>
+            <p className="text-zinc-200">
+              {modelLabel(run.analysisModel)}
+              {run.manualOnly && (
+                <span className="ml-2 rounded bg-violet-900/40 px-2 py-0.5 text-xs text-violet-300">
+                  Manual only
+                </span>
+              )}
+            </p>
           </div>
           <div>
             <p className="text-zinc-500">Search query</p>

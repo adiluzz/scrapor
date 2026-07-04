@@ -8,6 +8,7 @@ export const RUN_STATUS_COLORS: Record<string, string> = {
 };
 
 export function modelLabel(id: string): string {
+  if (id === "manual") return "Manual only (no AI)";
   return VIDEO_AGENT_MODEL_CATALOG.find((m) => m.id === id)?.label ?? id;
 }
 

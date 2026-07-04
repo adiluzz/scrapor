@@ -1,5 +1,10 @@
 import { prisma } from "@/lib/db";
 import { slugify } from "@/lib/slug";
+import {
+  GOLDEN_DROP_ICON,
+  PISS_SWALLOW_VERIFIED_NAME,
+  PISS_SWALLOW_VERIFIED_SLUG,
+} from "@/lib/verified-tags";
 
 /** Parse a duration string like "12:34" or "1:02:03" into seconds. */
 export function durationToSeconds(input?: string | null): number | null {
@@ -25,6 +30,44 @@ async function uniqueVideoSlug(siteId: string, title: string, videoId: string): 
   const existing = await prisma.video.findUnique({ where: { siteId_slug: { siteId, slug } } });
   if (existing && existing.id !== videoId) slug = `${base}-${videoId.slice(-6)}`;
   return slug;
+}
+
+/** Resolve a unique slug for admin edits (explicit slug or derived from title). */
+export async function resolveAdminVideoSlug(
+  siteId: string,
+  videoId: string,
+  slugInput: string | undefined,
+  title: string
+): Promise<string> {
+  const base = slugify(slugInput?.trim() || title) || "video";
+  const taken = await prisma.video.findFirst({
+    where: { siteId, slug: base, id: { not: videoId } },
+    select: { id: true },
+  });
+  if (taken) {
+    throw new Error(`Slug "${base}" is already in use`);
+  }
+  return base;
+}
+
+/** Site-wide verified badge tag for AI-confirmed piss swallow content. */
+export async function ensurePissSwallowVerifiedTag(siteId: string) {
+  return prisma.tag.upsert({
+    where: { siteId_slug: { siteId, slug: PISS_SWALLOW_VERIFIED_SLUG } },
+    update: { name: PISS_SWALLOW_VERIFIED_NAME, icon: GOLDEN_DROP_ICON },
+    create: {
+      siteId,
+      slug: PISS_SWALLOW_VERIFIED_SLUG,
+      name: PISS_SWALLOW_VERIFIED_NAME,
+      icon: GOLDEN_DROP_ICON,
+    },
+  });
+}
+
+/** Link the verified piss swallow badge to a video (idempotent). */
+export async function linkPissSwallowVerifiedTag(siteId: string, videoId: string) {
+  const tag = await ensurePissSwallowVerifiedTag(siteId);
+  await prisma.videoTag.create({ data: { videoId, tagId: tag.id } }).catch(() => {});
 }
 
 /** Upsert a Pornstar for a site and link it to a video. */
@@ -55,8 +98,19 @@ export async function linkTags(siteId: string, videoId: string, names: string[])
     const tag = await prisma.tag.upsert({
       where: { siteId_slug: { siteId, slug } },
       update: { name },
-      create: { siteId, slug, name },
+      create: {
+        siteId,
+        slug,
+        name,
+        ...(slug === PISS_SWALLOW_VERIFIED_SLUG ? { icon: GOLDEN_DROP_ICON } : {}),
+      },
     });
+    if (slug === PISS_SWALLOW_VERIFIED_SLUG && !tag.icon) {
+      await prisma.tag.update({
+        where: { id: tag.id },
+        data: { icon: GOLDEN_DROP_ICON },
+      });
+    }
     await prisma.videoTag.create({ data: { videoId, tagId: tag.id } }).catch(() => {});
   }
 }

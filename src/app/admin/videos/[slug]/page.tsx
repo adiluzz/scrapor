@@ -5,6 +5,8 @@ import { requireAdmin } from "@/lib/session";
 import { adminThumbUrl, loadStoryboardData } from "@/lib/media";
 import { formatDuration } from "@/lib/videos";
 import VideoPlayer from "@/components/player/VideoPlayer";
+import AdminVideoEditor from "@/components/admin/AdminVideoEditor";
+import TagBadge from "@/components/site/TagBadge";
 
 export const dynamic = "force-dynamic";
 
@@ -96,12 +98,17 @@ export default async function AdminVideoDetail({
             </span>
           ))}
           {video.tags.map((t) => (
-            <span key={t.tagId} className="rounded-full bg-zinc-800 px-3 py-1 text-xs text-zinc-300">
-              {t.tag.name}
-            </span>
+            <TagBadge
+              key={t.tagId}
+              name={t.tag.name}
+              slug={t.tag.slug}
+              icon={t.tag.icon}
+            />
           ))}
         </div>
       )}
+
+      <AdminVideoEditor videoId={video.id} />
     </div>
   );
 }

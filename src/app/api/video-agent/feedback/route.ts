@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { guardAdmin, authUserId } from "@/lib/admin-guard";
 import { recordFeedbackTraining } from "@/lib/video-agent-feedback";
+import { isPissSwallowVerificationLabel } from "@/lib/verified-tags";
 import { prisma } from "@/lib/db";
 
 export async function POST(request: Request) {
@@ -28,6 +29,11 @@ export async function POST(request: Request) {
   }
 
   await recordFeedbackTraining(detectionId, approved, userId, auth.siteId);
+
+  if (approved && isPissSwallowVerificationLabel(detection.label)) {
+    const { linkPissSwallowVerifiedTag } = await import("@/lib/videos");
+    await linkPissSwallowVerifiedTag(auth.siteId, detection.videoId);
+  }
 
   return NextResponse.json({ ok: true, approved });
 }

@@ -156,6 +156,7 @@ model Tag {
   siteId String
   slug   String
   name   String
+  icon   String? // e.g. "golden-drop" for verified badge tags
   videos VideoTag[]
 
   @@unique([siteId, slug])

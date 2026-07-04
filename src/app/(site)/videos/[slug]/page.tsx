@@ -21,6 +21,7 @@ import {
 import { publicVideoContentUrl } from "@/lib/video-sitemap";
 import AdZone from "@/components/ads/AdZone";
 import ExoFullscreenOverlay from "@/components/ads/ExoFullscreenOverlay";
+import TagBadge from "@/components/site/TagBadge";
 
 export const dynamic = "force-dynamic";
 
@@ -185,13 +186,14 @@ export default async function VideoPage({
           {video.tags.length > 0 && (
             <div className="mt-3 flex flex-wrap gap-2">
               {video.tags.map((t) => (
-                <Link
+                <TagBadge
                   key={t.tagId}
+                  name={t.tag.name}
+                  slug={t.tag.slug}
+                  icon={t.tag.icon}
                   href={`/tags/${t.tag.slug}`}
-                  className="rounded-full bg-zinc-800 px-3 py-1 text-xs text-zinc-300 hover:bg-zinc-700"
-                >
-                  {t.tag.name}
-                </Link>
+                  className="hover:bg-zinc-700"
+                />
               ))}
             </div>
           )}

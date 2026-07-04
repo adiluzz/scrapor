@@ -26,6 +26,18 @@ async function main() {
   });
   console.log(`Site ready: ${site.domain} (${site.id})`);
 
+  await prisma.tag.upsert({
+    where: { siteId_slug: { siteId: site.id, slug: "piss-swallow" } },
+    update: { name: "piss swallow", icon: "golden-drop" },
+    create: {
+      siteId: site.id,
+      slug: "piss-swallow",
+      name: "piss swallow",
+      icon: "golden-drop",
+    },
+  });
+  console.log("Verified tag ready: piss swallow (golden-drop icon)");
+
   const passwordHash = await bcrypt.hash(password, 10);
   const admin = await prisma.user.upsert({
     where: { siteId_email: { siteId: site.id, email } },

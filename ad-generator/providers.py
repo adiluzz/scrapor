@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import base64
-import json
 import logging
 import time
 from abc import ABC, abstractmethod
@@ -76,6 +75,65 @@ def _build_nova_reel_input(
     }
 
 
+_BEDROCK_RUNTIME_CONFIG = Config(read_timeout=900, connect_timeout=60, retries={"max_attempts": 3})
+
+_LUMA_RAY_MODELS: dict[str, dict[str, Any]] = {
+    "luma-ray-2-540p": {"resolution": "540p", "price_per_sec": 0.75},
+    "luma-ray-2-720p": {"resolution": "720p", "price_per_sec": 1.5},
+}
+
+
+def _bedrock_runtime_client(region: str):
+    return boto3.client(
+        "bedrock-runtime",
+        region_name=region,
+        config=_BEDROCK_RUNTIME_CONFIG,
+    )
+
+
+def _fetch_bedrock_s3_output(output_uri: str, work_dir: Path, dest_name: str = "bedrock_output.mp4") -> Path:
+    if not output_uri.startswith("s3://"):
+        raise ValueError(f"Invalid output URI: {output_uri}")
+    parts = output_uri[5:].split("/", 1)
+    bucket = parts[0]
+    prefix = parts[1] if len(parts) > 1 else ""
+
+    s3 = boto3.client("s3", region_name=CONFIG.aws_region, endpoint_url=CONFIG.s3_endpoint)
+    listed = s3.list_objects_v2(Bucket=bucket, Prefix=prefix)
+    keys = [o["Key"] for o in listed.get("Contents", []) if o["Key"].endswith(".mp4")]
+    if not keys:
+        raise FileNotFoundError(f"No MP4 in Bedrock output prefix {prefix}")
+
+    dest = work_dir / dest_name
+    s3.download_file(bucket, keys[0], str(dest))
+    return dest
+
+
+def _poll_bedrock_async_invoke(
+    client,
+    invocation_arn: str,
+    output_uri: str,
+    work_dir: Path,
+    *,
+    timeout_label: str,
+    dest_name: str = "bedrock_output.mp4",
+) -> Path:
+    for _ in range(360):
+        status_resp = client.get_async_invoke(invocationArn=invocation_arn)
+        status = status_resp.get("status")
+        if status == "Completed":
+            return _fetch_bedrock_s3_output(output_uri, work_dir, dest_name)
+        if status == "Failed":
+            raise RuntimeError(status_resp.get("failureMessage", "Bedrock job failed"))
+        time.sleep(5)
+    raise TimeoutError(f"{timeout_label} timed out")
+
+
+def _luma_ray_duration(duration_seconds: int) -> tuple[str, int]:
+    seconds = 9 if int(duration_seconds) >= 7 else 5
+    return f"{seconds}s", seconds
+
+
 class VideoProvider(ABC):
     @abstractmethod
     def generate(
@@ -92,11 +150,7 @@ class VideoProvider(ABC):
 
 class BedrockReelProvider(VideoProvider):
     def __init__(self) -> None:
-        self._client = boto3.client(
-            "bedrock-runtime",
-            region_name=CONFIG.aws_region,
-            config=Config(read_timeout=900, connect_timeout=60, retries={"max_attempts": 3}),
-        )
+        self._client = _bedrock_runtime_client(CONFIG.aws_region)
 
     def generate(
         self,
@@ -124,36 +178,73 @@ class BedrockReelProvider(VideoProvider):
         invocation_arn = resp.get("invocationArn", "")
         log.info("bedrock_reel_started arn=%s duration=%s", invocation_arn, duration)
 
-        for _ in range(360):
-            status_resp = self._client.get_async_invoke(invocationArn=invocation_arn)
-            status = status_resp.get("status")
-            if status == "Completed":
-                out_path = self._fetch_output(output_uri, work_dir)
-                cost = round(duration * 0.08, 4)
-                return out_path, invocation_arn, cost
-            if status == "Failed":
-                raise RuntimeError(status_resp.get("failureMessage", "Bedrock job failed"))
-            time.sleep(5)
+        out_path = _poll_bedrock_async_invoke(
+            self._client,
+            invocation_arn,
+            output_uri,
+            work_dir,
+            timeout_label="Bedrock Nova Reel",
+        )
+        cost = round(duration * 0.08, 4)
+        return out_path, invocation_arn, cost
 
-        raise TimeoutError("Bedrock Nova Reel timed out")
 
-    def _fetch_output(self, output_uri: str, work_dir: Path) -> Path:
-        # output_uri like s3://bucket/prefix/job/
-        if not output_uri.startswith("s3://"):
-            raise ValueError(f"Invalid output URI: {output_uri}")
-        parts = output_uri[5:].split("/", 1)
-        bucket = parts[0]
-        prefix = parts[1] if len(parts) > 1 else ""
+class BedrockLumaRayProvider(VideoProvider):
+    BEDROCK_MODEL_ID = "luma.ray-v2:0"
 
-        s3 = boto3.client("s3", region_name=CONFIG.aws_region, endpoint_url=CONFIG.s3_endpoint)
-        listed = s3.list_objects_v2(Bucket=bucket, Prefix=prefix)
-        keys = [o["Key"] for o in listed.get("Contents", []) if o["Key"].endswith(".mp4")]
-        if not keys:
-            raise FileNotFoundError(f"No MP4 in Bedrock output prefix {prefix}")
+    def __init__(self, catalog_model_id: str) -> None:
+        spec = _LUMA_RAY_MODELS.get(catalog_model_id)
+        if not spec:
+            raise ValueError(f"Unsupported Luma Ray catalog model: {catalog_model_id}")
+        self._catalog_model_id = catalog_model_id
+        self._resolution = spec["resolution"]
+        self._price_per_sec = float(spec["price_per_sec"])
+        self._client = _bedrock_runtime_client(CONFIG.luma_bedrock_region)
 
-        dest = work_dir / "bedrock_output.mp4"
-        s3.download_file(bucket, keys[0], str(dest))
-        return dest
+    def generate(
+        self,
+        prompt: str,
+        duration_seconds: int,
+        model_id: str,
+        model_params: dict[str, Any],
+        ref_image_path: Path | None,
+        work_dir: Path,
+    ) -> tuple[Path, str | None, float | None]:
+        duration_enum, billed_seconds = _luma_ray_duration(duration_seconds)
+        model_input = {
+            "prompt": prompt[:5000],
+            "aspect_ratio": model_params.get("aspectRatio") or "16:9",
+            "loop": bool(model_params.get("loop")),
+            "duration": duration_enum,
+            "resolution": self._resolution,
+        }
+
+        output_uri = f"{CONFIG.bedrock_output_prefix}{work_dir.name}/"
+        resp = self._client.start_async_invoke(
+            modelId=self.BEDROCK_MODEL_ID,
+            modelInput=model_input,
+            outputDataConfig={"s3OutputDataConfig": {"s3Uri": output_uri}},
+        )
+        invocation_arn = resp.get("invocationArn", "")
+        log.info(
+            "bedrock_luma_started model=%s arn=%s duration=%s resolution=%s region=%s",
+            self._catalog_model_id,
+            invocation_arn,
+            duration_enum,
+            self._resolution,
+            CONFIG.luma_bedrock_region,
+        )
+
+        out_path = _poll_bedrock_async_invoke(
+            self._client,
+            invocation_arn,
+            output_uri,
+            work_dir,
+            dest_name="luma_output.mp4",
+            timeout_label="Bedrock Luma Ray 2",
+        )
+        cost = round(billed_seconds * self._price_per_sec, 4)
+        return out_path, invocation_arn, cost
 
 
 class FalProvider(VideoProvider):
@@ -375,6 +466,8 @@ class GeminiVeoProvider(VideoProvider):
 def get_provider(model_id: str) -> VideoProvider:
     if model_id == "nova-reel-1-1":
         return BedrockReelProvider()
+    if model_id in _LUMA_RAY_MODELS:
+        return BedrockLumaRayProvider(model_id)
     if model_id in FalProvider.MODEL_ENDPOINTS:
         return FalProvider()
     if model_id in RunwayProvider.MODEL_MAP:

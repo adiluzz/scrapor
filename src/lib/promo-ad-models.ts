@@ -54,6 +54,36 @@ export const PROMO_AD_MODEL_CATALOG: PromoAdModelInfo[] = [
     description: "AWS-native multi-shot video up to 2 minutes. Legacy — EOL Sep 2026.",
   },
   {
+    id: "luma-ray-2-540p",
+    label: "Luma Ray 2 (540p)",
+    provider: "bedrock",
+    generationMode: "generative",
+    pricePerSecondUsd: 0.75,
+    maxDurationSec: 9,
+    resolution: "540p",
+    supportsAudio: false,
+    supportsImageToVideo: false,
+    supportsMultiShot: false,
+    pricingSourceUrl: "https://aws.amazon.com/bedrock/pricing/",
+    description:
+      "Short cinematic clips (5 or 9s) via Bedrock in us-west-2. Lower cost tier — good for motion tests.",
+  },
+  {
+    id: "luma-ray-2-720p",
+    label: "Luma Ray 2 (720p)",
+    provider: "bedrock",
+    generationMode: "generative",
+    pricePerSecondUsd: 1.5,
+    maxDurationSec: 9,
+    resolution: "720p",
+    supportsAudio: false,
+    supportsImageToVideo: false,
+    supportsMultiShot: false,
+    pricingSourceUrl: "https://aws.amazon.com/bedrock/pricing/",
+    description:
+      "Higher-fidelity Luma Ray 2 on Bedrock (5 or 9s). Enable model access in us-west-2.",
+  },
+  {
     id: "kling-3-standard",
     label: "Kling 3.0 Standard",
     provider: "fal",
@@ -178,7 +208,7 @@ export const PROMO_AD_MODEL_CATALOG: PromoAdModelInfo[] = [
 ];
 
 const DEFAULT_ALLOWLIST =
-  "clip-compose,nova-reel-1-1,kling-3-pro,veo-3-1-fast,runway-gen4-turbo,runway-gen4-5";
+  "clip-compose,nova-reel-1-1,luma-ray-2-540p,luma-ray-2-720p,kling-3-pro,veo-3-1-fast,runway-gen4-turbo,runway-gen4-5";
 
 /** Nova 2 Lite planner cost per draft/iteration (~2k tokens). */
 export const PROMO_AD_PLANNER_COST_USD = 0.01;
@@ -216,6 +246,23 @@ export function rateForModel(
   return model.pricePerSecondUsd;
 }
 
+/** Seconds actually billed by the generative backend for a requested duration. */
+export function billableGenerativeDuration(
+  model: PromoAdModelInfo,
+  durationSeconds: number
+): number {
+  if (model.id.startsWith("luma-ray-2-")) {
+    return durationSeconds >= 7 ? 9 : 5;
+  }
+
+  let duration = Math.max(6, Math.min(model.maxDurationSec, Math.round(durationSeconds)));
+  duration = Math.floor(duration / 6) * 6;
+  if (model.id === "nova-reel-1-1" && duration > 6 && duration < 12) {
+    duration = 12;
+  }
+  return duration;
+}
+
 export type PromoAdEstimateInput = {
   mode: "CLIP_COMPOSE" | "GENERATIVE";
   modelId?: string;
@@ -240,12 +287,12 @@ export type PromoAdEstimate = {
 };
 
 export function estimatePromoAdCost(input: PromoAdEstimateInput): PromoAdEstimate {
-  const duration = Math.max(1, Math.round(input.durationSeconds));
   const includePlanner = input.includePlanner !== false;
 
   if (input.mode === "CLIP_COMPOSE") {
+    const bodyDuration = Math.max(1, Math.round(input.durationSeconds));
     const introOutro = 5;
-    const totalDuration = duration + introOutro;
+    const totalDuration = bodyDuration + introOutro;
     return {
       mode: "CLIP_COMPOSE",
       durationSeconds: totalDuration,
@@ -266,6 +313,7 @@ export function estimatePromoAdCost(input: PromoAdEstimateInput): PromoAdEstimat
     throw new Error("Invalid or unavailable generative model");
   }
 
+  const duration = billableGenerativeDuration(model, input.durationSeconds);
   const rate = rateForModel(model, Boolean(input.audioEnabled));
   const videoUsd = Math.round(rate * duration * 100) / 100;
   const plannerUsd = includePlanner ? PROMO_AD_PLANNER_COST_USD : 0;

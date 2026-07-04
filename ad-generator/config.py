@@ -19,6 +19,7 @@ class Config:
     brand_lockup_path: str
     intro_path: str
     outro_path: str
+    luma_bedrock_region: str
     fal_api_key: str | None
     runway_api_key: str | None
     gemini_api_key: str | None
@@ -44,6 +45,7 @@ class Config:
             ),
             intro_path=os.path.join(assets, "intro_1080p.mp4"),
             outro_path=os.path.join(assets, "outro_1080p.mp4"),
+            luma_bedrock_region=os.environ.get("PROMO_AD_LUMA_BEDROCK_REGION", "us-west-2"),
             fal_api_key=(os.environ.get("FAL_API_KEY") or "").strip() or None,
             runway_api_key=(os.environ.get("RUNWAY_API_KEY") or "").strip() or None,
             gemini_api_key=(os.environ.get("GEMINI_API_KEY") or "").strip() or None,

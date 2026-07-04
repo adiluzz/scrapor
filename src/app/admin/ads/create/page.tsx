@@ -165,6 +165,11 @@ export default function CreateAdPage() {
   }
 
   const generativeModels = models.filter((m) => m.generationMode === "generative");
+  const selectedGenerativeModel =
+    generativeModels.find((m) => m.id === ad?.generativeModelId) ?? generativeModels[0];
+  const durationMax = selectedGenerativeModel?.maxDurationSec ?? 120;
+  const durationStep = selectedGenerativeModel?.id.startsWith("luma-ray-2-") ? 1 : 6;
+  const durationMin = selectedGenerativeModel?.id.startsWith("luma-ray-2-") ? 5 : 6;
 
   if (loading) {
     return <p className="text-sm text-zinc-500">Loading draft…</p>;
@@ -272,9 +277,9 @@ export default function CreateAdPage() {
             Duration (seconds)
             <input
               type="number"
-              min={6}
-              max={120}
-              step={6}
+              min={durationMin}
+              max={durationMax}
+              step={durationStep}
               value={ad.modelParams.durationSeconds ?? 12}
               onChange={(e) => {
                 const durationSeconds = parseInt(e.target.value, 10) || 12;
@@ -284,6 +289,11 @@ export default function CreateAdPage() {
               onBlur={() => savePatch({ modelParams: ad.modelParams })}
               className="mt-1 w-32 rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-white"
             />
+            {selectedGenerativeModel?.id.startsWith("luma-ray-2-") && (
+              <span className="mt-1 block text-xs text-zinc-500">
+                Luma Ray 2 bills 5s or 9s only (≥7s request → 9s clip).
+              </span>
+            )}
           </label>
 
           <label className="flex items-center gap-2 text-sm text-zinc-300">

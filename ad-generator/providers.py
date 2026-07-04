@@ -18,6 +18,63 @@ from config import CONFIG
 
 log = logging.getLogger("ad-generator.providers")
 
+_NOVA_REEL_VIDEO_CONFIG = {"fps": 24, "dimension": "1280x720"}
+
+
+def _nova_reel_duration(duration_seconds: int) -> int:
+    duration = max(6, min(120, int(duration_seconds)))
+    return (duration // 6) * 6
+
+
+def _build_nova_reel_input(
+    prompt: str,
+    duration_seconds: int,
+    model_params: dict[str, Any],
+    ref_image_path: Path | None,
+) -> dict[str, Any]:
+    """Build StartAsyncInvoke modelInput for amazon.nova-reel-v1:1."""
+    duration = _nova_reel_duration(duration_seconds)
+    seed = int(model_params.get("seed") or 0)
+    requested_task = model_params.get("taskType")
+
+    # TEXT_VIDEO: exactly 6s, textToVideoParams, max 512 chars, optional image.
+    # MULTI_SHOT_AUTOMATED: 12–120s, multiShotAutomatedParams, max 4000 chars, no image.
+    use_multi_shot = (
+        requested_task == "MULTI_SHOT_AUTOMATED"
+        if requested_task in ("TEXT_VIDEO", "MULTI_SHOT_AUTOMATED")
+        else duration > 6
+    )
+    if use_multi_shot:
+        if duration < 12:
+            duration = 12
+        return {
+            "taskType": "MULTI_SHOT_AUTOMATED",
+            "multiShotAutomatedParams": {"text": prompt[:4000]},
+            "videoGenerationConfig": {
+                **_NOVA_REEL_VIDEO_CONFIG,
+                "durationSeconds": duration,
+                "seed": seed,
+            },
+        }
+
+    text_params: dict[str, Any] = {"text": prompt[:512]}
+    if ref_image_path and ref_image_path.exists():
+        img_b64 = base64.b64encode(ref_image_path.read_bytes()).decode("ascii")
+        text_params["images"] = [{"format": "png", "source": {"bytes": img_b64}}]
+
+    video_config: dict[str, Any] = {
+        **_NOVA_REEL_VIDEO_CONFIG,
+        "durationSeconds": 6,
+    }
+    if seed:
+        video_config["seed"] = seed
+
+    return {
+        "taskType": "TEXT_VIDEO",
+        "textToVideoParams": text_params,
+        "videoGenerationConfig": video_config,
+    }
+
 
 class VideoProvider(ABC):
     @abstractmethod
@@ -50,29 +107,13 @@ class BedrockReelProvider(VideoProvider):
         ref_image_path: Path | None,
         work_dir: Path,
     ) -> tuple[Path, str | None, float | None]:
-        duration = max(6, min(120, int(duration_seconds)))
-        duration = (duration // 6) * 6
-        task_type = model_params.get("taskType") or (
-            "MULTI_SHOT_AUTOMATED" if duration > 6 else "TEXT_VIDEO"
+        model_input = _build_nova_reel_input(
+            prompt=prompt,
+            duration_seconds=duration_seconds,
+            model_params=model_params,
+            ref_image_path=ref_image_path,
         )
-        seed = int(model_params.get("seed") or 0)
-
-        text_params: dict[str, Any] = {"text": prompt[:4000], "seed": seed}
-        if ref_image_path and ref_image_path.exists():
-            img_b64 = base64.b64encode(ref_image_path.read_bytes()).decode("ascii")
-            text_params["images"] = [
-                {"format": "png", "source": {"bytes": img_b64}}
-            ]
-
-        model_input = {
-            "taskType": task_type,
-            "textToVideoParams": text_params,
-            "videoGenerationConfig": {
-                "durationSeconds": duration,
-                "fps": 24,
-                "dimension": "1280x720",
-            },
-        }
+        duration = model_input["videoGenerationConfig"]["durationSeconds"]
 
         output_uri = f"{CONFIG.bedrock_output_prefix}{work_dir.name}/"
         resp = self._client.start_async_invoke(

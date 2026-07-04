@@ -22,8 +22,8 @@ export default function Icon() {
           <defs>
             <linearGradient id="g" x1="16" y1="2" x2="16" y2="38" gradientUnits="userSpaceOnUse">
               <stop offset="0%" stopColor="#F5E6A3" />
-              <stop offset="45%" stopColor="#D4AF37" />
-              <stop offset="100%" stopColor="#9A7209" />
+              <stop offset="45%" stopColor="#E8C547" />
+              <stop offset="100%" stopColor="#C9A227" />
             </linearGradient>
           </defs>
           <path

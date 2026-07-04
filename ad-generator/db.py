@@ -58,15 +58,19 @@ def load_clips(conn, promo_ad_id: str) -> list[dict[str, Any]]:
     rows = conn.execute(
         '''
         SELECT c."sortOrder", d.id, d."videoId", d."videoTitle", d.label,
-               d."startSec", d."endSec"
+               d."startSec", d."endSec", v."sourceSite"
         FROM "PromoAdClip" c
         JOIN "VideoAgentDetection" d ON d.id = c."detectionId"
+        JOIN "Video" v ON v.id = d."videoId"
         WHERE c."promoAdId" = %s
         ORDER BY c."sortOrder" ASC
         ''',
         (promo_ad_id,),
     ).fetchall()
-    cols = ["sortOrder", "detectionId", "videoId", "videoTitle", "label", "startSec", "endSec"]
+    cols = [
+        "sortOrder", "detectionId", "videoId", "videoTitle", "label",
+        "startSec", "endSec", "sourceSite",
+    ]
     return [dict(zip(cols, r)) for r in rows]
 
 

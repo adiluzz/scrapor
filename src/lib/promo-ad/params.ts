@@ -9,6 +9,10 @@ export type PromoAdModelParams = {
   showTagline?: boolean;
   audioEnabled?: boolean;
   maxBodySeconds?: number;
+  crossfadeSec?: number;
+  kenBurns?: boolean;
+  removeSourceLogos?: boolean;
+  logoRemovalMode?: "presets" | "auto" | "both";
 };
 
 export function parseModelParams(raw: string | null | undefined): PromoAdModelParams {
@@ -34,6 +38,10 @@ export function defaultModelParams(
           showTagline: true,
           maxBodySeconds: 60,
           logoOpacity: 0.9,
+          crossfadeSec: 0.5,
+          kenBurns: false,
+          removeSourceLogos: true,
+          logoRemovalMode: "both",
         }
       : {
           durationSeconds: 12,

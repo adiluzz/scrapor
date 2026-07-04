@@ -31,6 +31,10 @@ type AdDraft = {
     audioEnabled?: boolean;
     logoPosition?: string;
     showTagline?: boolean;
+    crossfadeSec?: number;
+    kenBurns?: boolean;
+    removeSourceLogos?: boolean;
+    logoRemovalMode?: "presets" | "auto" | "both";
   };
   clips: ClipRow[];
 };
@@ -312,24 +316,104 @@ export default function CreateAdPage() {
       )}
 
       {ad.generationMode === "CLIP_COMPOSE" && (
-        <label className="block text-sm text-zinc-300">
-          Max body length (seconds)
-          <input
-            type="number"
-            min={10}
-            max={180}
-            value={ad.modelParams.maxBodySeconds ?? 60}
-            onChange={(e) => {
-              const maxBodySeconds = parseInt(e.target.value, 10) || 60;
-              setAd({ ...ad, modelParams: { ...ad.modelParams, maxBodySeconds } });
-            }}
-            onBlur={() => savePatch({ modelParams: ad.modelParams })}
-            className="mt-1 w-32 rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-white"
-          />
-          <span className="mt-1 block text-xs text-zinc-500">
-            Selected clips total ~{Math.ceil(clipDuration)}s (+ 5s intro/outro)
-          </span>
-        </label>
+        <div className="space-y-4 rounded-xl border border-zinc-800 p-4">
+          <h2 className="text-sm font-medium text-zinc-300">Clip compose options</h2>
+
+          <label className="block text-sm text-zinc-300">
+            Max body length (seconds)
+            <input
+              type="number"
+              min={10}
+              max={180}
+              value={ad.modelParams.maxBodySeconds ?? 60}
+              onChange={(e) => {
+                const maxBodySeconds = parseInt(e.target.value, 10) || 60;
+                setAd({ ...ad, modelParams: { ...ad.modelParams, maxBodySeconds } });
+              }}
+              onBlur={() => savePatch({ modelParams: ad.modelParams })}
+              className="mt-1 w-32 rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-white"
+            />
+            <span className="mt-1 block text-xs text-zinc-500">
+              Selected clips total ~{Math.ceil(clipDuration)}s (+ 5s intro/outro)
+            </span>
+          </label>
+
+          <label className="block text-sm text-zinc-300">
+            Crossfade between clips (seconds)
+            <input
+              type="number"
+              min={0.2}
+              max={1.5}
+              step={0.1}
+              value={ad.modelParams.crossfadeSec ?? 0.5}
+              onChange={(e) => {
+                const crossfadeSec = parseFloat(e.target.value) || 0.5;
+                setAd({ ...ad, modelParams: { ...ad.modelParams, crossfadeSec } });
+              }}
+              onBlur={() => savePatch({ modelParams: ad.modelParams })}
+              className="mt-1 w-32 rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-white"
+            />
+          </label>
+
+          <label className="flex items-center gap-2 text-sm text-zinc-300">
+            <input
+              type="checkbox"
+              checked={ad.modelParams.kenBurns ?? false}
+              onChange={(e) => {
+                const modelParams = { ...ad.modelParams, kenBurns: e.target.checked };
+                setAd({ ...ad, modelParams });
+                savePatch({ modelParams });
+              }}
+            />
+            Ken Burns slow zoom (more CPU)
+          </label>
+
+          <label className="flex items-center gap-2 text-sm text-zinc-300">
+            <input
+              type="checkbox"
+              checked={ad.modelParams.removeSourceLogos ?? true}
+              onChange={(e) => {
+                const modelParams = { ...ad.modelParams, removeSourceLogos: e.target.checked };
+                setAd({ ...ad, modelParams });
+                savePatch({ modelParams });
+              }}
+            />
+            Remove source-site corner watermarks
+          </label>
+
+          {(ad.modelParams.removeSourceLogos ?? true) && (
+            <label className="block text-sm text-zinc-300">
+              Watermark removal mode
+              <select
+                value={ad.modelParams.logoRemovalMode ?? "both"}
+                onChange={(e) => {
+                  const logoRemovalMode = e.target.value as "presets" | "auto" | "both";
+                  const modelParams = { ...ad.modelParams, logoRemovalMode };
+                  setAd({ ...ad, modelParams });
+                  savePatch({ modelParams });
+                }}
+                className="mt-1 w-full rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-white"
+              >
+                <option value="both">Presets + auto-detect fallback</option>
+                <option value="presets">Per-source presets only</option>
+                <option value="auto">OpenCV auto-detect only</option>
+              </select>
+            </label>
+          )}
+
+          <label className="flex items-center gap-2 text-sm text-zinc-300">
+            <input
+              type="checkbox"
+              checked={ad.modelParams.showTagline ?? true}
+              onChange={(e) => {
+                const modelParams = { ...ad.modelParams, showTagline: e.target.checked };
+                setAd({ ...ad, modelParams });
+                savePatch({ modelParams });
+              }}
+            />
+            Show pisster.com tagline on outro
+          </label>
+        </div>
       )}
 
       <div className="rounded-xl border border-zinc-800 bg-zinc-900/40 p-4">

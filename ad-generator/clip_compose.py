@@ -8,7 +8,9 @@ from pathlib import Path
 from brand_intro_outro import intro_outro_paths
 from config import CONFIG
 from media import (
+    apply_body_bookends,
     concat_simple,
+    concat_with_xfade,
     download_video,
     normalize_segment,
     overlay_logo,
@@ -33,6 +35,10 @@ def compose_promo_ad(
     show_tagline = model_params.get("showTagline", True) is not False
     logo_position = model_params.get("logoPosition") or "bottom-right"
     logo_opacity = float(model_params.get("logoOpacity") or 0.85)
+    crossfade_sec = float(model_params.get("crossfadeSec") or 0.5)
+    ken_burns = model_params.get("kenBurns") is True
+    remove_logos = model_params.get("removeSourceLogos", True) is not False
+    logo_removal_mode = model_params.get("logoRemovalMode") or "both"
 
     segments_dir = work / "segments"
     segments_dir.mkdir(exist_ok=True)
@@ -41,6 +47,7 @@ def compose_promo_ad(
 
     for i, clip in enumerate(clips):
         video_id = clip["videoId"]
+        source_site = clip.get("sourceSite")
         start = float(clip["startSec"])
         end = float(clip["endSec"])
         seg_dur = end - start
@@ -54,14 +61,30 @@ def compose_promo_ad(
                 raise FileNotFoundError(f"Cannot download video {video_id}")
 
         seg_out = segments_dir / f"seg_{i:03d}.mp4"
-        normalize_segment(src, seg_out, start, end)
+        normalize_segment(
+            src,
+            seg_out,
+            start,
+            end,
+            source_site=source_site,
+            remove_logos=remove_logos,
+            logo_removal_mode=logo_removal_mode,
+            ken_burns=ken_burns,
+            work_dir=work,
+        )
         normalized.append(seg_out)
 
     if not normalized:
         raise ValueError("No clip segments produced")
 
+    body_raw = work / "body_raw.mp4"
+    if len(normalized) > 1:
+        concat_with_xfade(normalized, body_raw, xfade_sec=crossfade_sec)
+    else:
+        body_raw.write_bytes(normalized[0].read_bytes())
+
     body_path = work / "body.mp4"
-    concat_simple(normalized, body_path)
+    apply_body_bookends(body_raw, body_path)
 
     intro, outro = intro_outro_paths(show_tagline)
     parts = []
@@ -75,6 +98,12 @@ def compose_promo_ad(
     concat_simple(parts, raw_path)
 
     lockup_png = Path(CONFIG.brand_lockup_path)
+    if not lockup_png.exists():
+        svg_fallback = lockup_png.parent / "pisster-lockup.svg"
+        if svg_fallback.exists():
+            from brand_intro_outro import _svg_to_png
+            _svg_to_png(svg_fallback, lockup_png)
+
     final_path = work / "final.mp4"
     if lockup_png.exists() and lockup_png.suffix.lower() == ".png":
         overlay_logo(raw_path, final_path, lockup_png, logo_position, logo_opacity)

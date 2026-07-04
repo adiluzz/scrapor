@@ -11,10 +11,15 @@ import boto3
 from botocore.config import Config
 
 from config import CONFIG
+from watermark import DelogoRect, delogo_filter_chain, resolve_delogo_rects
 
 log = logging.getLogger("ad-generator.media")
 
 _s3 = None
+
+TARGET_W = 1920
+TARGET_H = 1080
+TARGET_FPS = 24
 
 
 def s3_client():
@@ -97,16 +102,100 @@ def probe_duration(video_path: Path) -> float:
         return 0.0
 
 
-def normalize_segment(src: Path, dest: Path, start: float, end: float) -> Path:
+def has_audio_stream(video_path: Path) -> bool:
+    result = subprocess.run(
+        [
+            "ffprobe", "-v", "error",
+            "-select_streams", "a",
+            "-show_entries", "stream=codec_type",
+            "-of", "csv=p=0",
+            str(video_path),
+        ],
+        capture_output=True,
+        text=True,
+        timeout=60,
+        check=False,
+    )
+    return "audio" in result.stdout
+
+
+def _build_normalize_vf(
+    duration: float,
+    delogo_rects: list[DelogoRect],
+    *,
+    ken_burns: bool,
+    fade_sec: float,
+) -> str:
+    """Video filter chain after optional delogo prefix."""
+    fade_in = max(0.1, min(fade_sec, duration / 4))
+    fade_out_start = max(fade_in, duration - fade_in)
+
+    scale_pad = (
+        f"scale={TARGET_W}:{TARGET_H}:force_original_aspect_ratio=decrease,"
+        f"pad={TARGET_W}:{TARGET_H}:(ow-iw)/2:(oh-ih)/2:black"
+    )
+    color = "eq=contrast=1.05:saturation=1.08,unsharp=3:3:0.4:3:3:0.0"
+    fades = (
+        f"fade=t=in:st=0:d={fade_in:.3f},"
+        f"fade=t=out:st={fade_out_start:.3f}:d={fade_in:.3f}"
+    )
+
+    if ken_burns:
+        frames = max(1, int(duration * TARGET_FPS))
+        motion = (
+            f"zoompan=z='min(1.0+0.0008*on,1.04)':"
+            f"x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':"
+            f"d={frames}:s={TARGET_W}x{TARGET_H}:fps={TARGET_FPS}"
+        )
+        core = f"{scale_pad},{color},{motion},{fades},format=yuv420p"
+    else:
+        core = f"{scale_pad},{color},{fades},fps={TARGET_FPS},format=yuv420p"
+
+    delogo = delogo_filter_chain(delogo_rects)
+    if delogo:
+        return f"{delogo};[vout]{core}"
+    return core
+
+
+def normalize_segment(
+    src: Path,
+    dest: Path,
+    start: float,
+    end: float,
+    *,
+    source_site: str | None = None,
+    remove_logos: bool = True,
+    logo_removal_mode: str = "both",
+    ken_burns: bool = False,
+    fade_sec: float = 0.25,
+    work_dir: Path | None = None,
+) -> Path:
     dest.parent.mkdir(parents=True, exist_ok=True)
     duration = max(0.5, end - start)
+
+    delogo_rects = resolve_delogo_rects(
+        src,
+        source_site,
+        start,
+        end,
+        remove=remove_logos,
+        mode=logo_removal_mode,
+        work_dir=work_dir,
+    )
+    if delogo_rects:
+        log.info(
+            "watermark_zones video=%s site=%s zones=%s",
+            src.name,
+            source_site,
+            [(r.x, r.y, r.w, r.h) for r in delogo_rects],
+        )
+
+    vf = _build_normalize_vf(duration, delogo_rects, ken_burns=ken_burns, fade_sec=fade_sec)
     run_ffmpeg([
         "-ss", str(max(0, start - 0.1)),
         "-i", str(src),
         "-t", str(duration + 0.2),
-        "-vf",
-        "scale=1920:1080:force_original_aspect_ratio=decrease,"
-        "pad=1920:1080:(ow-iw)/2:(oh-ih)/2:black,fps=24,format=yuv420p",
+        "-vf", vf,
         "-c:v", "libx264", "-preset", "fast", "-crf", "20",
         "-c:a", "aac", "-ar", "48000", "-ac", "2", "-b:a", "128k",
         "-movflags", "+faststart",
@@ -115,7 +204,11 @@ def normalize_segment(src: Path, dest: Path, start: float, end: float) -> Path:
     return dest
 
 
-def concat_with_xfade(segments: list[Path], out_path: Path, xfade_sec: float = 0.6) -> Path:
+def concat_with_xfade(
+    segments: list[Path],
+    out_path: Path,
+    xfade_sec: float = 0.5,
+) -> Path:
     if not segments:
         raise ValueError("No segments to concat")
     out_path.parent.mkdir(parents=True, exist_ok=True)
@@ -123,33 +216,79 @@ def concat_with_xfade(segments: list[Path], out_path: Path, xfade_sec: float = 0
         out_path.write_bytes(segments[0].read_bytes())
         return out_path
 
-    # Build filter_complex for xfade chain
+    xfade_sec = max(0.1, min(xfade_sec, 1.5))
+    durations = [probe_duration(s) for s in segments]
+    all_have_audio = all(has_audio_stream(s) for s in segments)
+
     inputs: list[str] = []
     for seg in segments:
         inputs.extend(["-i", str(seg)])
 
-    filters = []
-    offset = probe_duration(segments[0]) - xfade_sec
-    last = "[0:v][0:a]"
+    # Chain xfade for video
+    v_filters: list[str] = []
+    offset = durations[0] - xfade_sec
+    v_prev = "[0:v]"
     for i in range(1, len(segments)):
-        v_out = f"[v{i}]" if i < len(segments) - 1 else "[vout]"
-        a_out = f"[a{i}]" if i < len(segments) - 1 else "[aout]"
-        filters.append(
-            f"{last}[{i}:v][{i}:a]xfade=transition=fade:duration={xfade_sec}:offset={max(0, offset):.3f}{v_out}{a_out}"
+        v_out = f"[vx{i}]" if i < len(segments) - 1 else "[vout]"
+        v_filters.append(
+            f"{v_prev}[{i}:v]xfade=transition=fade:duration={xfade_sec:.3f}:"
+            f"offset={max(0, offset):.3f}{v_out}"
         )
-        last = f"{v_out}{a_out}"
+        v_prev = v_out
         if i < len(segments) - 1:
-            offset += probe_duration(segments[i]) - xfade_sec
+            offset += durations[i] - xfade_sec
 
-    # Simpler approach: concat demuxer with re-encode if xfade too complex
-    list_file = out_path.parent / "concat.txt"
-    list_file.write_text("\n".join(f"file '{s.resolve()}'" for s in segments))
+    filter_parts = v_filters
+
+    if all_have_audio:
+        a_filters: list[str] = []
+        a_prev = "[0:a]"
+        for i in range(1, len(segments)):
+            a_out = f"[ax{i}]" if i < len(segments) - 1 else "[aout]"
+            a_filters.append(f"{a_prev}[{i}:a]acrossfade=d={xfade_sec:.3f}{a_out}")
+            a_prev = a_out
+        filter_parts = v_filters + a_filters
+        maps = ["-map", "[vout]", "-map", "[aout]"]
+        audio_codec = ["-c:a", "aac", "-b:a", "128k"]
+    else:
+        maps = ["-map", "[vout]"]
+        audio_codec = ["-an"]
+
     run_ffmpeg([
-        "-f", "concat", "-safe", "0", "-i", str(list_file),
+        *inputs,
+        "-filter_complex", ";".join(filter_parts),
+        *maps,
         "-c:v", "libx264", "-preset", "fast", "-crf", "20",
-        "-c:a", "aac", "-movflags", "+faststart",
+        *audio_codec,
+        "-movflags", "+faststart",
         str(out_path),
     ])
+    return out_path
+
+
+def apply_body_bookends(body_path: Path, out_path: Path, fade_sec: float = 0.3) -> Path:
+    """Short fade-in at start and fade-out at end of the composed body."""
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+    duration = probe_duration(body_path)
+    if duration <= fade_sec * 2:
+        out_path.write_bytes(body_path.read_bytes())
+        return out_path
+
+    fade_out_start = duration - fade_sec
+    has_audio = has_audio_stream(body_path)
+    vf = (
+        f"fade=t=in:st=0:d={fade_sec:.3f},"
+        f"fade=t=out:st={fade_out_start:.3f}:d={fade_sec:.3f},"
+        f"format=yuv420p"
+    )
+    args = ["-i", str(body_path), "-vf", vf, "-c:v", "libx264", "-preset", "fast", "-crf", "20"]
+    if has_audio:
+        af = f"afade=t=in:st=0:d={fade_sec:.3f},afade=t=out:st={fade_out_start:.3f}:d={fade_sec:.3f}"
+        args.extend(["-af", af, "-c:a", "aac", "-b:a", "128k"])
+    else:
+        args.append("-an")
+    args.extend(["-movflags", "+faststart", str(out_path)])
+    run_ffmpeg(args)
     return out_path
 
 

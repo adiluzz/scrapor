@@ -35,7 +35,7 @@ export const PROMO_AD_MODEL_CATALOG: PromoAdModelInfo[] = [
     supportsMultiShot: false,
     pricingSourceUrl: "",
     description:
-      "Professionally stitches approved clips with crossfades and animated Pisster logo intro/outro. No generative API cost.",
+      "Stitches approved clips with crossfades, color normalization, optional Ken Burns, per-source watermark removal, and animated Pisster intro/outro. No generative API cost.",
   },
   {
     id: "nova-reel-1-1",

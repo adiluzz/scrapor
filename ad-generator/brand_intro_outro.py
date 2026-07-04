@@ -17,20 +17,32 @@ def ensure_brand_assets() -> None:
     assets_dir = Path(CONFIG.intro_path).parent
     assets_dir.mkdir(parents=True, exist_ok=True)
     lockup = Path(CONFIG.brand_lockup_path)
-    if not lockup.exists():
-        log.warning("brand_lockup_missing path=%s", lockup)
-        return
+    svg_fallback = lockup.parent / "pisster-lockup.svg"
 
     png_path = lockup if lockup.suffix.lower() == ".png" else assets_dir / "pisster-lockup.png"
-    if png_path != lockup and not png_path.exists():
-        _svg_to_png(lockup, png_path)
-    elif lockup.suffix.lower() == ".png":
+    if not png_path.exists():
+        if lockup.suffix.lower() == ".svg" and lockup.exists():
+            _svg_to_png(lockup, png_path)
+        elif svg_fallback.exists():
+            _svg_to_png(svg_fallback, png_path)
+        else:
+            log.warning("brand_lockup_missing path=%s svg=%s", lockup, svg_fallback)
+            return
+    elif lockup.suffix.lower() == ".png" and lockup.exists():
         png_path = lockup
 
     if not Path(CONFIG.intro_path).exists():
         _render_intro(png_path, Path(CONFIG.intro_path))
     if not Path(CONFIG.outro_path).exists():
         _render_outro(png_path, Path(CONFIG.outro_path))
+
+    outro_base = Path(CONFIG.outro_path).parent
+    tagline_path = outro_base / "outro_tagline_1080p.mp4"
+    notag_path = outro_base / "outro_notagline_1080p.mp4"
+    if not notag_path.exists():
+        _render_outro(png_path, notag_path, show_tagline=False)
+    if not tagline_path.exists():
+        _render_outro(png_path, tagline_path, show_tagline=True)
 
 
 def _svg_to_png(svg_path: Path, png_path: Path) -> None:
@@ -64,17 +76,22 @@ def _render_intro(png_path: Path, out_path: Path) -> None:
     ])
 
 
-def _render_outro(png_path: Path, out_path: Path) -> None:
+def _render_outro(png_path: Path, out_path: Path, show_tagline: bool = True) -> None:
     """2.5s: logo hold + fade to black + optional tagline area."""
+    tagline = (
+        "drawtext=text='pisster.com':fontsize=36:fontcolor=0xD4AF37:"
+        "x=(w-text_w)/2:y=h-180:alpha='if(lt(t,1.5),0,if(lt(t,2.2),(t-1.5)/0.7,1))',"
+        if show_tagline
+        else ""
+    )
     run_ffmpeg([
         "-f", "lavfi", "-i", "color=c=black:s=1920x1080:d=2.5:r=24",
         "-i", str(png_path),
         "-filter_complex",
         "[1:v]scale=700:-1,format=rgba,"
         "fade=t=out:st=1.8:d=0.7:alpha=1[logo];"
-        "[0:v][logo]overlay=(W-w)/2:(H-h)/2-60:format=auto,"
-        "drawtext=text='pisster.com':fontsize=36:fontcolor=0xD4AF37:"
-        "x=(w-text_w)/2:y=h-180:alpha='if(lt(t,1.5),0,if(lt(t,2.2),(t-1.5)/0.7,1))',"
+        f"[0:v][logo]overlay=(W-w)/2:(H-h)/2-60:format=auto,"
+        f"{tagline}"
         "format=yuv420p",
         "-c:v", "libx264", "-preset", "fast", "-crf", "18",
         "-an",
@@ -85,4 +102,9 @@ def _render_outro(png_path: Path, out_path: Path) -> None:
 
 def intro_outro_paths(show_tagline: bool = True) -> tuple[Path, Path]:
     ensure_brand_assets()
-    return Path(CONFIG.intro_path), Path(CONFIG.outro_path)
+    intro = Path(CONFIG.intro_path)
+    outro_base = Path(CONFIG.outro_path).parent
+    outro = outro_base / ("outro_tagline_1080p.mp4" if show_tagline else "outro_notagline_1080p.mp4")
+    if not outro.exists():
+        outro = Path(CONFIG.outro_path)
+    return intro, outro

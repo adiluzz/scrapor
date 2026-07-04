@@ -19,11 +19,11 @@ export default function GoldenDrop({
       <defs>
         <linearGradient id={grad} x1="16" y1="2" x2="16" y2="38" gradientUnits="userSpaceOnUse">
           <stop offset="0%" stopColor="#F5E6A3" />
-          <stop offset="45%" stopColor="#D4AF37" />
-          <stop offset="100%" stopColor="#9A7209" />
+          <stop offset="45%" stopColor="#E8C547" />
+          <stop offset="100%" stopColor="#C9A227" />
         </linearGradient>
-        <filter id={`${grad}-shine`} x="-20%" y="-20%" width="140%" height="140%">
-          <feDropShadow dx="0" dy="1" stdDeviation="1" floodColor="#000" floodOpacity="0.35" />
+        <filter id={`${grad}-shine`} x="-30%" y="-30%" width="160%" height="160%">
+          <feDropShadow dx="0" dy="0" stdDeviation="1.5" floodColor="#D4AF37" floodOpacity="0.55" />
         </filter>
       </defs>
       <path

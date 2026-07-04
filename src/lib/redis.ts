@@ -28,6 +28,11 @@ export const SCRAPE_QUEUE_KEY = "scrape:queue";
 export const CREATOR_QUEUE_KEY = "creator:queue";
 
 /**
+ * Redis key for on-demand hover-preview / storyboard regeneration (Video ids).
+ */
+export const PREVIEW_QUEUE_KEY = "preview:queue";
+
+/**
  * Fixed-window rate limiter. Returns true when the action is allowed.
  * Fails open (allows) if Redis is unavailable so auth never hard-breaks.
  */

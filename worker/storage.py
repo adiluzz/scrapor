@@ -40,3 +40,15 @@ def upload(local_path, key, content_type):
         return None
     s3().upload_file(local_path, _BUCKET, key, ExtraArgs={"ContentType": content_type})
     return key
+
+
+def download(key, dest_path):
+    """Download an S3 object to a local path. Returns True on success."""
+    if not key:
+        return False
+    try:
+        os.makedirs(os.path.dirname(os.path.abspath(dest_path)) or ".", exist_ok=True)
+        s3().download_file(_BUCKET, key, dest_path)
+        return os.path.exists(dest_path) and os.path.getsize(dest_path) > 0
+    except Exception:
+        return False

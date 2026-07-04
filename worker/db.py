@@ -232,6 +232,48 @@ def load_video(conn, video_id: str):
     return {"id": row[0], "siteId": row[1], "durationSec": row[2], "status": row[3]}
 
 
+def load_video_media(conn, video_id: str):
+    """Load S3 keys + duration for preview/storyboard regeneration."""
+    with conn.cursor() as cur:
+        cur.execute(
+            'SELECT id,"siteId","durationSec","s3VideoKey","s3PreviewKey",'
+            '"s3StoryboardKey","s3StoryboardVttKey","previewVersion" '
+            'FROM "Video" WHERE id=%s',
+            (video_id,),
+        )
+        row = cur.fetchone()
+    if not row:
+        return None
+    return {
+        "id": row[0],
+        "siteId": row[1],
+        "durationSec": row[2],
+        "s3VideoKey": row[3],
+        "s3PreviewKey": row[4],
+        "s3StoryboardKey": row[5],
+        "s3StoryboardVttKey": row[6],
+        "previewVersion": row[7],
+    }
+
+
+def update_video_preview_media(
+    conn,
+    video_id: str,
+    *,
+    s3_preview_key,
+    s3_storyboard_key,
+    s3_storyboard_vtt_key,
+    preview_version: int,
+):
+    with conn.cursor() as cur:
+        cur.execute(
+            'UPDATE "Video" SET "s3PreviewKey"=%s,"s3StoryboardKey"=%s,'
+            '"s3StoryboardVttKey"=%s,"previewVersion"=%s,"updatedAt"=now() '
+            'WHERE id=%s',
+            (s3_preview_key, s3_storyboard_key, s3_storyboard_vtt_key, preview_version, video_id),
+        )
+
+
 def set_video_status(conn, video_id: str, status: str):
     with conn.cursor() as cur:
         cur.execute(
@@ -241,16 +283,18 @@ def set_video_status(conn, video_id: str, status: str):
 
 
 def update_video_media(conn, video_id, *, s3_video_key, s3_thumb_key, s3_preview_key,
-                       s3_storyboard_key, s3_storyboard_vtt_key, duration_sec, status):
+                       s3_storyboard_key, s3_storyboard_vtt_key, duration_sec, status,
+                       preview_version=None):
     """Write generated S3 keys + duration and flip status (READY/FAILED)."""
     with conn.cursor() as cur:
         cur.execute(
             'UPDATE "Video" SET "s3VideoKey"=%s,"s3ThumbKey"=%s,"s3PreviewKey"=%s,'
             '"s3StoryboardKey"=%s,"s3StoryboardVttKey"=%s,'
-            '"durationSec"=COALESCE("durationSec",%s),status=%s,"updatedAt"=now() '
+            '"durationSec"=COALESCE("durationSec",%s),status=%s,'
+            '"previewVersion"=COALESCE(%s,"previewVersion"),"updatedAt"=now() '
             'WHERE id=%s',
             (s3_video_key, s3_thumb_key, s3_preview_key, s3_storyboard_key,
-             s3_storyboard_vtt_key, duration_sec, status, video_id),
+             s3_storyboard_vtt_key, duration_sec, status, preview_version, video_id),
         )
 
 

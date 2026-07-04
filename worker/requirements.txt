@@ -15,3 +15,6 @@ xhamster-api==2.2
 youporn-api==1.5.2
 eporner-api==2.2
 hqporner-api==2.1.1
+
+# Scene detection for v2 hover previews (short montage from shot boundaries)
+scenedetect[opencv]>=0.7

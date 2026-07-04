@@ -54,14 +54,14 @@ export default async function PornstarsPage({
           {q ? `No pornstars matching “${q}”.` : "No pornstars yet."}
         </p>
       ) : (
-        <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6">
+        <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5">
           {stars.map((s) => (
             <Link
               key={s.id}
               href={`/pornstars/${s.slug}`}
               className="group flex flex-col items-center rounded-xl border border-zinc-800 bg-zinc-900 p-4 text-center hover:border-brand-500/50"
             >
-              <PornstarAvatar name={s.name} pornstar={s} size="md" className="mb-3 h-20 w-20 text-2xl" />
+              <PornstarAvatar name={s.name} pornstar={s} size="xl" className="mb-3" />
               <span className="truncate text-sm font-medium text-zinc-200 group-hover:text-white">{s.name}</span>
               <span className="text-xs text-zinc-500">{s._count.videos} videos</span>
             </Link>

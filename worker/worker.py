@@ -86,6 +86,7 @@ PAGE_BATCH = int(os.environ.get("SCRAPE_PAGE_BATCH", "50"))
 ALL_CAP = int(os.environ.get("SCRAPE_ALL_MAX", "100000"))
 QUEUE_KEY = "scrape:queue"
 CREATOR_QUEUE_KEY = "creator:queue"
+PREVIEW_QUEUE_KEY = "preview:queue"
 # Shared volume the web app writes creator uploads to (see docker-compose).
 UPLOAD_DIR = os.environ.get("UPLOAD_DIR", os.path.join(ROOT, "uploads"))
 # Optional HTTP(S) proxy for source downloads (or use docker-compose.vpn.yml).
@@ -263,7 +264,7 @@ def _process_one_inner(conn, run, source_site, video) -> str:
         sprite = os.path.join(tmp_dir, "storyboard.jpg")
         vtt = os.path.join(tmp_dir, "storyboard.vtt")
 
-        if not media.make_preview(video_path, preview):
+        if not media.make_preview(video_path, preview, duration=duration):
             _log_video_fail("make_preview", video, run, source_site, "ffmpeg preview generation failed")
             return "fail"
         if not media.make_thumbnail(video_path, thumb, video.get("thumbnail", "")):
@@ -299,8 +300,8 @@ def _process_one_inner(conn, run, source_site, video) -> str:
             with conn.cursor() as cur:
                 cur.execute(
                     'UPDATE "Video" SET "s3VideoKey"=%s,"s3ThumbKey"=%s,"s3PreviewKey"=%s,'
-                    '"s3StoryboardKey"=%s,"s3StoryboardVttKey"=%s WHERE id=%s',
-                    (keys["v"], keys["t"], keys["p"], keys["sb"], keys["vtt"], vid),
+                    '"s3StoryboardKey"=%s,"s3StoryboardVttKey"=%s,"previewVersion"=%s WHERE id=%s',
+                    (keys["v"], keys["t"], keys["p"], keys["sb"], keys["vtt"], media.PREVIEW_VERSION, vid),
                 )
         else:
             local = os.path.join(ROOT, "downloads", vid)
@@ -352,9 +353,9 @@ def process_creator_upload(conn, video_id: str):
         thumb = os.path.join(tmp_dir, "thumbnail.jpg")
         sprite = os.path.join(tmp_dir, "storyboard.jpg")
         vtt = os.path.join(tmp_dir, "storyboard.vtt")
-        media.make_preview(video_path, preview)
+        media.make_preview(video_path, preview, duration=duration or 0)
         media.make_thumbnail(video_path, thumb, "")
-        media.make_storyboard(video_path, sprite, vtt, duration)
+        media.make_storyboard(video_path, sprite, vtt, duration or 0)
 
         keys = dict(v=None, t=None, p=None, sb=None, vtt=None)
         if storage.configured():
@@ -380,6 +381,7 @@ def process_creator_upload(conn, video_id: str):
             s3_video_key=keys["v"], s3_thumb_key=keys["t"], s3_preview_key=keys["p"],
             s3_storyboard_key=keys["sb"], s3_storyboard_vtt_key=keys["vtt"],
             duration_sec=duration, status="READY",
+            preview_version=media.PREVIEW_VERSION,
         )
         _event("info", "creator_ready", videoId=video_id, durationSec=duration)
     except Exception as e:
@@ -389,6 +391,92 @@ def process_creator_upload(conn, video_id: str):
     finally:
         shutil.rmtree(tmp_dir, ignore_errors=True)
         shutil.rmtree(os.path.join(UPLOAD_DIR, video_id), ignore_errors=True)
+
+
+def _resolve_source_video(conn, video_id: str, site_id: str, s3_video_key: str | None, dest: str) -> bool:
+    """Copy or download the full video to dest for media regeneration."""
+    if storage.configured() and s3_video_key:
+        if storage.download(s3_video_key, dest):
+            return True
+    for name in ("video.mp4", "preview.mp4"):
+        local = os.path.join(ROOT, "downloads", video_id, name)
+        if os.path.exists(local) and os.path.getsize(local) > 10_000:
+            shutil.copy(local, dest)
+            return True
+    return False
+
+
+def process_regenerate_preview(conn, video_id: str):
+    """Rebuild hover preview (v2) and adaptive storyboard for an existing video."""
+    v = db.load_video_media(conn, video_id)
+    if not v:
+        _event("warning", "preview_regen_not_found", videoId=video_id)
+        return
+
+    site_id = v["siteId"]
+    duration = v.get("durationSec") or 0
+    _event("info", "preview_regen_start", videoId=video_id, durationSec=duration,
+           previewVersion=v.get("previewVersion"))
+
+    tmp_dir = tempfile.mkdtemp(prefix="preview_regen_")
+    try:
+        video_path = os.path.join(tmp_dir, "video.mp4")
+        if not _resolve_source_video(conn, video_id, site_id, v.get("s3VideoKey"), video_path):
+            _event("warning", "preview_regen_no_source", videoId=video_id)
+            return
+
+        if duration <= 0:
+            duration = media.probe_duration(video_path)
+
+        preview = os.path.join(tmp_dir, "preview.mp4")
+        sprite = os.path.join(tmp_dir, "storyboard.jpg")
+        vtt = os.path.join(tmp_dir, "storyboard.vtt")
+
+        if not media.make_preview(video_path, preview, duration=duration, force=True):
+            _event("warning", "preview_regen_failed", videoId=video_id, stage="make_preview")
+            return
+
+        storyboard_ok = media.make_storyboard(video_path, sprite, vtt, duration, force=True)
+
+        preview_key = v.get("s3PreviewKey")
+        storyboard_key = v.get("s3StoryboardKey")
+        vtt_key = v.get("s3StoryboardVttKey")
+
+        if storage.configured():
+            preview_key = storage.upload(
+                preview, storage.key_preview(site_id, video_id), "video/mp4"
+            ) or preview_key
+            if storyboard_ok:
+                storyboard_key = storage.upload(
+                    sprite, storage.key_storyboard(site_id, video_id), "image/jpeg"
+                ) or storyboard_key
+                vtt_key = storage.upload(
+                    vtt, storage.key_storyboard_vtt(site_id, video_id), "text/vtt"
+                ) or vtt_key
+        else:
+            local_dir = os.path.join(ROOT, "downloads", video_id)
+            os.makedirs(local_dir, exist_ok=True)
+            shutil.copy(preview, os.path.join(local_dir, "preview.mp4"))
+            if storyboard_ok:
+                shutil.copy(sprite, os.path.join(local_dir, "storyboard.jpg"))
+                shutil.copy(vtt, os.path.join(local_dir, "storyboard.vtt"))
+            preview_key = preview_key or f"local:{video_id}/preview.mp4"
+
+        db.update_video_preview_media(
+            conn,
+            video_id,
+            s3_preview_key=preview_key,
+            s3_storyboard_key=storyboard_key if storyboard_ok else v.get("s3StoryboardKey"),
+            s3_storyboard_vtt_key=vtt_key if storyboard_ok else v.get("s3StoryboardVttKey"),
+            preview_version=media.PREVIEW_VERSION,
+        )
+        _event("info", "preview_regen_done", videoId=video_id, previewVersion=media.PREVIEW_VERSION,
+               storyboard=storyboard_ok)
+    except Exception as e:
+        _event("warning", "preview_regen_failed", videoId=video_id, reason=str(e)[:500],
+               errorType=type(e).__name__, traceback=traceback.format_exc()[-800:])
+    finally:
+        shutil.rmtree(tmp_dir, ignore_errors=True)
 
 
 def _run_stopped(conn, run_id: str) -> bool:
@@ -568,9 +656,14 @@ def process_run(conn, run_id: str):
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--run", help="Process a single existing ScrapeRun id and exit")
+    parser.add_argument("--regenerate-preview", help="Regenerate hover preview for a Video id and exit")
     args = parser.parse_args()
 
     conn = db.connect()
+
+    if args.regenerate_preview:
+        process_regenerate_preview(conn, args.regenerate_preview)
+        return
 
     if args.run:
         process_run(conn, args.run)
@@ -594,13 +687,15 @@ def main():
     log.info(_j("worker started, waiting for jobs"))
     while True:
         try:
-            item = r.blpop([QUEUE_KEY, CREATOR_QUEUE_KEY], timeout=5)
+            item = r.blpop([QUEUE_KEY, CREATOR_QUEUE_KEY, PREVIEW_QUEUE_KEY], timeout=5)
             if not item:
                 continue
             queue = item[0].decode() if isinstance(item[0], bytes) else item[0]
             job_id = item[1].decode() if isinstance(item[1], bytes) else item[1]
             if queue == CREATOR_QUEUE_KEY:
                 process_creator_upload(conn, job_id)
+            elif queue == PREVIEW_QUEUE_KEY:
+                process_regenerate_preview(conn, job_id)
             else:
                 process_run(conn, job_id)
         except Exception as e:

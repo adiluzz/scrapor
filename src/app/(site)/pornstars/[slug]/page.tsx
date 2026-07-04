@@ -74,9 +74,9 @@ export default async function PornstarPage({
         }}
       />
 
-      <div className="mb-6 flex items-center gap-4">
-        <PornstarAvatar name={star.name} pornstar={star} size="lg" />
-        <div>
+      <div className="mb-8 flex flex-col items-center gap-5 sm:flex-row sm:items-start">
+        <PornstarAvatar name={star.name} pornstar={star} size="2xl" className="ring-2 ring-zinc-800" />
+        <div className="min-w-0 text-center sm:text-left">
           <h1 className="text-2xl font-bold text-zinc-100">{star.name}</h1>
           <p className="text-sm text-zinc-500">{total} videos</p>
           {star.bio && <p className="mt-1 max-w-2xl text-sm text-zinc-400">{star.bio}</p>}

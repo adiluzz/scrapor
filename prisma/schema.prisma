@@ -463,6 +463,7 @@ model VideoAgentDetection {
   screenH    Float?
   confidence Float?
   frameSec   Float?
+  manual     Boolean              @default(false) // admin-created clip (not model output)
   createdAt  DateTime             @default(now())
   feedback   VideoAgentFeedback?
   promoClips PromoAdClip[]

@@ -42,7 +42,7 @@ export default async function VideoAgentRunDetailPage({
     selectedIds.length > 0
       ? await prisma.video.findMany({
           where: { siteId: user.siteId, id: { in: selectedIds } },
-          select: { id: true, slug: true, title: true },
+          select: { id: true, slug: true, title: true, durationSec: true },
           orderBy: { viewCount: "desc" },
         })
       : [];
@@ -62,6 +62,7 @@ export default async function VideoAgentRunDetailPage({
     screenW: d.screenW,
     screenH: d.screenH,
     confidence: d.confidence,
+    manual: d.manual,
     feedback: d.feedback ? { approved: d.feedback.approved } : null,
   }));
 
@@ -155,6 +156,12 @@ export default async function VideoAgentRunDetailPage({
           runId={run.id}
           initialStatus={run.status}
           initialDetections={detections}
+          labelOptions={targets}
+          runVideos={selectedVideos.map((v) => ({
+            id: v.id,
+            title: v.title,
+            durationSec: v.durationSec,
+          }))}
         />
       </section>
     </div>

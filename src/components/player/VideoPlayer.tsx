@@ -178,8 +178,8 @@ export default forwardRef(function VideoPlayer(
   const [landscapeFill, setLandscapeFill] = useState(false);
   const [preview, setPreview] = useState<{
     left: number;
-    thumbBottom: string;
-    labelBottom: string;
+    thumbBottom: number;
+    labelBottom: number;
     cue: StoryboardCue;
     time: number;
     scale: number;
@@ -387,9 +387,9 @@ export default forwardRef(function VideoPlayer(
         const scale = Math.min(1, (rootRect.width - 16) / cue.w);
         const half = (cue.w * scale) / 2;
         const left = Math.min(rootRect.width - half, Math.max(half, clientX - rootRect.left));
-        // Match progress-holder top: var(--player-bar-height) from root bottom.
-        const thumbBottom = "calc(var(--player-bar-height) + 8px)";
-        const labelBottom = "calc(var(--player-bar-height) + 2px)";
+        const seekTopFromRootBottom = rootRect.bottom - seekRect.top;
+        const thumbBottom = seekTopFromRootBottom + 8;
+        const labelBottom = seekTopFromRootBottom + 2;
         setPreview({ left, thumbBottom, labelBottom, cue, time, scale });
       };
 

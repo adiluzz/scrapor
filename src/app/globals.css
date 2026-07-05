@@ -13,6 +13,7 @@
   /* Sit flush above the progress track (track top ≈ bar-height from player bottom) */
   --player-heatmap-bottom: calc(var(--player-bar-height) + 1.375rem);
   --player-playhead-size: calc(var(--player-progress-height) * 1.8);
+  --player-timeline-zone-height: calc(var(--player-heatmap-height) + 1.625rem);
 }
 
 @media (max-width: 640px) {
@@ -22,6 +23,7 @@
     --player-controls-height: 2rem;
     --player-heatmap-height: 1.75rem;
     --player-heatmap-bottom: calc(var(--player-bar-height) + 1.25rem);
+    --player-timeline-zone-height: calc(var(--player-heatmap-height) + 1.5rem);
   }
 }
 
@@ -33,8 +35,20 @@
 .video-player-root .video-player-heatmap {
   bottom: var(--player-heatmap-bottom);
   z-index: 11;
-  pointer-events: auto;
   height: var(--player-heatmap-height);
+}
+
+/* Unified hit target: heatmap + seek bar (hover = preview, click/drag = seek) */
+.video-player-root .video-player-timeline-zone {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: calc(var(--player-bar-height) - 0.25rem);
+  height: var(--player-timeline-zone-height);
+  z-index: 13;
+  pointer-events: auto;
+  cursor: pointer;
+  touch-action: none;
 }
 
 /* ── Video.js — Pisster golden control bar ─────────────────────────── */
@@ -142,7 +156,7 @@
   align-items: center;
   box-sizing: border-box;
   z-index: 12;
-  pointer-events: auto;
+  pointer-events: none;
   cursor: pointer;
 }
 
@@ -253,6 +267,38 @@
   .video-player-root.video-player-themed .vjs-progress-control {
     padding: 0 0.5rem;
     height: calc(var(--player-progress-height) + 0.75rem);
+  }
+
+  .video-player-root .video-player-timeline-zone {
+    bottom: calc(var(--player-bar-height) - 0.25rem);
+    height: var(--player-timeline-zone-height);
+  }
+
+  /* Portrait → landscape: expand player to fill the viewport (works without Fullscreen API). */
+  .video-player-root.video-player-landscape-fill {
+    position: fixed;
+    inset: 0;
+    z-index: 9999;
+    width: 100vw !important;
+    height: 100vh !important;
+    height: 100dvh !important;
+    max-height: 100dvh;
+    background: #000;
+    display: flex;
+    flex-direction: column;
+  }
+
+  .video-player-root.video-player-landscape-fill [data-vjs-player] {
+    flex: 1;
+    min-height: 0;
+    height: auto !important;
+    border-radius: 0;
+    border: none;
+  }
+
+  .video-player-root.video-player-landscape-fill .video-js.vjs-fluid {
+    height: 100% !important;
+    padding-top: 0 !important;
   }
 
   .video-player-root.video-player-themed .vjs-button > .vjs-icon-placeholder:before {

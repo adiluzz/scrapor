@@ -115,6 +115,31 @@ def _download_m3u8(m3u8: str, dest: str, dl_env: dict, timeout: int | None = Non
     return False, last_result, None
 
 
+def _download_eporner(page_url: str, dload_url: str, dest: str, dl_env: dict) -> tuple[bool, subprocess.CompletedProcess | None]:
+    """Download via Eporner /dload/ redirect using a browser-impersonated session."""
+    proxy = SCRAPE_PROXY or None
+    proxies = {"http": proxy, "https": proxy} if proxy else None
+    try:
+        from curl_cffi import requests as cr
+        session = cr.Session(impersonate="chrome120")
+        session.get(page_url, timeout=30, proxies=proxies)
+        resp = session.get(
+            dload_url, timeout=DOWNLOAD_LONG_TIMEOUT, proxies=proxies,
+            allow_redirects=True, stream=True,
+        )
+        if resp.status_code != 200:
+            return False, None
+        with open(dest, "wb") as fh:
+            for chunk in resp.iter_content(1024 * 1024):
+                if chunk:
+                    fh.write(chunk)
+        if os.path.exists(dest) and os.path.getsize(dest) > 100_000:
+            return True, None
+        return False, None
+    except Exception:
+        return False, None
+
+
 # ── Downloaders ───────────────────────────────────────────────────────
 def _download(video, dest_dir) -> tuple[bool, str, dict]:
     """
@@ -174,9 +199,18 @@ def _download(video, dest_dir) -> tuple[bool, str, dict]:
                 }
             method = f"ffmpeg-m3u8-{quality}"
         elif cdn:
-            method = "wget-cdn"
-            cmd = ["wget", "-q", "--no-check-certificate", "-O", dest, cdn]
-            last_result = subprocess.run(cmd, capture_output=True, timeout=DOWNLOAD_TIMEOUT, env=dl_env)
+            if "eporner.com/dload/" in cdn:
+                method = "curl-dload"
+                ok, last_result = _download_eporner(url, cdn, dest, dl_env)
+                if not ok:
+                    return False, "eporner dload download failed", {
+                        "method": method,
+                        "stderr": _stderr_tail(last_result),
+                    }
+            else:
+                method = "wget-cdn"
+                cmd = ["wget", "-q", "--no-check-certificate", "-O", dest, cdn]
+                last_result = subprocess.run(cmd, capture_output=True, timeout=DOWNLOAD_TIMEOUT, env=dl_env)
         else:
             method = "yt-dlp"
             tmp = os.path.join(dest_dir, "dl.%(ext)s")

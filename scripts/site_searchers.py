@@ -25,7 +25,7 @@ Eporner / ParadiseHill; result offset for API libraries), and `exhausted` is Tru
 when the source has no more result pages.
 
 The "EchterAlsFake" site-API libraries (phub, xnxx_api, xvideos_api,
-xhamster_api, youporn_api, eporner_api, hqporner_api) are async-first: their
+xhamster_api, youporn_api, hqporner_api) are async-first: their
 `search`/`search_videos` methods return async generators (xnxx returns an
 awaitable Search object). The worker calls these searchers synchronously, so
 each one drives its async work through `asyncio.run(...)` and collects results
@@ -876,43 +876,193 @@ def search_xvideos(query, count, cursor=0, min_duration=600):
     return asyncio.run(_run_paginated("XVideos", run, offset, count))
 
 
-# ── Eporner ───────────────────────────────────────────────────────────
+# ── Eporner (HTML + browser-impersonated session; bypasses yt-dlp) ─────
+_EP_BASE = "https://www.eporner.com"
+_EP_VIDEO_RE = re.compile(r"^/video-[A-Za-z0-9]+/")
+
+
+def _eporner_tag_slug(query):
+    return re.sub(r"\s+", "-", (query or "").strip().lower())
+
+
+def _eporner_search_url(query, page):
+    from urllib.parse import quote_plus
+    q = quote_plus(query)
+    slug = _eporner_tag_slug(query)
+    if page <= 1:
+        return f"{_EP_BASE}/search/{q}/"
+    return f"{_EP_BASE}/tag/{slug}/{page}/"
+
+
+def _eporner_search_items(html):
+    """Extract video cards from an Eporner search/tag listing page."""
+    from bs4 import BeautifulSoup
+    from urllib.parse import urljoin, urlparse
+    soup = BeautifulSoup(html or "", "html.parser")
+    out = []
+    seen = set()
+    for item in soup.select(".mb"):
+        a = item.select_one('a[href*="/video-"]')
+        if not a:
+            continue
+        full = urljoin(_EP_BASE, a.get("href", ""))
+        parsed = urlparse(full)
+        if "eporner.com" not in (parsed.netloc or ""):
+            continue
+        if not _EP_VIDEO_RE.search(parsed.path or ""):
+            continue
+        clean = f"{parsed.scheme}://{parsed.netloc}{parsed.path.rstrip('/')}/"
+        if clean in seen:
+            continue
+        seen.add(clean)
+        title_el = item.select_one(".mbtit a")
+        title = (title_el.get_text(strip=True) if title_el
+                 else a.get("title") or a.get_text(" ", strip=True) or "")
+        dur_el = item.select_one(".mbtim")
+        dur_s = _dur(dur_el.get_text()) if dur_el else None
+        thumb = ""
+        img = item.select_one("img")
+        if img:
+            for attr in ("src", "data-src"):
+                val = img.get(attr)
+                if val and str(val).startswith("http"):
+                    thumb = str(val)
+                    break
+        out.append((clean, title, dur_s, thumb))
+    return out
+
+
+def _eporner_best_dload(html, max_quality=720):
+    """Pick the highest-quality h264 MP4 download link that does not require login."""
+    from bs4 import BeautifulSoup
+    from urllib.parse import urljoin
+    soup = BeautifulSoup(html or "", "html.parser")
+    best_q, best_url = -1, ""
+    for a in soup.select(".download-h264 a[href]"):
+        href = a.get("href", "")
+        if not href.endswith(".mp4"):
+            continue
+        m = re.search(r"(\d+)p", a.get_text(" ", strip=True))
+        q = int(m.group(1)) if m else 0
+        if q <= 0 or q > max_quality:
+            continue
+        if q >= best_q:
+            best_q = q
+            best_url = urljoin(_EP_BASE, href)
+    return best_url
+
+
+def _eporner_parse_detail(html, url):
+    """Parse an Eporner video page for metadata and a session-gated dload URL."""
+    from bs4 import BeautifulSoup
+    from urllib.parse import urljoin
+    soup = BeautifulSoup(html or "", "html.parser")
+    h1 = soup.select_one("h1")
+    title = h1.get_text(" ", strip=True) if h1 else ""
+    if title:
+        title = re.sub(r"\s+\d+min\s*$", "", title, flags=re.I)
+        title = re.sub(r"\s+\d+p(?:\([^)]+\))?\s*$", "", title, flags=re.I)
+        title = re.sub(r"\s+\d+fps\s*$", "", title, flags=re.I).strip()
+    dur_s = None
+    dur_el = soup.select_one(".vid-length")
+    if dur_el:
+        dur_s = _dur(dur_el.get_text()) or None
+    if not dur_s:
+        for node in soup.select('script[type="application/ld+json"]'):
+            try:
+                data = json.loads(node.string or "")
+            except Exception:
+                continue
+            if isinstance(data, dict) and data.get("duration"):
+                dur_s = _dur(data["duration"]) or dur_s
+    tags = []
+    for a in soup.select('a[href*="/cat/"], a[href*="/tag/"]'):
+        name = a.get_text(strip=True)
+        if name and name not in tags:
+            tags.append(name)
+    pornstars = []
+    for a in soup.select('a[href*="/pornstar/"]'):
+        name = a.get_text(strip=True)
+        if name and name not in pornstars:
+            pornstars.append(name)
+    thumb = ""
+    og = soup.select_one('meta[property="og:image"]')
+    if og and og.get("content"):
+        thumb = str(og["content"])
+    desc = ""
+    for node in soup.select('script[type="application/ld+json"]'):
+        try:
+            data = json.loads(node.string or "")
+        except Exception:
+            continue
+        if isinstance(data, dict) and data.get("description"):
+            desc = str(data["description"]).strip()
+            break
+    dload = _eporner_best_dload(html)
+    return {
+        "title": title,
+        "duration_sec": dur_s,
+        "tags": tags,
+        "pornstars": pornstars,
+        "thumbnail": thumb,
+        "description": desc,
+        "_cdn_url": dload or None,
+    }
+
+
 def search_eporner(query, count, cursor=0, min_duration=600):
-    async def run():
-        import eporner_api
-        from eporner_api import Gay, Order, LowQuality
-        client = eporner_api.Client()
-        per_page = min(max(count, 20), 60)
-
-        async def extract(v):
-            dur_s = _dur(_sget(v, "length", 0))
-            tags = [t for t in (list(_sget(v, "tags", []) or [])) if t]
-            return _norm(
-                _sget(v, "url", ""), _sget(v, "title", ""), dur_s or None,
-                tags=tags,
-            )
-
-        out, page = [], _page_cursor(cursor)
-        while len(out) < count:
-            agen = client.search_videos(
-                query=query, sorting_gay=Gay.exclude_gay_content,
-                sorting_order=Order.longest,
-                sorting_low_quality=LowQuality.exclude_low_quality_content,
-                page=page, per_page=per_page,
-            )
-            batch, saw_any = await _collect(agen, extract, count - len(out), min_duration)
-            if not saw_any:
-                return out, page, True
-            if batch:
-                out.extend(batch)
-            page += 1
-        return out, page, len(out) < count
-
+    """Search Eporner via HTML listings; enrich each hit with a dload fast-path URL."""
+    page = _page_cursor(cursor)
+    stubs, seen = [], set()
     try:
-        return asyncio.run(run())
+        while len(stubs) < count:
+            html = _html_get(_eporner_search_url(query, page))
+            if not html:
+                break
+            batch = _eporner_search_items(html)
+            if not batch:
+                break
+            new_urls = 0
+            for clean, title, dur_s, thumb in batch:
+                if clean in seen:
+                    continue
+                seen.add(clean)
+                new_urls += 1
+                if dur_s and dur_s < min_duration:
+                    continue
+                stubs.append((clean, title, dur_s, thumb))
+                if len(stubs) >= count:
+                    break
+            if new_urls == 0:
+                break
+            page += 1
     except Exception as e:  # noqa: BLE001
-        print(f"[site_searchers] Eporner failed: {e!r}", file=sys.stderr, flush=True)
-        return [], _page_cursor(cursor), True
+        print(f"[site_searchers] Eporner search failed: {e!r}", file=sys.stderr, flush=True)
+        return [], page, True
+
+    out = []
+    for clean, title, dur_s, thumb in stubs[:count]:
+        try:
+            detail_html = _html_get(clean)
+            if not detail_html:
+                out.append(_norm(clean, title, dur_s, thumbnail=thumb))
+                continue
+            meta = _eporner_parse_detail(detail_html, clean)
+            out.append(_norm(
+                clean,
+                meta.get("title") or title,
+                meta.get("duration_sec") or dur_s,
+                thumbnail=meta.get("thumbnail") or thumb,
+                tags=meta.get("tags"),
+                pornstars=meta.get("pornstars"),
+                description=meta.get("description") or "",
+                cdn=meta.get("_cdn_url"),
+            ))
+        except Exception:
+            out.append(_norm(clean, title, dur_s, thumbnail=thumb))
+    next_page = page
+    exhausted = len(stubs) < count
+    return out, next_page, exhausted
 
 
 # ── YouPorn ───────────────────────────────────────────────────────────

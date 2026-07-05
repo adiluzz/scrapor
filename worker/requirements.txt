@@ -13,8 +13,10 @@ xnxx-api==2.1
 xvideos-api==2.2.2
 xhamster-api==2.2
 youporn-api==1.5.2
-eporner-api==2.2
 hqporner-api==2.1.1
+# HTML scraping for sources without a working API (Eporner, RedTube, SpankBang).
+curl_cffi>=0.7.0
+beautifulsoup4>=4.12.0
 
 # Scene detection for v2 hover previews (short montage from shot boundaries)
 scenedetect[opencv]>=0.7

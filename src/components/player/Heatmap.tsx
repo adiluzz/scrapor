@@ -22,7 +22,7 @@ export default function Heatmap({
   const max = Math.max(...buckets);
 
   return (
-    <div className="flex h-8 w-full items-end gap-px overflow-hidden rounded-t bg-black/30">
+    <div className="flex h-full w-full items-end gap-px overflow-hidden rounded-t bg-black/30">
       {buckets.map((b, i) => (
         <button
           key={i}

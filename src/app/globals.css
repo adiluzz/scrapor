@@ -9,7 +9,9 @@
   --player-bar-height: 4rem;
   --player-progress-height: 1rem;
   --player-controls-height: 2.25rem;
+  --player-heatmap-height: 2rem;
   --player-heatmap-bottom: 4.5rem;
+  --player-playhead-size: calc(var(--player-progress-height) * 1.8);
 }
 
 @media (max-width: 640px) {
@@ -17,6 +19,7 @@
     --player-bar-height: 3.25rem;
     --player-progress-height: 0.625rem;
     --player-controls-height: 2rem;
+    --player-heatmap-height: 1.75rem;
     --player-heatmap-bottom: 3.75rem;
   }
 }
@@ -30,6 +33,7 @@
   bottom: var(--player-heatmap-bottom);
   z-index: 11;
   pointer-events: auto;
+  height: var(--player-heatmap-height);
 }
 
 /* ── Video.js — Pisster golden control bar ─────────────────────────── */
@@ -171,8 +175,8 @@
 
 .video-player-root.video-player-themed .vjs-play-progress:before {
   content: "" !important;
-  width: 0.875rem;
-  height: 0.875rem;
+  width: var(--player-playhead-size);
+  height: var(--player-playhead-size);
   border-radius: 9999px;
   background: var(--brand-gold-light);
   box-shadow: 0 0 6px rgba(212, 175, 55, 0.6);
@@ -182,6 +186,13 @@
   font-size: 0;
   line-height: 0;
   text-shadow: none;
+  transition: transform 0.15s ease-out, box-shadow 0.15s ease-out;
+}
+
+.video-player-root.video-player-themed .vjs-progress-control.vjs-scrubbing .vjs-play-progress:before,
+.video-player-root.video-player-themed .vjs-progress-control:active .vjs-play-progress:before {
+  transform: translate(50%, -50%) scale(1.2);
+  box-shadow: 0 0 12px rgba(212, 175, 55, 0.9);
 }
 
 .video-player-root.video-player-themed .vjs-slider:focus {
@@ -241,11 +252,6 @@
   .video-player-root.video-player-themed .vjs-progress-control {
     padding: 0 0.5rem;
     height: calc(var(--player-progress-height) + 0.75rem);
-  }
-
-  .video-player-root.video-player-themed .vjs-play-progress:before {
-    width: 0.75rem;
-    height: 0.75rem;
   }
 
   .video-player-root.video-player-themed .vjs-button > .vjs-icon-placeholder:before {

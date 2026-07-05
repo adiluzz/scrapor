@@ -10,7 +10,8 @@
   --player-progress-height: 1rem;
   --player-controls-height: 2.25rem;
   --player-heatmap-height: 2rem;
-  --player-heatmap-bottom: 4.5rem;
+  /* Sit flush above the progress track (track top ≈ bar-height from player bottom) */
+  --player-heatmap-bottom: calc(var(--player-bar-height) + 1.375rem);
   --player-playhead-size: calc(var(--player-progress-height) * 1.8);
 }
 
@@ -20,7 +21,7 @@
     --player-progress-height: 0.625rem;
     --player-controls-height: 2rem;
     --player-heatmap-height: 1.75rem;
-    --player-heatmap-bottom: 3.75rem;
+    --player-heatmap-bottom: calc(var(--player-bar-height) + 1.25rem);
   }
 }
 

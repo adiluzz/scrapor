@@ -178,8 +178,8 @@ export default forwardRef(function VideoPlayer(
   const [landscapeFill, setLandscapeFill] = useState(false);
   const [preview, setPreview] = useState<{
     left: number;
-    thumbBottom: number;
-    labelBottom: number;
+    thumbBottom: string;
+    labelBottom: string;
     cue: StoryboardCue;
     time: number;
     scale: number;
@@ -387,8 +387,9 @@ export default forwardRef(function VideoPlayer(
         const scale = Math.min(1, (rootRect.width - 16) / cue.w);
         const half = (cue.w * scale) / 2;
         const left = Math.min(rootRect.width - half, Math.max(half, clientX - rootRect.left));
-        const thumbBottom = rootRect.bottom - seekRect.top + 8;
-        const labelBottom = rootRect.bottom - seekRect.top + 2;
+        // Match progress-holder top: var(--player-bar-height) from root bottom.
+        const thumbBottom = "calc(var(--player-bar-height) + 8px)";
+        const labelBottom = "calc(var(--player-bar-height) + 2px)";
         setPreview({ left, thumbBottom, labelBottom, cue, time, scale });
       };
 
@@ -406,11 +407,21 @@ export default forwardRef(function VideoPlayer(
         if (!scrubbing && !isInsideZone(clientX, clientY)) setPreview(null);
       };
 
+      const wakeControls = () => {
+        player.userActive(true);
+        setControlsVisible(true);
+      };
+
+      const onMouseEnter = () => {
+        wakeControls();
+      };
+
       const onMouseMove = (e: MouseEvent) => {
         if (!isInsideZone(e.clientX, e.clientY)) {
           clearPreviewIfOutside(e.clientX, e.clientY);
           return;
         }
+        wakeControls();
         updatePreview(e.clientX);
         if (scrubbing && e.buttons === 1) seekFromClientX(e.clientX);
       };
@@ -441,6 +452,7 @@ export default forwardRef(function VideoPlayer(
         const touch = e.touches[0];
         if (!touch) return;
         e.preventDefault();
+        wakeControls();
         scrubbing = true;
         setScrubbing(true);
         updatePreview(touch.clientX);
@@ -462,6 +474,7 @@ export default forwardRef(function VideoPlayer(
         setPreview(null);
       };
 
+      timelineZone.addEventListener("mouseenter", onMouseEnter);
       timelineZone.addEventListener("mousemove", onMouseMove);
       timelineZone.addEventListener("mousedown", onMouseDown);
       timelineZone.addEventListener("mouseleave", onMouseLeave);
@@ -473,6 +486,7 @@ export default forwardRef(function VideoPlayer(
       document.addEventListener("mousemove", onMouseMove);
 
       const cleanup = () => {
+        timelineZone.removeEventListener("mouseenter", onMouseEnter);
         timelineZone.removeEventListener("mousemove", onMouseMove);
         timelineZone.removeEventListener("mousedown", onMouseDown);
         timelineZone.removeEventListener("mouseleave", onMouseLeave);
@@ -578,15 +592,29 @@ export default forwardRef(function VideoPlayer(
 
     const frame = requestAnimationFrame(() => attachTimelineInteractions());
 
-    const rebind = () => requestAnimationFrame(() => attachTimelineInteractions());
-    document.addEventListener("fullscreenchange", rebind);
+    const rebind = () => {
+      setPreview(null);
+      requestAnimationFrame(() => attachTimelineInteractions());
+    };
+    const onFullscreenChange = () => {
+      const player = playerRef.current;
+      const root = rootRef.current;
+      if (player && root && document.fullscreenElement === root) {
+        player.userActive(true);
+        setControlsVisible(true);
+      }
+      rebind();
+    };
+    document.addEventListener("fullscreenchange", onFullscreenChange);
+    document.addEventListener("webkitfullscreenchange", onFullscreenChange);
     const player = playerRef.current;
-    player?.on("fullscreenchange", rebind);
+    player?.on("fullscreenchange", onFullscreenChange);
 
     return () => {
       cancelAnimationFrame(frame);
-      document.removeEventListener("fullscreenchange", rebind);
-      player?.off("fullscreenchange", rebind);
+      document.removeEventListener("fullscreenchange", onFullscreenChange);
+      document.removeEventListener("webkitfullscreenchange", onFullscreenChange);
+      player?.off("fullscreenchange", onFullscreenChange);
       scrubCleanupRef.current?.();
       scrubCleanupRef.current = null;
       progressSeekCleanupRef.current?.();
@@ -594,6 +622,10 @@ export default forwardRef(function VideoPlayer(
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [status, storyboard, heatmap.length]);
+
+  useEffect(() => {
+    if (!controlsVisible) setPreview(null);
+  }, [controlsVisible]);
 
   useEffect(() => {
     if (adminPreview) return;
@@ -777,9 +809,7 @@ export default forwardRef(function VideoPlayer(
       {status === "playing" && (
         <div
           ref={timelineHitRef}
-          className={`video-player-timeline-zone ${
-            controlsVisible ? "opacity-100" : "pointer-events-none opacity-0"
-          }`}
+          className="video-player-timeline-zone"
           aria-hidden
         />
       )}

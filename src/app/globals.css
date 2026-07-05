@@ -336,6 +336,7 @@
 .video-player-root:fullscreen .video-player-timeline-zone,
 .video-player-root:-webkit-full-screen .video-player-timeline-zone {
   z-index: 2147483646;
+  pointer-events: auto;
 }
 
 .video-player-root:fullscreen .video-player-heatmap,

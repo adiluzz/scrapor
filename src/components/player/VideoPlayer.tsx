@@ -178,7 +178,8 @@ export default forwardRef(function VideoPlayer(
   const [landscapeFill, setLandscapeFill] = useState(false);
   const [preview, setPreview] = useState<{
     left: number;
-    bottom: number;
+    thumbBottom: number;
+    labelBottom: number;
     cue: StoryboardCue;
     time: number;
     scale: number;
@@ -386,8 +387,9 @@ export default forwardRef(function VideoPlayer(
         const scale = Math.min(1, (rootRect.width - 16) / cue.w);
         const half = (cue.w * scale) / 2;
         const left = Math.min(rootRect.width - half, Math.max(half, clientX - rootRect.left));
-        const bottom = rootRect.bottom - seekRect.top + 8;
-        setPreview({ left, bottom, cue, time, scale });
+        const thumbBottom = rootRect.bottom - seekRect.top + 8;
+        const labelBottom = rootRect.bottom - seekRect.top + 2;
+        setPreview({ left, thumbBottom, labelBottom, cue, time, scale });
       };
 
       const isInsideZone = (clientX: number, clientY: number) => {
@@ -846,30 +848,41 @@ export default forwardRef(function VideoPlayer(
       )}
 
       {preview && storyboard && (
-        <div
-          className="pointer-events-none absolute z-40"
-          style={{
-            left: preview.left,
-            bottom: preview.bottom,
-            transform: `translateX(-50%) scale(${preview.scale})`,
-            transformOrigin: "bottom center",
-          }}
-        >
+        <>
           <div
-            className="overflow-hidden rounded border border-zinc-500 bg-black shadow-2xl"
+            className="pointer-events-none absolute z-40"
             style={{
-              width: preview.cue.w,
-              height: preview.cue.h,
-              backgroundImage: `url(${storyboard.sprite})`,
-              backgroundSize: "auto",
-              backgroundRepeat: "no-repeat",
-              backgroundPosition: `-${preview.cue.x}px -${preview.cue.y}px`,
+              left: preview.left,
+              bottom: preview.thumbBottom,
+              transform: `translateX(-50%) scale(${preview.scale})`,
+              transformOrigin: "bottom center",
             }}
-          />
-          <div className="mx-auto mt-1 w-fit rounded bg-black/85 px-2 py-0.5 text-center text-[11px] font-medium text-white">
-            {formatTime(preview.time)}
+          >
+            <div
+              className="overflow-hidden rounded border border-zinc-500 bg-black shadow-2xl"
+              style={{
+                width: preview.cue.w,
+                height: preview.cue.h,
+                backgroundImage: `url(${storyboard.sprite})`,
+                backgroundSize: "auto",
+                backgroundRepeat: "no-repeat",
+                backgroundPosition: `-${preview.cue.x}px -${preview.cue.y}px`,
+              }}
+            />
           </div>
-        </div>
+          <div
+            className="pointer-events-none absolute z-40"
+            style={{
+              left: preview.left,
+              bottom: preview.labelBottom,
+              transform: "translateX(-50%)",
+            }}
+          >
+            <div className="rounded bg-black/85 px-2 py-0.5 text-center text-[11px] font-medium text-white">
+              {formatTime(preview.time)}
+            </div>
+          </div>
+        </>
       )}
     </div>
   );

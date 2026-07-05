@@ -274,34 +274,34 @@
     height: var(--player-timeline-zone-height);
   }
 
-  /* Portrait → landscape: expand player to fill the viewport (works without Fullscreen API). */
-  .video-player-root.video-player-landscape-fill {
-    position: fixed;
-    inset: 0;
-    z-index: 9999;
-    width: 100vw !important;
-    height: 100vh !important;
-    height: 100dvh !important;
-    max-height: 100dvh;
-    background: #000;
-    display: flex;
-    flex-direction: column;
-  }
-
-  .video-player-root.video-player-landscape-fill [data-vjs-player] {
-    flex: 1;
-    min-height: 0;
-    height: auto !important;
-    border-radius: 0;
-    border: none;
-  }
-
-  .video-player-root.video-player-landscape-fill .video-js.vjs-fluid {
-    height: 100% !important;
-    padding-top: 0 !important;
-  }
-
   .video-player-root.video-player-themed .vjs-button > .vjs-icon-placeholder:before {
     font-size: 1.35em;
   }
+}
+
+/* Portrait → landscape on touch phones: fill viewport (no Fullscreen API required). */
+.video-player-root.video-player-landscape-fill {
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
+  width: 100vw !important;
+  height: 100vh !important;
+  height: 100dvh !important;
+  max-height: 100dvh;
+  background: #000;
+  display: flex;
+  flex-direction: column;
+}
+
+.video-player-root.video-player-landscape-fill [data-vjs-player] {
+  flex: 1;
+  min-height: 0;
+  height: auto !important;
+  border-radius: 0;
+  border: none;
+}
+
+.video-player-root.video-player-landscape-fill .video-js.vjs-fluid {
+  height: 100% !important;
+  padding-top: 0 !important;
 }

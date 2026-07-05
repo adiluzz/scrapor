@@ -40,10 +40,12 @@ function isTouchDevice(): boolean {
   return "ontouchstart" in window || navigator.maxTouchPoints > 0;
 }
 
-/** Phones/tablets in the mobile player layout. */
+/** Touch phones/tablets — portrait or landscape (min edge ≤ 640px). */
 function isMobilePlayerLayout(): boolean {
   if (typeof window === "undefined") return false;
-  return window.matchMedia("(max-width: 640px)").matches;
+  if (window.matchMedia("(hover: none) and (pointer: coarse)").matches) return true;
+  if (!isTouchDevice()) return false;
+  return Math.min(window.innerWidth, window.innerHeight) <= 640;
 }
 
 function isPortraitOrientation(): boolean {

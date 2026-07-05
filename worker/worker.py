@@ -119,33 +119,35 @@ def _download_eporner(page_url: str, dload_url: str, dest: str, dl_env: dict) ->
     """Download via Eporner /dload/ redirect using a browser-impersonated session."""
     proxy = SCRAPE_PROXY or None
     proxies = {"http": proxy, "https": proxy} if proxy else None
-    last_result = None
     try:
         from curl_cffi import requests as cr
         session = cr.Session(impersonate="chrome120")
         session.get(page_url, timeout=30, proxies=proxies)
-        # Resolve the signed CDN URL without buffering the full body in Python.
         resp = session.get(
-            dload_url, timeout=60, proxies=proxies, allow_redirects=True, stream=True,
+            dload_url, timeout=DOWNLOAD_LONG_TIMEOUT, proxies=proxies,
+            allow_redirects=True, stream=True,
         )
-        final_url = resp.url
         ctype = (resp.headers.get("content-type") or "").lower()
         if resp.status_code != 200 or "text/html" in ctype:
             return False, None
-        resp.close()
-        cookie_hdr = "; ".join(f"{k}={v}" for k, v in session.cookies.items())
-        cmd = ["wget", "-q", "--no-check-certificate", "-O", dest, "--referer", page_url]
-        if cookie_hdr:
-            cmd.extend(["--header", f"Cookie: {cookie_hdr}"])
-        cmd.append(final_url)
-        last_result = subprocess.run(
-            cmd, capture_output=True, timeout=DOWNLOAD_LONG_TIMEOUT, env=dl_env,
-        )
-        if os.path.exists(dest) and os.path.getsize(dest) > 100_000:
-            return True, last_result
-        return False, last_result
+        expected = int(resp.headers.get("content-length") or 0)
+        with open(dest, "wb") as fh:
+            for chunk in resp.iter_content(1024 * 1024):
+                if chunk:
+                    fh.write(chunk)
+        size = os.path.getsize(dest) if os.path.exists(dest) else 0
+        if size <= 100_000:
+            return False, None
+        if expected and size < expected * 0.95:
+            return False, None
+        return True, None
     except Exception:
-        return False, last_result
+        if os.path.exists(dest):
+            try:
+                os.remove(dest)
+            except OSError:
+                pass
+        return False, None
 
 
 # ── Downloaders ───────────────────────────────────────────────────────

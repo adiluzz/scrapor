@@ -53,30 +53,43 @@ function isPortraitOrientation(): boolean {
   return window.matchMedia("(orientation: portrait)").matches;
 }
 
-function enterPlayerFullscreen(
+function tryWebkitVideoFullscreen(
   player: Player,
   autoRef: MutableRefObject<boolean>
 ): void {
   const videoEl = player.el().querySelector("video") as
     | (HTMLVideoElement & { webkitEnterFullscreen?: () => void })
     | null;
-  if (videoEl?.webkitEnterFullscreen) {
-    try {
-      videoEl.webkitEnterFullscreen();
-      autoRef.current = true;
-    } catch {
-      /* iOS may reject without a fresh user gesture */
-    }
-    return;
-  }
-  const root = player.el() as HTMLElement;
-  const target = "requestFullscreen" in root ? root : document.documentElement;
-  target.requestFullscreen?.().then(() => {
+  if (!videoEl?.webkitEnterFullscreen) return;
+  try {
+    videoEl.webkitEnterFullscreen();
     autoRef.current = true;
-  }).catch(() => {});
+  } catch {
+    /* iOS may reject without a fresh user gesture */
+  }
 }
 
-function exitPlayerFullscreen(player: Player): void {
+function enterPlayerFullscreen(
+  player: Player,
+  playerRoot: HTMLElement | null,
+  autoRef: MutableRefObject<boolean>
+): void {
+  if (playerRoot && "requestFullscreen" in playerRoot) {
+    playerRoot.requestFullscreen().then(() => {
+      autoRef.current = true;
+    }).catch(() => {
+      tryWebkitVideoFullscreen(player, autoRef);
+    });
+    return;
+  }
+  tryWebkitVideoFullscreen(player, autoRef);
+}
+
+function exitPlayerFullscreen(player: Player, playerRoot: HTMLElement | null): void {
+  if (playerRoot && document.fullscreenElement === playerRoot) {
+    document.exitFullscreen().catch(() => {});
+    return;
+  }
   const videoEl = player.el().querySelector("video") as
     | (HTMLVideoElement & {
         webkitDisplayingFullscreen?: boolean;
@@ -94,6 +107,22 @@ function exitPlayerFullscreen(player: Player): void {
   if (document.fullscreenElement) {
     document.exitFullscreen().catch(() => {});
   }
+}
+
+function patchPlayerFullscreen(player: Player, playerRoot: HTMLElement): void {
+  const p = player as Player & {
+    requestFullscreen: () => Promise<void>;
+    exitFullscreen: () => Promise<void>;
+    isFullscreen: () => boolean;
+  };
+  p.requestFullscreen = () => playerRoot.requestFullscreen() as Promise<void>;
+  p.exitFullscreen = () => {
+    if (document.fullscreenElement === playerRoot) {
+      return document.exitFullscreen() as Promise<void>;
+    }
+    return Promise.resolve();
+  };
+  p.isFullscreen = () => document.fullscreenElement === playerRoot;
 }
 
 export default forwardRef(function VideoPlayer(
@@ -217,6 +246,9 @@ export default forwardRef(function VideoPlayer(
     });
     playerRef.current = player;
 
+    const playerRoot = rootRef.current;
+    if (playerRoot) patchPlayerFullscreen(player, playerRoot);
+
     player.on("useractive", () => setControlsVisible(true));
     player.on("userinactive", () => {
       if (!isTouchDevice()) setControlsVisible(false);
@@ -258,7 +290,7 @@ export default forwardRef(function VideoPlayer(
 
     if (!isMobilePlayerLayout()) {
       if (autoLandscapeFullscreen.current) {
-        exitPlayerFullscreen(player);
+        exitPlayerFullscreen(player, rootRef.current);
         autoLandscapeFullscreen.current = false;
       }
       setLandscapeFill(false);
@@ -277,11 +309,11 @@ export default forwardRef(function VideoPlayer(
       if (landscape && wasPortrait) {
         setLandscapeFill(true);
         p.userActive(true);
-        window.setTimeout(() => enterPlayerFullscreen(p, autoLandscapeFullscreen), 200);
+        window.setTimeout(() => enterPlayerFullscreen(p, rootRef.current, autoLandscapeFullscreen), 200);
       } else if (!landscape) {
         setLandscapeFill(false);
         if (autoLandscapeFullscreen.current) {
-          exitPlayerFullscreen(p);
+          exitPlayerFullscreen(p, rootRef.current);
           autoLandscapeFullscreen.current = false;
         }
       }
@@ -354,8 +386,7 @@ export default forwardRef(function VideoPlayer(
         const scale = Math.min(1, (rootRect.width - 16) / cue.w);
         const half = (cue.w * scale) / 2;
         const left = Math.min(rootRect.width - half, Math.max(half, clientX - rootRect.left));
-        const zoneRect = timelineZone.getBoundingClientRect();
-        const bottom = rootRect.bottom - zoneRect.top + 12;
+        const bottom = rootRect.bottom - seekRect.top + 8;
         setPreview({ left, bottom, cue, time, scale });
       };
 
@@ -544,8 +575,16 @@ export default forwardRef(function VideoPlayer(
     }
 
     const frame = requestAnimationFrame(() => attachTimelineInteractions());
+
+    const rebind = () => requestAnimationFrame(() => attachTimelineInteractions());
+    document.addEventListener("fullscreenchange", rebind);
+    const player = playerRef.current;
+    player?.on("fullscreenchange", rebind);
+
     return () => {
       cancelAnimationFrame(frame);
+      document.removeEventListener("fullscreenchange", rebind);
+      player?.off("fullscreenchange", rebind);
       scrubCleanupRef.current?.();
       scrubCleanupRef.current = null;
       progressSeekCleanupRef.current?.();

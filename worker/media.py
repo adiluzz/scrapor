@@ -219,51 +219,20 @@ def _storyboard_interval(duration: int) -> int:
     interval = 10
     while max(1, math.ceil(duration / interval)) > STORYBOARD_MAX_TILES:
         interval += 5
-    return min(interval, 60)
+    return interval
 
 
-def make_storyboard(
-    video_path: str,
-    sprite_dest: str,
-    vtt_dest: str,
-    duration: int,
-    force: bool = False,
-) -> bool:
-    """
-    Build a sprite sheet + WebVTT for scrubber thumbnails.
-    Interval adapts to video length (10s–60s) so long videos stay on one sheet.
-    """
-    if not force and os.path.exists(sprite_dest) and os.path.exists(vtt_dest):
-        return True
+def _storyboard_tile_count(duration: int, interval: int) -> int:
+    return min(STORYBOARD_MAX_TILES, max(1, math.ceil(duration / interval)))
 
-    if duration <= 0:
-        duration = probe_duration(video_path)
-    if duration <= 0:
-        return False
 
-    interval = _storyboard_interval(duration)
-    count = max(1, math.ceil(duration / interval))
-    rows = math.ceil(count / STORYBOARD_COLS)
-    fps = 1.0 / interval
-
-    vf = (
-        f"fps={fps},scale={STORYBOARD_TILE_W}:{STORYBOARD_TILE_H},"
-        f"tile={STORYBOARD_COLS}x{rows}"
-    )
-    cmd = ["ffmpeg", "-y", "-i", video_path, "-vf", vf, "-frames:v", "1", "-q:v", "5", sprite_dest]
-    try:
-        if subprocess.run(cmd, capture_output=True, timeout=1800).returncode != 0:
-            return False
-    except Exception:
-        return False
-
+def _write_storyboard_vtt(vtt_dest: str, sprite_name: str, duration: int, interval: int, count: int) -> None:
     def ts(sec):
         h = sec // 3600
         m = (sec % 3600) // 60
         s = sec % 60
         return f"{h:02d}:{m:02d}:{s:02d}.000"
 
-    sprite_name = os.path.basename(sprite_dest)
     lines = ["WEBVTT", ""]
     for i in range(count):
         start = i * interval
@@ -275,4 +244,142 @@ def make_storyboard(
         lines.append("")
     with open(vtt_dest, "w", encoding="utf-8") as f:
         f.write("\n".join(lines))
+
+
+def _storyboard_tile_ffmpeg(
+    video_path: str,
+    sprite_dest: str,
+    duration: int,
+    interval: int,
+    count: int,
+    timeout: int,
+) -> tuple[bool, str]:
+    """Single-pass fps+tile sprite (fast on short/medium videos)."""
+    rows = math.ceil(count / STORYBOARD_COLS)
+    fps = 1.0 / interval
+    vf = (
+        f"fps={fps},scale={STORYBOARD_TILE_W}:{STORYBOARD_TILE_H},"
+        f"tile={STORYBOARD_COLS}x{rows}"
+    )
+    cmd = ["ffmpeg", "-y", "-i", video_path, "-vf", vf, "-frames:v", "1", "-q:v", "5", sprite_dest]
+    try:
+        r = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout)
+        ok = (
+            r.returncode == 0
+            and os.path.exists(sprite_dest)
+            and os.path.getsize(sprite_dest) > 1000
+        )
+        return ok, (r.stderr or "")[-800:]
+    except subprocess.TimeoutExpired:
+        return False, "ffmpeg tile timed out"
+    except Exception as e:
+        return False, str(e)
+
+
+def _storyboard_seek_ffmpeg(
+    video_path: str,
+    sprite_dest: str,
+    duration: int,
+    interval: int,
+    count: int,
+    timeout: int,
+) -> tuple[bool, str]:
+    """Seek per frame then tile — avoids decoding entire long files (ARM-friendly)."""
+    tmp_dir = os.path.dirname(os.path.abspath(sprite_dest)) or "."
+    frames: list[str] = []
+    per_frame = max(30, min(120, timeout // max(count, 1)))
+    try:
+        for i in range(count):
+            t = min(max(0.0, duration - 0.5), i * interval + interval / 2)
+            fp = os.path.join(tmp_dir, f"sb_{i:04d}.jpg")
+            cmd = [
+                "ffmpeg", "-y", "-ss", f"{t:.3f}", "-i", video_path,
+                "-frames:v", "1", "-q:v", "5",
+                "-vf", f"scale={STORYBOARD_TILE_W}:{STORYBOARD_TILE_H}",
+                fp,
+            ]
+            try:
+                r = subprocess.run(cmd, capture_output=True, timeout=per_frame)
+                if r.returncode == 0 and os.path.exists(fp) and os.path.getsize(fp) > 100:
+                    frames.append(fp)
+            except subprocess.TimeoutExpired:
+                continue
+        if not frames:
+            return False, "no frames extracted"
+
+        # Pad incomplete last row by duplicating the last frame.
+        rows = math.ceil(len(frames) / STORYBOARD_COLS)
+        padded = list(frames)
+        while len(padded) < rows * STORYBOARD_COLS:
+            padded.append(frames[-1])
+        inputs = []
+        for fp in padded[: rows * STORYBOARD_COLS]:
+            inputs.extend(["-loop", "1", "-t", "1", "-i", fp])
+        filter_parts = []
+        for row in range(rows):
+            idx = row * STORYBOARD_COLS
+            row_inputs = "".join(f"[{idx + c}:v]" for c in range(STORYBOARD_COLS))
+            filter_parts.append(f"{row_inputs}hstack=inputs={STORYBOARD_COLS}[r{row}]")
+        stack_inputs = "".join(f"[r{r}]" for r in range(rows))
+        filter_parts.append(f"{stack_inputs}vstack=inputs={rows}[out]")
+        cmd = [
+            "ffmpeg", "-y", *inputs,
+            "-filter_complex", ";".join(filter_parts),
+            "-map", "[out]", "-frames:v", "1", "-q:v", "5", sprite_dest,
+        ]
+        r = subprocess.run(cmd, capture_output=True, text=True, timeout=max(120, timeout // 4))
+        ok = (
+            r.returncode == 0
+            and os.path.exists(sprite_dest)
+            and os.path.getsize(sprite_dest) > 1000
+        )
+        return ok, (r.stderr or "")[-800:]
+    except Exception as e:
+        return False, str(e)
+    finally:
+        for i in range(count):
+            fp = os.path.join(tmp_dir, f"sb_{i:04d}.jpg")
+            try:
+                os.remove(fp)
+            except OSError:
+                pass
+
+
+def make_storyboard(
+    video_path: str,
+    sprite_dest: str,
+    vtt_dest: str,
+    duration: int,
+    force: bool = False,
+    timeout: int = 1800,
+) -> bool:
+    """
+    Build a sprite sheet + WebVTT for scrubber thumbnails.
+    Interval adapts to video length so long videos stay on one sheet (≤100 tiles).
+    Falls back to seek-based extraction when the single-pass tile filter fails.
+    """
+    if not force and os.path.exists(sprite_dest) and os.path.exists(vtt_dest):
+        return True
+
+    if duration <= 0:
+        duration = probe_duration(video_path)
+    if duration <= 0:
+        return False
+
+    interval = _storyboard_interval(duration)
+    count = _storyboard_tile_count(duration, interval)
+    sprite_name = os.path.basename(sprite_dest)
+
+    # Long videos: seek-based path avoids decoding the full file on ARM.
+    if duration >= 3600:
+        ok, _ = _storyboard_seek_ffmpeg(video_path, sprite_dest, duration, interval, count, timeout)
+    else:
+        ok, _ = _storyboard_tile_ffmpeg(video_path, sprite_dest, duration, interval, count, timeout)
+        if not ok:
+            ok, _ = _storyboard_seek_ffmpeg(video_path, sprite_dest, duration, interval, count, timeout)
+
+    if not ok:
+        return False
+
+    _write_storyboard_vtt(vtt_dest, sprite_name, duration, interval, count)
     return True

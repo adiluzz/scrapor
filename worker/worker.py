@@ -115,8 +115,29 @@ def _download_m3u8(m3u8: str, dest: str, dl_env: dict, timeout: int | None = Non
     return False, last_result, None
 
 
+def _disk_free_mb(path: str = "/tmp") -> int:
+    try:
+        st = os.statvfs(path)
+        return (st.f_bavail * st.f_frsize) // (1024 * 1024)
+    except OSError:
+        return 0
+
+
 def _download_eporner(page_url: str, dload_url: str, dest: str, dl_env: dict) -> tuple[bool, subprocess.CompletedProcess | None]:
     """Download via Eporner /dload/ redirect using a browser-impersonated session."""
+    import time
+    last_err = ""
+    for attempt in range(3):
+        ok, err = _download_eporner_once(page_url, dload_url, dest, dl_env)
+        if ok:
+            return True, None
+        last_err = err
+        if attempt < 2:
+            time.sleep(5 * (attempt + 1))
+    return False, None
+
+
+def _download_eporner_once(page_url: str, dload_url: str, dest: str, dl_env: dict) -> tuple[bool, str]:
     proxy = SCRAPE_PROXY or None
     proxies = {"http": proxy, "https": proxy} if proxy else None
     try:
@@ -129,7 +150,7 @@ def _download_eporner(page_url: str, dload_url: str, dest: str, dl_env: dict) ->
         )
         ctype = (resp.headers.get("content-type") or "").lower()
         if resp.status_code != 200 or "text/html" in ctype:
-            return False, None
+            return False, f"HTTP {resp.status_code} ctype={ctype[:40]}"
         expected = int(resp.headers.get("content-length") or 0)
         with open(dest, "wb") as fh:
             for chunk in resp.iter_content(1024 * 1024):
@@ -137,17 +158,17 @@ def _download_eporner(page_url: str, dload_url: str, dest: str, dl_env: dict) ->
                     fh.write(chunk)
         size = os.path.getsize(dest) if os.path.exists(dest) else 0
         if size <= 100_000:
-            return False, None
+            return False, f"too small ({size} bytes)"
         if expected and size < expected * 0.95:
-            return False, None
-        return True, None
-    except Exception:
+            return False, f"incomplete ({size}/{expected} bytes)"
+        return True, ""
+    except Exception as e:
         if os.path.exists(dest):
             try:
                 os.remove(dest)
             except OSError:
                 pass
-        return False, None
+        return False, str(e)
 
 
 # ── Downloaders ───────────────────────────────────────────────────────
@@ -160,6 +181,10 @@ def _download(video, dest_dir) -> tuple[bool, str, dict]:
     dest = os.path.join(dest_dir, "video.mp4")
     if os.path.exists(dest) and os.path.getsize(dest) > 100_000:
         return True, "cached", {"method": "cache"}
+
+    free_mb = _disk_free_mb(dest_dir)
+    if free_mb and free_mb < 2048:
+        return False, f"insufficient disk space ({free_mb}MB free)", {"method": "disk-check"}
 
     m3u8 = video.get("_m3u8_base_url")
     cdn = video.get("_cdn_url")
@@ -314,9 +339,10 @@ def _process_one_inner(conn, run, source_site, video) -> str:
         if not media.make_thumbnail(video_path, thumb, video.get("thumbnail", "")):
             _log_video_fail("make_thumbnail", video, run, source_site, "thumbnail generation failed")
             return "fail"
-        if not media.make_storyboard(video_path, sprite, vtt, duration):
-            _log_video_fail("make_storyboard", video, run, source_site, "storyboard generation failed")
-            return "fail"
+        storyboard_ok = media.make_storyboard(video_path, sprite, vtt, duration)
+        if not storyboard_ok:
+            _event("warning", "storyboard_skipped", reason="storyboard generation failed",
+                   **_video_ctx(video, run, source_site))
 
         keys = dict(v=None, t=None, p=None, sb=None, vtt=None)
         vid, slug = db.create_video(

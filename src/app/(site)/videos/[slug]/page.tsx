@@ -22,6 +22,7 @@ import { publicVideoContentUrl } from "@/lib/video-sitemap";
 import AdZone from "@/components/ads/AdZone";
 import ExoFullscreenOverlay from "@/components/ads/ExoFullscreenOverlay";
 import TagBadge from "@/components/site/TagBadge";
+import { isVerifiedBadgeTag } from "@/lib/verified-tags";
 
 export const dynamic = "force-dynamic";
 
@@ -192,7 +193,7 @@ export default async function VideoPage({
                   slug={t.tag.slug}
                   icon={t.tag.icon}
                   href={`/tags/${t.tag.slug}`}
-                  className="hover:bg-zinc-700"
+                  className={isVerifiedBadgeTag(t.tag) ? "" : "hover:bg-zinc-700"}
                 />
               ))}
             </div>

@@ -981,10 +981,12 @@ def _eporner_parse_detail(html, url):
         if name and name not in tags:
             tags.append(name)
     pornstars = []
-    for a in soup.select('a[href*="/pornstar/"]'):
-        name = a.get_text(strip=True)
-        if name and name not in pornstars:
-            pornstars.append(name)
+    info = soup.select_one("#video-info")
+    if info:
+        for a in info.select('a[href^="/pornstar/"]'):
+            name = a.get_text(strip=True)
+            if name and name not in pornstars:
+                pornstars.append(name)
     thumb = ""
     og = soup.select_one('meta[property="og:image"]')
     if og and og.get("content"):

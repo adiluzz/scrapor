@@ -279,8 +279,8 @@
   }
 }
 
-/* Portrait → landscape on touch phones: CSS viewport fill (no Fullscreen API). */
-.video-player-root.video-player-landscape-fill {
+/* Mobile immersive mode (landscape rotate or fullscreen button) — CSS fill, not Fullscreen API. */
+.video-player-root.video-player-immersive {
   position: fixed;
   inset: 0;
   z-index: 9999;
@@ -293,30 +293,38 @@
   overflow: hidden;
 }
 
-.video-player-root.video-player-landscape-fill [data-vjs-player] {
+.video-player-root.video-player-immersive [data-vjs-player] {
   flex: 1 1 auto;
   min-height: 0;
   width: 100% !important;
   height: 100% !important;
   border-radius: 0;
   border: none;
+  overflow: hidden;
 }
 
-.video-player-root.video-player-landscape-fill .video-js,
-.video-player-root.video-player-landscape-fill .video-js.vjs-fluid {
+.video-player-root.video-player-immersive .video-js,
+.video-player-root.video-player-immersive .video-js.vjs-fluid,
+.video-player-root.video-player-immersive .video-js.vjs-fill {
+  position: relative !important;
+  display: block !important;
   width: 100% !important;
   height: 100% !important;
   padding-top: 0 !important;
+  overflow: hidden;
 }
 
-.video-player-root.video-player-landscape-fill .video-js .vjs-tech {
+.video-player-root.video-player-immersive .video-js .vjs-tech {
+  position: absolute !important;
+  top: 0 !important;
+  left: 0 !important;
   width: 100% !important;
   height: 100% !important;
   object-fit: contain;
   background: #000;
 }
 
-/* Browser fullscreen — keep overlays (heatmap, timeline, preview) inside the element. */
+/* Desktop browser fullscreen — keep overlays inside the element. */
 .video-player-root:fullscreen,
 .video-player-root:-webkit-full-screen {
   width: 100vw !important;
@@ -326,21 +334,43 @@
   background: #000;
   display: flex;
   flex-direction: column;
+  overflow: hidden;
 }
 
 .video-player-root:fullscreen [data-vjs-player],
 .video-player-root:-webkit-full-screen [data-vjs-player] {
-  flex: 1;
+  flex: 1 1 auto;
   min-height: 0;
-  height: auto !important;
+  width: 100% !important;
+  height: 100% !important;
   border-radius: 0;
   border: none;
+  overflow: hidden;
 }
 
+.video-player-root:fullscreen .video-js,
+.video-player-root:-webkit-full-screen .video-js,
 .video-player-root:fullscreen .video-js.vjs-fluid,
-.video-player-root:-webkit-full-screen .video-js.vjs-fluid {
+.video-player-root:-webkit-full-screen .video-js.vjs-fluid,
+.video-player-root:fullscreen .video-js.vjs-fill,
+.video-player-root:-webkit-full-screen .video-js.vjs-fill {
+  position: relative !important;
+  display: block !important;
+  width: 100% !important;
   height: 100% !important;
   padding-top: 0 !important;
+  overflow: hidden;
+}
+
+.video-player-root:fullscreen .video-js .vjs-tech,
+.video-player-root:-webkit-full-screen .video-js .vjs-tech {
+  position: absolute !important;
+  top: 0 !important;
+  left: 0 !important;
+  width: 100% !important;
+  height: 100% !important;
+  object-fit: contain;
+  background: #000;
 }
 
 .video-player-root:fullscreen .video-player-timeline-zone,

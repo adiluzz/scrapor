@@ -109,20 +109,59 @@ function exitPlayerFullscreen(player: Player, playerRoot: HTMLElement | null): v
   }
 }
 
-function patchPlayerFullscreen(player: Player, playerRoot: HTMLElement): void {
+function patchPlayerFullscreen(
+  player: Player,
+  playerRoot: HTMLElement,
+  immersive: {
+    isActive: () => boolean;
+    enter: () => void;
+    exit: () => void;
+  }
+): void {
   const p = player as Player & {
     requestFullscreen: () => Promise<void>;
     exitFullscreen: () => Promise<void>;
     isFullscreen: () => boolean;
   };
-  p.requestFullscreen = () => playerRoot.requestFullscreen() as Promise<void>;
+  p.requestFullscreen = () => {
+    if (isMobilePlayerLayout()) {
+      immersive.enter();
+      return Promise.resolve();
+    }
+    return playerRoot.requestFullscreen() as Promise<void>;
+  };
   p.exitFullscreen = () => {
+    if (isMobilePlayerLayout()) {
+      immersive.exit();
+      return Promise.resolve();
+    }
     if (document.fullscreenElement === playerRoot) {
       return document.exitFullscreen() as Promise<void>;
     }
     return Promise.resolve();
   };
-  p.isFullscreen = () => document.fullscreenElement === playerRoot;
+  p.isFullscreen = () => {
+    if (isMobilePlayerLayout()) return immersive.isActive();
+    return document.fullscreenElement === playerRoot;
+  };
+}
+
+function applyImmersiveVideoLayout(player: Player, root: HTMLElement, on: boolean): void {
+  if (on) {
+    if (window.visualViewport) {
+      root.style.setProperty("--player-viewport-height", `${window.visualViewport.height}px`);
+    }
+    // vjs-fluid keeps height:0 + padding-top; that collapses the video in immersive mode
+    // while absolute overlays (heatmap) still render — a known Video.js mobile issue.
+    player.fluid(false);
+    player.fill(true);
+  } else {
+    root.style.removeProperty("--player-viewport-height");
+    player.fill(false);
+    player.fluid(true);
+  }
+  window.requestAnimationFrame(() => player.trigger("resize"));
+  window.setTimeout(() => player.trigger("resize"), 250);
 }
 
 export default forwardRef(function VideoPlayer(
@@ -175,6 +214,7 @@ export default forwardRef(function VideoPlayer(
   const viewCounted = useRef(false);
   const autoLandscapeFullscreen = useRef(false);
   const wasPortraitRef = useRef(true);
+  const immersiveActiveRef = useRef(false);
   const [landscapeFill, setLandscapeFill] = useState(false);
   const [preview, setPreview] = useState<{
     left: number;
@@ -248,7 +288,25 @@ export default forwardRef(function VideoPlayer(
     playerRef.current = player;
 
     const playerRoot = rootRef.current;
-    if (playerRoot) patchPlayerFullscreen(player, playerRoot);
+    const setImmersiveMode = (on: boolean) => {
+      const p = playerRef.current;
+      const root = rootRef.current;
+      if (!p || !root) return;
+      immersiveActiveRef.current = on;
+      setLandscapeFill(on);
+      setControlsVisible(true);
+      p.userActive(true);
+      applyImmersiveVideoLayout(p, root, on);
+      p.trigger("fullscreenchange");
+    };
+
+    if (playerRoot) {
+      patchPlayerFullscreen(player, playerRoot, {
+        isActive: () => immersiveActiveRef.current,
+        enter: () => setImmersiveMode(true),
+        exit: () => setImmersiveMode(false),
+      });
+    }
 
     player.on("useractive", () => setControlsVisible(true));
     player.on("userinactive", () => {
@@ -298,45 +356,42 @@ export default forwardRef(function VideoPlayer(
       return;
     }
 
-    const syncPlayerLayout = (p: Player) => {
+    const enterAutoLandscapeImmersive = () => {
+      const p = playerRef.current;
       const root = rootRef.current;
-      if (root && window.visualViewport) {
-        root.style.setProperty("--player-viewport-height", `${window.visualViewport.height}px`);
-      }
-      window.requestAnimationFrame(() => {
-        p.trigger("resize");
-      });
+      if (!p || !root) return;
+      immersiveActiveRef.current = true;
+      setLandscapeFill(true);
+      setControlsVisible(true);
+      p.userActive(true);
+      applyImmersiveVideoLayout(p, root, true);
+    };
+
+    const exitAutoLandscapeImmersive = () => {
+      const p = playerRef.current;
+      const root = rootRef.current;
+      if (!p || !root) return;
+      immersiveActiveRef.current = false;
+      setLandscapeFill(false);
+      applyImmersiveVideoLayout(p, root, false);
     };
 
     wasPortraitRef.current = isPortraitOrientation();
     if (!wasPortraitRef.current) {
-      setLandscapeFill(true);
-      setControlsVisible(true);
-      player.userActive(true);
-      syncPlayerLayout(player);
+      enterAutoLandscapeImmersive();
     }
 
     const syncLandscapeFullscreen = () => {
       const p = playerRef.current;
-      const root = rootRef.current;
-      if (!p || !root) return;
+      if (!p) return;
 
       const landscape = window.matchMedia("(orientation: landscape)").matches;
       const wasPortrait = wasPortraitRef.current;
 
       if (landscape && wasPortrait) {
-        // CSS viewport fill only. requestFullscreen() on orientation change is not a
-        // trusted user gesture on Android and is unsupported/broken on iOS divs — it
-        // produces a blank fullscreen page while the video keeps playing underneath.
-        setLandscapeFill(true);
-        setControlsVisible(true);
-        p.userActive(true);
-        syncPlayerLayout(p);
-        window.setTimeout(() => syncPlayerLayout(p), 250);
-      } else if (!landscape) {
-        setLandscapeFill(false);
-        root.style.removeProperty("--player-viewport-height");
-        syncPlayerLayout(p);
+        enterAutoLandscapeImmersive();
+      } else if (!landscape && immersiveActiveRef.current) {
+        exitAutoLandscapeImmersive();
       }
 
       wasPortraitRef.current = !landscape;
@@ -349,8 +404,11 @@ export default forwardRef(function VideoPlayer(
     const onViewportChange = () => {
       const p = playerRef.current;
       const root = rootRef.current;
-      if (!p || !root?.classList.contains("video-player-landscape-fill")) return;
-      syncPlayerLayout(p);
+      if (!p || !root?.classList.contains("video-player-immersive")) return;
+      if (window.visualViewport) {
+        root.style.setProperty("--player-viewport-height", `${window.visualViewport.height}px`);
+      }
+      window.requestAnimationFrame(() => p.trigger("resize"));
     };
 
     const mq = window.matchMedia("(orientation: landscape)");
@@ -365,7 +423,11 @@ export default forwardRef(function VideoPlayer(
       window.visualViewport?.removeEventListener("resize", onViewportChange);
       window.visualViewport?.removeEventListener("scroll", onViewportChange);
       rootRef.current?.style.removeProperty("--player-viewport-height");
+      immersiveActiveRef.current = false;
       setLandscapeFill(false);
+      const p = playerRef.current;
+      const root = rootRef.current;
+      if (p && root) applyImmersiveVideoLayout(p, root, false);
     };
   }, [status]);
 
@@ -640,10 +702,16 @@ export default forwardRef(function VideoPlayer(
     const onFullscreenChange = () => {
       const player = playerRef.current;
       const root = rootRef.current;
-      if (player && root && document.fullscreenElement === root) {
+      if (!player || !root || isMobilePlayerLayout()) {
+        rebind();
+        return;
+      }
+      const inFs = document.fullscreenElement === root;
+      if (inFs) {
         player.userActive(true);
         setControlsVisible(true);
       }
+      applyImmersiveVideoLayout(player, root, inFs);
       rebind();
     };
     document.addEventListener("fullscreenchange", onFullscreenChange);
@@ -831,7 +899,7 @@ export default forwardRef(function VideoPlayer(
       ref={rootRef}
       className={`relative w-full video-player-root video-player-themed ${
         touchUi ? "video-player-touch" : ""
-      } ${landscapeFill ? "video-player-landscape-fill" : ""} ${
+      } ${landscapeFill ? "video-player-immersive" : ""} ${
         status !== "playing" ? "video-player-preplay" : ""
       }`}
     >

@@ -279,31 +279,41 @@
   }
 }
 
-/* Portrait → landscape on touch phones: fill viewport (no Fullscreen API required). */
+/* Portrait → landscape on touch phones: CSS viewport fill (no Fullscreen API). */
 .video-player-root.video-player-landscape-fill {
   position: fixed;
   inset: 0;
   z-index: 9999;
   width: 100vw !important;
-  height: 100vh !important;
-  height: 100dvh !important;
-  max-height: 100dvh;
+  height: var(--player-viewport-height, 100dvh) !important;
+  max-height: var(--player-viewport-height, 100dvh);
   background: #000;
   display: flex;
   flex-direction: column;
+  overflow: hidden;
 }
 
 .video-player-root.video-player-landscape-fill [data-vjs-player] {
-  flex: 1;
+  flex: 1 1 auto;
   min-height: 0;
-  height: auto !important;
+  width: 100% !important;
+  height: 100% !important;
   border-radius: 0;
   border: none;
 }
 
+.video-player-root.video-player-landscape-fill .video-js,
 .video-player-root.video-player-landscape-fill .video-js.vjs-fluid {
+  width: 100% !important;
   height: 100% !important;
   padding-top: 0 !important;
+}
+
+.video-player-root.video-player-landscape-fill .video-js .vjs-tech {
+  width: 100% !important;
+  height: 100% !important;
+  object-fit: contain;
+  background: #000;
 }
 
 /* Browser fullscreen — keep overlays (heatmap, timeline, preview) inside the element. */

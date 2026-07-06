@@ -298,25 +298,45 @@ export default forwardRef(function VideoPlayer(
       return;
     }
 
+    const syncPlayerLayout = (p: Player) => {
+      const root = rootRef.current;
+      if (root && window.visualViewport) {
+        root.style.setProperty("--player-viewport-height", `${window.visualViewport.height}px`);
+      }
+      window.requestAnimationFrame(() => {
+        p.trigger("resize");
+      });
+    };
+
     wasPortraitRef.current = isPortraitOrientation();
+    if (!wasPortraitRef.current) {
+      setLandscapeFill(true);
+      setControlsVisible(true);
+      player.userActive(true);
+      syncPlayerLayout(player);
+    }
 
     const syncLandscapeFullscreen = () => {
       const p = playerRef.current;
-      if (!p) return;
+      const root = rootRef.current;
+      if (!p || !root) return;
 
       const landscape = window.matchMedia("(orientation: landscape)").matches;
       const wasPortrait = wasPortraitRef.current;
 
       if (landscape && wasPortrait) {
+        // CSS viewport fill only. requestFullscreen() on orientation change is not a
+        // trusted user gesture on Android and is unsupported/broken on iOS divs — it
+        // produces a blank fullscreen page while the video keeps playing underneath.
         setLandscapeFill(true);
+        setControlsVisible(true);
         p.userActive(true);
-        window.setTimeout(() => enterPlayerFullscreen(p, rootRef.current, autoLandscapeFullscreen), 200);
+        syncPlayerLayout(p);
+        window.setTimeout(() => syncPlayerLayout(p), 250);
       } else if (!landscape) {
         setLandscapeFill(false);
-        if (autoLandscapeFullscreen.current) {
-          exitPlayerFullscreen(p, rootRef.current);
-          autoLandscapeFullscreen.current = false;
-        }
+        root.style.removeProperty("--player-viewport-height");
+        syncPlayerLayout(p);
       }
 
       wasPortraitRef.current = !landscape;
@@ -326,16 +346,37 @@ export default forwardRef(function VideoPlayer(
       window.requestAnimationFrame(syncLandscapeFullscreen);
     };
 
+    const onViewportChange = () => {
+      const p = playerRef.current;
+      const root = rootRef.current;
+      if (!p || !root?.classList.contains("video-player-landscape-fill")) return;
+      syncPlayerLayout(p);
+    };
+
     const mq = window.matchMedia("(orientation: landscape)");
     mq.addEventListener("change", onOrientationChange);
     window.addEventListener("orientationchange", onOrientationChange);
+    window.visualViewport?.addEventListener("resize", onViewportChange);
+    window.visualViewport?.addEventListener("scroll", onViewportChange);
 
     return () => {
       mq.removeEventListener("change", onOrientationChange);
       window.removeEventListener("orientationchange", onOrientationChange);
+      window.visualViewport?.removeEventListener("resize", onViewportChange);
+      window.visualViewport?.removeEventListener("scroll", onViewportChange);
+      rootRef.current?.style.removeProperty("--player-viewport-height");
       setLandscapeFill(false);
     };
   }, [status]);
+
+  useEffect(() => {
+    if (!landscapeFill) return;
+    const prevOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.body.style.overflow = prevOverflow;
+    };
+  }, [landscapeFill]);
 
   function attachTimelineInteractions() {
     scrubCleanupRef.current?.();

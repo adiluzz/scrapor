@@ -53,6 +53,7 @@ export async function POST(request: Request) {
 
   const parsed = schema.safeParse(await request.json());
   if (!parsed.success) {
+    logger.warn({ issues: parsed.error.issues }, "scrape run create validation failed");
     const msg = parsed.error.issues[0]?.message || "Invalid input";
     return NextResponse.json({ error: msg }, { status: 400 });
   }

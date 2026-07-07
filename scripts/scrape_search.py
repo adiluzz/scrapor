@@ -29,6 +29,7 @@ from site_searchers import (  # noqa: E402
     _eporner_parse_detail,
     _html_get,
     _ph_parse_detail,
+    _po_parse_detail,
 )
 
 PREVIEW_BATCH = int(os.environ.get("SCRAPE_PAGE_BATCH", "50"))
@@ -45,6 +46,7 @@ SITE_BY_HOST = (
     ("redtube", "RedTube"),
     ("spankbang", "SpankBang"),
     ("paradisehill", "ParadiseHill"),
+    ("pornone", "PornOne"),
 )
 
 
@@ -138,6 +140,10 @@ def resolve_video_url(url: str, conn) -> dict:
         html = _html_get(raw)
         if html:
             meta.update(_ph_parse_detail(html, raw))
+    elif source == "PornOne":
+        html = _html_get(raw)
+        if html:
+            meta.update(_po_parse_detail(html, raw))
 
     if not meta.get("title") or meta.get("title") == "Unknown":
         meta.update(_yt_dlp_metadata(raw))

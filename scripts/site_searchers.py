@@ -1067,6 +1067,305 @@ def search_eporner(query, count, cursor=0, min_duration=600):
     return out, next_page, exhausted
 
 
+# ── PornOne ───────────────────────────────────────────────────────────
+_PO_BASE = "https://pornone.com"
+_PO_VIDEO_RE = re.compile(r"^/[^/]+/[^/]+/\d+/?$", re.I)
+_PO_RESERVED = re.compile(
+    r"^(?:search|login|signup|pornstars|categories|shorts|tags|upload|help|"
+    r"terms|cookie-policy|dmca|about|contact|privacy|for-advertisers)$",
+    re.I,
+)
+_PO_ISO_DUR_RE = re.compile(
+    r"P(?:(\d+)D)?T(?:(\d+)H)?(?:(\d+)M)?(?:(\d+(?:\.\d+)?)S)?",
+    re.I,
+)
+
+
+def _po_abs(url_or_path):
+    from urllib.parse import urljoin
+    if not url_or_path:
+        return ""
+    if str(url_or_path).startswith("http"):
+        return str(url_or_path)
+    return urljoin(_PO_BASE, str(url_or_path))
+
+
+def _po_is_video_path(path):
+    path = (path or "").split("?", 1)[0].rstrip("/") or "/"
+    if not _PO_VIDEO_RE.match(path + "/"):
+        return False
+    first = path.strip("/").split("/", 1)[0]
+    return not _PO_RESERVED.match(first)
+
+
+def _po_iso_duration(value):
+    if not value:
+        return None
+    m = _PO_ISO_DUR_RE.search(str(value))
+    if not m:
+        return None
+    days, hours, minutes, seconds = m.groups()
+    total = 0
+    if days:
+        total += int(days) * 86400
+    if hours:
+        total += int(hours) * 3600
+    if minutes:
+        total += int(minutes) * 60
+    if seconds:
+        total += int(float(seconds))
+    return total or None
+
+
+def _po_search_url(query, page):
+    from urllib.parse import quote_plus
+    q = quote_plus(query)
+    if page <= 1:
+        return f"{_PO_BASE}/search?q={q}"
+    return f"{_PO_BASE}/search/{page}?q={q}"
+
+
+def _po_next_search_page(html, current_page):
+    """Follow PornOne's bottom pagination nav (gosearch / Next Page) to the next page."""
+    from bs4 import BeautifulSoup
+    soup = BeautifulSoup(html or "", "html.parser")
+    for nav in soup.select('nav[aria-label="Pagination"]'):
+        nxt = nav.select_one('span[title="Next Page"]')
+        if not nxt:
+            continue
+        onclick = nxt.get("onclick") or ""
+        m = re.search(r"gosearch\((\d+)\)", onclick)
+        if not m:
+            continue
+        page = int(m.group(1))
+        if page > current_page:
+            return page
+    return None
+
+
+def _po_clean_name(text):
+    return re.sub(r"[,\s]+$", "", str(text or "").strip())
+
+
+def _po_search_items(html):
+    """Extract video cards from a PornOne search listing page."""
+    from bs4 import BeautifulSoup
+    from urllib.parse import urljoin, urlparse
+    soup = BeautifulSoup(html or "", "html.parser")
+    out = []
+    seen = set()
+    for item in soup.select("a.videocard, a.popbop.vidLinkFX.videocard"):
+        href = item.get("href") or ""
+        if not href or href.startswith("#"):
+            continue
+        full = urljoin(_PO_BASE, href)
+        parsed = urlparse(full)
+        if "pornone.com" not in (parsed.netloc or ""):
+            continue
+        if not _po_is_video_path(parsed.path or ""):
+            continue
+        clean = f"{parsed.scheme}://{parsed.netloc}{parsed.path.rstrip('/')}/"
+        if clean in seen:
+            continue
+        seen.add(clean)
+        title_el = item.select_one(".videotitle")
+        title = title_el.get_text(strip=True) if title_el else ""
+        if not title:
+            title = (item.get("title") or item.get_text(" ", strip=True) or "").strip()
+        dur_el = item.select_one(".durlabel")
+        dur_s = _dur(dur_el.get_text()) if dur_el else None
+        thumb = ""
+        img = item.select_one("img.thumbimg, img.imgvideo, img")
+        if img:
+            for attr in ("src", "data-src"):
+                val = img.get(attr)
+                if val and str(val).startswith("http"):
+                    thumb = str(val)
+                    break
+        out.append((clean, title, dur_s, thumb))
+    return out
+
+
+def _po_best_mp4(html):
+    """Pick the highest-resolution MP4 source from the video player."""
+    from bs4 import BeautifulSoup
+    soup = BeautifulSoup(html or "", "html.parser")
+    best_res, best_url = -1, ""
+    for src in soup.select('video source[type="video/mp4"], source[type="video/mp4"]'):
+        href = src.get("src") or ""
+        if not href or ".mp4" not in href:
+            continue
+        res = 0
+        if src.get("res"):
+            try:
+                res = int(src["res"])
+            except Exception:
+                res = 0
+        if not res:
+            label = src.get("label") or ""
+            m = re.search(r"(\d+)p", label, re.I)
+            if m:
+                res = int(m.group(1))
+        if res >= best_res:
+            best_res = res
+            best_url = href
+    return best_url
+
+
+def _po_parse_detail(html, url):
+    """Parse a PornOne video page for metadata and the best MP4 download URL."""
+    from bs4 import BeautifulSoup
+    soup = BeautifulSoup(html or "", "html.parser")
+
+    title = ""
+    h1 = soup.select_one("h1")
+    if h1:
+        title = h1.get_text(" ", strip=True)
+    if not title:
+        og = soup.select_one('meta[property="og:title"]')
+        if og and og.get("content"):
+            title = str(og["content"]).strip()
+            title = re.sub(r"\s*[—-]\s*PornOne.*$", "", title, flags=re.I).strip()
+
+    description = ""
+    desc_el = soup.select_one("#prepdesc")
+    if desc_el:
+        description = desc_el.get_text(" ", strip=True)
+    if not description:
+        meta_desc = soup.select_one('meta[name="description"]')
+        if meta_desc and meta_desc.get("content"):
+            description = str(meta_desc["content"]).strip()
+
+    categories = []
+    for a in soup.select("a[id^='cat']"):
+        name = _po_clean_name(a.get_text(" ", strip=True))
+        if name and name not in categories:
+            categories.append(name)
+
+    tags = []
+    for a in soup.select("a[id^='tag']"):
+        name = _po_clean_name(a.get_text(" ", strip=True))
+        if name and name not in tags:
+            tags.append(name)
+
+    pornstars = []
+    for a in soup.select("a[id^='star']"):
+        name = _po_clean_name(a.get_text(" ", strip=True))
+        if name and name not in pornstars:
+            pornstars.append(name)
+
+    dur_s = None
+    m = re.search(r"videoLength\s*=\s*(\d+)", html or "")
+    if m:
+        dur_s = int(m.group(1))
+    if not dur_s:
+        for node in soup.select('script[type="application/ld+json"]'):
+            try:
+                data = json.loads(node.string or "")
+            except Exception:
+                continue
+            if isinstance(data, dict) and data.get("@type") == "VideoObject":
+                dur_s = _po_iso_duration(data.get("duration")) or dur_s
+                break
+
+    thumb = ""
+    og = soup.select_one('meta[property="og:image"]')
+    if og and og.get("content"):
+        thumb = _po_abs(og["content"])
+    if not thumb:
+        for node in soup.select('script[type="application/ld+json"]'):
+            try:
+                data = json.loads(node.string or "")
+            except Exception:
+                continue
+            if isinstance(data, dict) and data.get("@type") == "VideoObject":
+                thumbs = data.get("thumbnailUrl") or []
+                if isinstance(thumbs, list) and thumbs:
+                    thumb = _po_abs(thumbs[0])
+                elif isinstance(thumbs, str):
+                    thumb = _po_abs(thumbs)
+                break
+
+    merged_tags = []
+    for name in categories + tags:
+        if name and name not in merged_tags:
+            merged_tags.append(name)
+
+    return {
+        "title": title,
+        "duration_sec": dur_s,
+        "tags": merged_tags,
+        "categories": categories,
+        "pornstars": pornstars,
+        "thumbnail": thumb,
+        "description": description,
+        "_cdn_url": _po_best_mp4(html) or None,
+    }
+
+
+def search_pornone(query, count, cursor=0, min_duration=600):
+    """Search PornOne via HTML listings; enrich each hit with detail-page metadata."""
+    page = _page_cursor(cursor)
+    stubs, seen = [], set()
+    has_next_page = True
+    try:
+        while len(stubs) < count and has_next_page:
+            html = _html_get(_po_search_url(query, page))
+            if not html:
+                has_next_page = False
+                break
+            batch = _po_search_items(html)
+            if not batch:
+                has_next_page = False
+                break
+            new_urls = 0
+            for clean, title, dur_s, thumb in batch:
+                if clean in seen:
+                    continue
+                seen.add(clean)
+                new_urls += 1
+                if dur_s and dur_s < min_duration:
+                    continue
+                stubs.append((clean, title, dur_s, thumb))
+                if len(stubs) >= count:
+                    break
+            if new_urls == 0:
+                has_next_page = False
+                break
+            next_page = _po_next_search_page(html, page)
+            if not next_page:
+                has_next_page = False
+                break
+            page = next_page
+    except Exception as e:  # noqa: BLE001
+        print(f"[site_searchers] PornOne search failed: {e!r}", file=sys.stderr, flush=True)
+        return [], page, True
+
+    out = []
+    for clean, title, dur_s, thumb in stubs[:count]:
+        try:
+            detail_html = _html_get(clean)
+            if not detail_html:
+                out.append(_norm(clean, title, dur_s, thumbnail=thumb))
+                continue
+            meta = _po_parse_detail(detail_html, clean)
+            out.append(_norm(
+                clean,
+                meta.get("title") or title,
+                meta.get("duration_sec") or dur_s,
+                thumbnail=meta.get("thumbnail") or thumb,
+                tags=meta.get("tags"),
+                pornstars=meta.get("pornstars"),
+                description=meta.get("description") or "",
+                cdn=meta.get("_cdn_url"),
+            ))
+        except Exception:
+            out.append(_norm(clean, title, dur_s, thumbnail=thumb))
+    next_page = page
+    exhausted = len(stubs) < count or not has_next_page
+    return out, next_page, exhausted
+
+
 # ── YouPorn ───────────────────────────────────────────────────────────
 def search_youporn(query, count, cursor=0, min_duration=600):
     offset = _offset_cursor(cursor)
@@ -1181,4 +1480,5 @@ SEARCHERS = {
     "RedTube": _html_redtube,
     "SpankBang": _html_spankbang,
     "ParadiseHill": search_paradisehill,
+    "PornOne": search_pornone,
 }

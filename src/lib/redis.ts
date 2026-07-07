@@ -32,6 +32,13 @@ export const CREATOR_QUEUE_KEY = "creator:queue";
  */
 export const PREVIEW_QUEUE_KEY = "preview:queue";
 
+/** Redis queue for interactive scrape search requests (handled by worker). */
+export const SCRAPE_SEARCH_QUEUE_KEY = "scrape:search:queue";
+
+export function scrapeSearchResultKey(requestId: string): string {
+  return `scrape:search:result:${requestId}`;
+}
+
 /**
  * Fixed-window rate limiter. Returns true when the action is allowed.
  * Fails open (allows) if Redis is unavailable so auth never hard-breaks.

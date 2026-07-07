@@ -12,6 +12,7 @@ RUN pip install --no-cache-dir -r worker/requirements.txt
 
 COPY worker ./worker
 COPY scripts/site_searchers.py ./scripts/site_searchers.py
+COPY scripts/scrape_search.py ./scripts/scrape_search.py
 
 ENV PYTHONUNBUFFERED=1
 

@@ -24,6 +24,14 @@ export default async function ScrapeRunsPage() {
   return (
     <div className="space-y-8">
       <h1 className="text-xl font-bold text-white sm:text-2xl">Scrape runs</h1>
+      <div className="flex flex-wrap gap-3">
+        <Link
+          href="/admin/scrape-runs/interactive"
+          className="rounded-lg border border-brand-600/50 bg-brand-600/10 px-4 py-2 text-sm font-medium text-brand-200 hover:bg-brand-600/20"
+        >
+          Interactive scrape (pick videos)
+        </Link>
+      </div>
       <NewRunForm />
 
       <div className="overflow-x-auto rounded-xl border border-zinc-800">

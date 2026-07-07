@@ -39,7 +39,11 @@ export default async function RunDetailPage({ params }: { params: Promise<{ id: 
           <span className="text-red-400">{run.failed} failed</span>
           <span className="text-zinc-500">min {Math.round(run.minDurationSec / 60)} min</span>
           <span className="text-zinc-500">
-            {run.maxPerSite ? `${run.maxPerSite}/site` : "all/site"}
+            {run.selectedCandidates
+              ? "interactive selection"
+              : run.maxPerSite
+                ? `${run.maxPerSite}/site`
+                : "all/site"}
           </span>
         </div>
         <div className="mt-4">

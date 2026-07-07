@@ -6,12 +6,28 @@ import { isSourceSite } from "@/lib/source-sites";
 import { redis, SCRAPE_QUEUE_KEY } from "@/lib/redis";
 import { logger } from "@/lib/logger";
 
+const candidateSchema = z.object({
+  url: z.string().url(),
+  title: z.string(),
+  thumbnail: z.string().optional(),
+  durationSec: z.number().int().nullable().optional(),
+  sourceSite: z.string(),
+  description: z.string().optional(),
+  tags: z.array(z.string()).optional(),
+  pornstars: z.array(z.string()).optional(),
+  _m3u8_base_url: z.string().nullable().optional(),
+  _cdn_url: z.string().nullable().optional(),
+  _part_urls: z.array(z.string()).nullable().optional(),
+});
+
 const schema = z.object({
   query: z.string().min(1).max(200),
   sources: z.array(z.string()).min(1),
   minDurationSec: z.number().int().min(0).max(36000).optional(),
   // Videos to download per source this run. null/omitted = download ALL results.
   maxPerSite: z.number().int().min(1).max(10000).nullable().optional(),
+  // Interactive mode: download only these pre-selected candidates.
+  candidates: z.array(candidateSchema).min(1).max(500).optional(),
 });
 
 export async function GET(request: Request) {
@@ -37,17 +53,27 @@ export async function POST(request: Request) {
   const sources = parsed.data.sources.filter(isSourceSite);
   if (sources.length === 0) return NextResponse.json({ error: "No valid source sites" }, { status: 400 });
 
+  const candidates = parsed.data.candidates;
+  if (candidates) {
+    const invalid = candidates.find((c) => !isSourceSite(c.sourceSite));
+    if (invalid) return NextResponse.json({ error: "Invalid candidate source site" }, { status: 400 });
+  }
+
   const run = await prisma.scrapeRun.create({
     data: {
       siteId: g.siteId,
       query: parsed.data.query,
       selectedSites: JSON.stringify(sources),
       minDurationSec: parsed.data.minDurationSec ?? 600,
-      maxPerSite: parsed.data.maxPerSite ?? null,
+      maxPerSite: candidates ? candidates.length : (parsed.data.maxPerSite ?? null),
+      selectedCandidates: candidates ? JSON.stringify(candidates) : null,
       createdById: authUserId(g),
       status: "QUEUED",
       siteResults: {
-        create: sources.map((sourceSite) => ({ sourceSite, status: "QUEUED" })),
+        create: (candidates
+          ? [...new Set(candidates.map((c) => c.sourceSite))]
+          : sources
+        ).map((sourceSite) => ({ sourceSite, status: "QUEUED" })),
       },
     },
   });

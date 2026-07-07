@@ -301,7 +301,8 @@ def update_video_media(conn, video_id, *, s3_video_key, s3_thumb_key, s3_preview
 def load_run(conn, run_id: str):
     with conn.cursor() as cur:
         cur.execute(
-            'SELECT id,"siteId",query,"selectedSites","minDurationSec","maxPerSite",status '
+            'SELECT id,"siteId",query,"selectedSites","minDurationSec","maxPerSite",'
+            '"selectedCandidates",status '
             'FROM "ScrapeRun" WHERE id=%s',
             (run_id,),
         )
@@ -311,7 +312,7 @@ def load_run(conn, run_id: str):
     return {
         "id": row[0], "siteId": row[1], "query": row[2],
         "selectedSites": row[3], "minDurationSec": row[4],
-        "maxPerSite": row[5], "status": row[6],
+        "maxPerSite": row[5], "selectedCandidates": row[6], "status": row[7],
     }
 
 

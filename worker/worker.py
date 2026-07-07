@@ -35,6 +35,7 @@ import db  # noqa: E402
 import storage  # noqa: E402
 import media  # noqa: E402
 from site_searchers import SEARCHERS  # noqa: E402
+from scrape_search import search_candidates  # noqa: E402
 
 logging.basicConfig(
     level=logging.INFO,
@@ -87,6 +88,8 @@ ALL_CAP = int(os.environ.get("SCRAPE_ALL_MAX", "100000"))
 QUEUE_KEY = "scrape:queue"
 CREATOR_QUEUE_KEY = "creator:queue"
 PREVIEW_QUEUE_KEY = "preview:queue"
+SCRAPE_SEARCH_QUEUE_KEY = "scrape:search:queue"
+SCRAPE_SEARCH_RESULT_PREFIX = "scrape:search:result:"
 # Shared volume the web app writes creator uploads to (see docker-compose).
 UPLOAD_DIR = os.environ.get("UPLOAD_DIR", os.path.join(ROOT, "uploads"))
 # Optional HTTP(S) proxy for source downloads (or use docker-compose.vpn.yml).
@@ -554,6 +557,117 @@ def _run_stopped(conn, run_id: str) -> bool:
     return db.get_run_status(conn, run_id) == "STOPPED"
 
 
+def _normalize_candidate(c: dict) -> dict:
+    """Map API/camelCase candidate fields to the worker video dict shape."""
+    return {
+        "url": c.get("url") or "",
+        "title": c.get("title") or "Unknown",
+        "description": c.get("description") or "",
+        "tags": c.get("tags") or [],
+        "pornstars": c.get("pornstars") or [],
+        "thumbnail": c.get("thumbnail") or "",
+        "duration_sec": c.get("duration_sec") if c.get("duration_sec") is not None else c.get("durationSec"),
+        "_m3u8_base_url": c.get("_m3u8_base_url"),
+        "_cdn_url": c.get("_cdn_url"),
+        "_part_urls": c.get("_part_urls"),
+    }
+
+
+def _process_selected(conn, run, candidates, totals) -> str:
+    """Download admin-selected candidates from an interactive scrape run."""
+    run_id = run["id"]
+    by_source: dict[str, list] = {}
+    for c in candidates:
+        src = c.get("sourceSite") or c.get("source_site") or "unknown"
+        by_source.setdefault(src, []).append(_normalize_candidate(c))
+
+    seen: set[str] = set()
+    stopped = False
+
+    for source, vids in by_source.items():
+        if _run_stopped(conn, run_id):
+            stopped = True
+            break
+
+        db.set_run_site(conn, run_id, source, status="RUNNING")
+        s = {"found": len(vids), "new_videos": 0, "skipped": 0, "failed": 0}
+        totals["found"] += len(vids)
+
+        def record(outcome):
+            if outcome == "new":
+                s["new_videos"] += 1
+                totals["new"] += 1
+            elif outcome == "skip":
+                s["skipped"] += 1
+                totals["skip"] += 1
+            else:
+                s["failed"] += 1
+                totals["fail"] += 1
+
+        fresh = []
+        for v in vids:
+            key = db.canonical_key(v.get("url") or "") or v.get("url") or ""
+            if not key or key in seen:
+                record("skip")
+                continue
+            seen.add(key)
+            fresh.append(v)
+
+        db.set_run_site(conn, run_id, source, status="RUNNING", **s)
+        db.update_run_totals(conn, run_id, totals["new"], totals["skip"],
+                             totals["fail"], totals["found"])
+
+        if fresh:
+            ex = ThreadPoolExecutor(max_workers=DOWNLOAD_CONCURRENCY)
+            futures = {ex.submit(_process_one, run, source, v): v for v in fresh}
+            try:
+                for fut in as_completed(futures):
+                    v = futures[fut]
+                    try:
+                        outcome = fut.result()
+                    except Exception as e:  # noqa: BLE001
+                        _log_video_fail("thread", v, run, source, e,
+                                        errorType=type(e).__name__,
+                                        traceback=traceback.format_exc()[-800:])
+                        outcome = "fail"
+                    record(outcome)
+                    db.set_run_site(conn, run_id, source, status="RUNNING", **s)
+                    db.update_run_totals(conn, run_id, totals["new"], totals["skip"],
+                                         totals["fail"], totals["found"])
+                    if _run_stopped(conn, run_id):
+                        stopped = True
+                        break
+            finally:
+                ex.shutdown(wait=not stopped, cancel_futures=stopped)
+
+        if stopped:
+            db.set_run_site(conn, run_id, source, status="QUEUED", **s)
+            return "stopped"
+        db.set_run_site(conn, run_id, source, status="DONE", **s)
+
+    return "stopped" if stopped else "done"
+
+
+def process_scrape_search(r, conn, payload_json: str):
+    """Handle interactive scrape preview search requests from the web app."""
+    req = json.loads(payload_json)
+    rid = req.get("id") or ""
+    result_key = f"{SCRAPE_SEARCH_RESULT_PREFIX}{rid}"
+    try:
+        result = search_candidates(
+            query=req["query"],
+            sources=req["sources"],
+            min_duration_sec=int(req.get("minDurationSec", 600)),
+            cursors=req.get("cursors"),
+            limit=int(req.get("limit", 50)),
+            exclude_urls=req.get("excludeUrls"),
+        )
+        payload = {"ok": True, **result}
+    except Exception as e:  # noqa: BLE001
+        payload = {"ok": False, "error": str(e)[:500]}
+    r.set(result_key, json.dumps(payload), ex=120)
+
+
 def _process_source(conn, run, source, min_dur, max_per_site, seen, totals) -> str:
     """
     Process one source for a run: paginate the source API, download new videos
@@ -688,9 +802,12 @@ def process_run(conn, run_id: str):
     sources = json.loads(run["selectedSites"])
     min_dur = run["minDurationSec"]
     max_per_site = run["maxPerSite"]  # None => download ALL
+    selected_raw = run.get("selectedCandidates")
+    selected = json.loads(selected_raw) if selected_raw else None
     cap = max_per_site if max_per_site else "all"
     _event("info", "run_start", runId=run_id, query=run["query"], sources=sources,
-           perSite=cap, concurrency=DOWNLOAD_CONCURRENCY, minDurationSec=min_dur)
+           perSite=cap, concurrency=DOWNLOAD_CONCURRENCY, minDurationSec=min_dur,
+           interactive=bool(selected))
     db.set_run_status(conn, run_id, "RUNNING", started=True)
 
     # Warm the shared S3 client once before spawning threads (avoids a lazy-init race).
@@ -704,15 +821,21 @@ def process_run(conn, run_id: str):
     totals = {"new": 0, "skip": 0, "fail": 0, "found": 0}
     stopped = False
 
-    for source in sources:
-        if _run_stopped(conn, run_id):
-            stopped = True
-            break
-        outcome = _process_source(conn, run, source, min_dur, max_per_site, seen, totals)
+    if selected:
+        outcome = _process_selected(conn, run, selected, totals)
         db.update_run_totals(conn, run_id, totals["new"], totals["skip"], totals["fail"], totals["found"])
         if outcome == "stopped":
             stopped = True
-            break
+    else:
+        for source in sources:
+            if _run_stopped(conn, run_id):
+                stopped = True
+                break
+            outcome = _process_source(conn, run, source, min_dur, max_per_site, seen, totals)
+            db.update_run_totals(conn, run_id, totals["new"], totals["skip"], totals["fail"], totals["found"])
+            if outcome == "stopped":
+                stopped = True
+                break
 
     db.update_run_totals(conn, run_id, totals["new"], totals["skip"], totals["fail"], totals["found"])
     if stopped:
@@ -757,7 +880,7 @@ def main():
     log.info(_j("worker started, waiting for jobs"))
     while True:
         try:
-            item = r.blpop([QUEUE_KEY, CREATOR_QUEUE_KEY, PREVIEW_QUEUE_KEY], timeout=5)
+            item = r.blpop([QUEUE_KEY, CREATOR_QUEUE_KEY, PREVIEW_QUEUE_KEY, SCRAPE_SEARCH_QUEUE_KEY], timeout=5)
             if not item:
                 continue
             queue = item[0].decode() if isinstance(item[0], bytes) else item[0]
@@ -766,6 +889,8 @@ def main():
                 process_creator_upload(conn, job_id)
             elif queue == PREVIEW_QUEUE_KEY:
                 process_regenerate_preview(conn, job_id)
+            elif queue == SCRAPE_SEARCH_QUEUE_KEY:
+                process_scrape_search(r, conn, job_id)
             else:
                 process_run(conn, job_id)
         except Exception as e:

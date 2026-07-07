@@ -256,6 +256,7 @@ model ScrapeRun {
   selectedSites  String // JSON array of source sites to search
   minDurationSec Int             @default(600)
   maxPerSite     Int? // videos to download per site this run; null = ALL (paginate everything)
+  selectedCandidates String? // JSON array of source candidates for interactive runs
   status         RunStatus       @default(QUEUED)
   totalFound     Int             @default(0)
   newVideos      Int             @default(0)

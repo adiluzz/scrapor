@@ -10,7 +10,7 @@ const candidateSchema = z.object({
   url: z.string().url(),
   title: z.string(),
   thumbnail: z.string().optional(),
-  durationSec: z.number().int().nullable().optional(),
+  durationSec: z.coerce.number().int().nullable().optional(),
   sourceSite: z.string(),
   description: z.string().optional(),
   tags: z.array(z.string()).optional(),
@@ -20,15 +20,19 @@ const candidateSchema = z.object({
   _part_urls: z.array(z.string()).nullable().optional(),
 });
 
-const schema = z.object({
-  query: z.string().min(1).max(200),
-  sources: z.array(z.string()).min(1),
-  minDurationSec: z.number().int().min(0).max(36000).optional(),
-  // Videos to download per source this run. null/omitted = download ALL results.
-  maxPerSite: z.number().int().min(1).max(10000).nullable().optional(),
-  // Interactive mode: download only these pre-selected candidates.
-  candidates: z.array(candidateSchema).min(1).max(500).optional(),
-});
+const schema = z
+  .object({
+    query: z.string().max(200).optional(),
+    sources: z.array(z.string()).min(1),
+    minDurationSec: z.number().int().min(0).max(36000).optional(),
+    // Videos to download per source this run. null/omitted = download ALL results.
+    maxPerSite: z.number().int().min(1).max(10000).nullable().optional(),
+    // Interactive mode: download only these pre-selected candidates.
+    candidates: z.array(candidateSchema).min(1).max(500).optional(),
+  })
+  .refine((d) => Boolean(d.query?.trim()) || (d.candidates?.length ?? 0) > 0, {
+    message: "Provide a search query or selected video candidates",
+  });
 
 export async function GET(request: Request) {
   const g = await guardAdmin(request);
@@ -48,7 +52,10 @@ export async function POST(request: Request) {
   if (g instanceof NextResponse) return g;
 
   const parsed = schema.safeParse(await request.json());
-  if (!parsed.success) return NextResponse.json({ error: "Invalid input" }, { status: 400 });
+  if (!parsed.success) {
+    const msg = parsed.error.issues[0]?.message || "Invalid input";
+    return NextResponse.json({ error: msg }, { status: 400 });
+  }
 
   const sources = parsed.data.sources.filter(isSourceSite);
   if (sources.length === 0) return NextResponse.json({ error: "No valid source sites" }, { status: 400 });
@@ -59,10 +66,14 @@ export async function POST(request: Request) {
     if (invalid) return NextResponse.json({ error: "Invalid candidate source site" }, { status: 400 });
   }
 
+  const runQuery =
+    parsed.data.query?.trim() ||
+    (candidates?.length ? `URL import (${candidates.length} videos)` : "");
+
   const run = await prisma.scrapeRun.create({
     data: {
       siteId: g.siteId,
-      query: parsed.data.query,
+      query: runQuery,
       selectedSites: JSON.stringify(sources),
       minDurationSec: parsed.data.minDurationSec ?? 600,
       maxPerSite: candidates ? candidates.length : (parsed.data.maxPerSite ?? null),

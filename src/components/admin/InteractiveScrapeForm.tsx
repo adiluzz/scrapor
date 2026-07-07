@@ -188,7 +188,7 @@ export default function InteractiveScrapeForm() {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
-          query,
+          query: query.trim() || `URL import (${selected.length} videos)`,
           sources: [...new Set(selected.map((v) => v.sourceSite))],
           minDurationSec: minMinutes * 60,
           candidates: selected.map(({ durationLabel: _d, inCatalog: _i, ...rest }) => rest),

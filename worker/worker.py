@@ -23,6 +23,7 @@ import shutil
 import subprocess
 import sys
 import tempfile
+import threading
 import time
 import traceback
 from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -648,7 +649,7 @@ def _process_selected(conn, run, candidates, totals) -> str:
     return "stopped" if stopped else "done"
 
 
-def process_scrape_search(r, conn, payload_json: str):
+def process_scrape_search(r, payload_json: str):
     """Handle interactive scrape preview search requests from the web app."""
     req = json.loads(payload_json)
     rid = req.get("id") or ""
@@ -666,6 +667,27 @@ def process_scrape_search(r, conn, payload_json: str):
     except Exception as e:  # noqa: BLE001
         payload = {"ok": False, "error": str(e)[:500]}
     r.set(result_key, json.dumps(payload), ex=120)
+    _event("info", "scrape_search_done", requestId=rid, videos=len(payload.get("videos") or []),
+           ok=payload.get("ok", True))
+
+
+def _run_background(job_name: str, fn, *args):
+    """Run a long job in a thread so the queue loop can still handle search requests."""
+
+    def _wrapper():
+        conn = db.connect()
+        try:
+            fn(conn, *args)
+        except Exception as e:  # noqa: BLE001
+            _event("error", "background_job_failed", job=job_name, reason=str(e)[:500],
+                   traceback=traceback.format_exc()[-800:])
+        finally:
+            try:
+                conn.close()
+            except Exception:
+                pass
+
+    threading.Thread(target=_wrapper, name=f"worker-{job_name}", daemon=True).start()
 
 
 def _process_source(conn, run, source, min_dur, max_per_site, seen, totals) -> str:
@@ -878,21 +900,23 @@ def main():
         log.error(_j(f"resume scan failed: {e}"))
 
     log.info(_j("worker started, waiting for jobs"))
+    # Search requests must not wait behind long scrape/creator jobs.
+    queue_priority = [SCRAPE_SEARCH_QUEUE_KEY, PREVIEW_QUEUE_KEY, CREATOR_QUEUE_KEY, QUEUE_KEY]
     while True:
         try:
-            item = r.blpop([QUEUE_KEY, CREATOR_QUEUE_KEY, PREVIEW_QUEUE_KEY, SCRAPE_SEARCH_QUEUE_KEY], timeout=5)
+            item = r.blpop(queue_priority, timeout=5)
             if not item:
                 continue
             queue = item[0].decode() if isinstance(item[0], bytes) else item[0]
             job_id = item[1].decode() if isinstance(item[1], bytes) else item[1]
-            if queue == CREATOR_QUEUE_KEY:
-                process_creator_upload(conn, job_id)
+            if queue == SCRAPE_SEARCH_QUEUE_KEY:
+                process_scrape_search(r, job_id)
             elif queue == PREVIEW_QUEUE_KEY:
-                process_regenerate_preview(conn, job_id)
-            elif queue == SCRAPE_SEARCH_QUEUE_KEY:
-                process_scrape_search(r, conn, job_id)
+                _run_background("preview", process_regenerate_preview, job_id)
+            elif queue == CREATOR_QUEUE_KEY:
+                _run_background("creator", process_creator_upload, job_id)
             else:
-                process_run(conn, job_id)
+                _run_background("scrape-run", process_run, job_id)
         except Exception as e:
             log.error(_j(f"worker loop error: {e}"))
             time.sleep(3)

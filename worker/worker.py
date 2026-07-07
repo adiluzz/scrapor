@@ -36,7 +36,7 @@ import db  # noqa: E402
 import storage  # noqa: E402
 import media  # noqa: E402
 from site_searchers import SEARCHERS  # noqa: E402
-from scrape_search import search_candidates  # noqa: E402
+from scrape_search import resolve_urls, search_candidates  # noqa: E402
 
 logging.basicConfig(
     level=logging.INFO,
@@ -655,14 +655,17 @@ def process_scrape_search(r, payload_json: str):
     rid = req.get("id") or ""
     result_key = f"{SCRAPE_SEARCH_RESULT_PREFIX}{rid}"
     try:
-        result = search_candidates(
-            query=req["query"],
-            sources=req["sources"],
-            min_duration_sec=int(req.get("minDurationSec", 600)),
-            cursors=req.get("cursors"),
-            limit=int(req.get("limit", 50)),
-            exclude_urls=req.get("excludeUrls"),
-        )
+        if req.get("urls"):
+            result = resolve_urls(req["urls"])
+        else:
+            result = search_candidates(
+                query=req["query"],
+                sources=req["sources"],
+                min_duration_sec=int(req.get("minDurationSec", 600)),
+                cursors=req.get("cursors"),
+                limit=int(req.get("limit", 50)),
+                exclude_urls=req.get("excludeUrls"),
+            )
         payload = {"ok": True, **result}
     except Exception as e:  # noqa: BLE001
         payload = {"ok": False, "error": str(e)[:500]}

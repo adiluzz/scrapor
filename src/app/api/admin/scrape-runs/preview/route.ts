@@ -5,29 +5,45 @@ import { isSourceSite } from "@/lib/source-sites";
 import { PREVIEW_BATCH, searchScrapeCandidates } from "@/lib/scrape-search";
 import { logger } from "@/lib/logger";
 
-const schema = z.object({
-  query: z.string().min(1).max(200),
-  sources: z.array(z.string()).min(1),
-  minDurationSec: z.number().int().min(0).max(36000).optional(),
-  cursors: z.record(z.union([z.number(), z.string()])).optional(),
-  limit: z.number().int().min(1).max(100).optional(),
-  excludeUrls: z.array(z.string().url()).optional(),
-});
+const schema = z
+  .object({
+    query: z.string().max(200).optional(),
+    sources: z.array(z.string()).optional(),
+    urls: z.array(z.string().url()).min(1).max(50).optional(),
+    minDurationSec: z.number().int().min(0).max(36000).optional(),
+    cursors: z.record(z.union([z.number(), z.string()])).optional(),
+    limit: z.number().int().min(1).max(100).optional(),
+    excludeUrls: z.array(z.string().url()).optional(),
+  })
+  .refine(
+    (d) =>
+      (d.urls?.length ?? 0) > 0 ||
+      (Boolean(d.query?.trim()) && (d.sources?.length ?? 0) > 0),
+    { message: "Provide a search query + sources, or a list of video URLs" }
+  );
 
 export async function POST(request: Request) {
   const g = await guardAdmin(request);
   if (g instanceof NextResponse) return g;
 
   const parsed = schema.safeParse(await request.json());
-  if (!parsed.success) return NextResponse.json({ error: "Invalid input" }, { status: 400 });
+  if (!parsed.success) {
+    const msg = parsed.error.issues[0]?.message || "Invalid input";
+    return NextResponse.json({ error: msg }, { status: 400 });
+  }
 
-  const sources = parsed.data.sources.filter(isSourceSite);
-  if (sources.length === 0) return NextResponse.json({ error: "No valid source sites" }, { status: 400 });
+  const urls = parsed.data.urls;
+  const sources = (parsed.data.sources ?? []).filter(isSourceSite);
+
+  if (!urls?.length && sources.length === 0) {
+    return NextResponse.json({ error: "No valid source sites" }, { status: 400 });
+  }
 
   try {
     const result = await searchScrapeCandidates({
-      query: parsed.data.query,
-      sources,
+      query: parsed.data.query?.trim(),
+      sources: urls?.length ? undefined : sources,
+      urls,
       minDurationSec: parsed.data.minDurationSec,
       cursors: parsed.data.cursors,
       limit: parsed.data.limit ?? PREVIEW_BATCH,

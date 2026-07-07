@@ -9,8 +9,9 @@ import {
 import type { ScrapeCandidate, ScrapeSearchResult } from "@/types/scrape-candidate";
 
 export type ScrapeSearchParams = {
-  query: string;
-  sources: string[];
+  query?: string;
+  sources?: string[];
+  urls?: string[];
   minDurationSec?: number;
   cursors?: Record<string, number | string>;
   limit?: number;
@@ -36,10 +37,12 @@ function normalizeResult(raw: {
   videos: Array<Omit<ScrapeCandidate, "durationLabel">>;
   cursors: Record<string, number | string>;
   hasMore: boolean;
+  errors?: Array<{ url: string; error: string }>;
 }): ScrapeSearchResult {
   return {
     cursors: raw.cursors,
     hasMore: raw.hasMore,
+    errors: raw.errors,
     videos: raw.videos.map((v) => ({
       ...v,
       durationLabel: formatDuration(v.durationSec),
@@ -56,6 +59,7 @@ async function runLocalPythonSearch(params: ScrapeSearchParams): Promise<ScrapeS
   const payload = JSON.stringify({
     query: params.query,
     sources: params.sources,
+    urls: params.urls,
     minDurationSec: params.minDurationSec ?? 600,
     cursors: params.cursors,
     limit: params.limit ?? PREVIEW_BATCH,
@@ -105,6 +109,7 @@ async function runRedisSearch(params: ScrapeSearchParams): Promise<ScrapeSearchR
       id: requestId,
       query: params.query,
       sources: params.sources,
+      urls: params.urls,
       minDurationSec: params.minDurationSec ?? 600,
       cursors: params.cursors,
       limit: params.limit ?? PREVIEW_BATCH,
@@ -123,6 +128,7 @@ async function runRedisSearch(params: ScrapeSearchParams): Promise<ScrapeSearchR
         videos?: Array<Omit<ScrapeCandidate, "durationLabel">>;
         cursors?: Record<string, number | string>;
         hasMore?: boolean;
+        errors?: Array<{ url: string; error: string }>;
       };
       if (parsed.ok === false) {
         throw new Error(parsed.error || "Search failed");
@@ -131,6 +137,7 @@ async function runRedisSearch(params: ScrapeSearchParams): Promise<ScrapeSearchR
         videos: parsed.videos ?? [],
         cursors: parsed.cursors ?? {},
         hasMore: parsed.hasMore ?? false,
+        errors: parsed.errors,
       });
     }
     await sleep(POLL_MS);

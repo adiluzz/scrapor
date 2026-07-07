@@ -11,6 +11,16 @@ function Card({
   selected: boolean;
   onToggle: () => void;
 }) {
+  async function copyUrl(e: React.MouseEvent) {
+    e.preventDefault();
+    e.stopPropagation();
+    try {
+      await navigator.clipboard.writeText(v.url);
+    } catch {
+      // ignore
+    }
+  }
+
   return (
     <div
       className={`group relative overflow-hidden rounded-xl border bg-zinc-900 transition-colors ${
@@ -56,6 +66,18 @@ function Card({
         </div>
         <div className="p-2.5">
           <h3 className="line-clamp-2 text-sm text-zinc-200 group-hover:text-white">{v.title}</h3>
+          <div className="mt-1.5 flex items-start gap-1">
+            <p className="min-w-0 flex-1 truncate text-[11px] text-zinc-500" title={v.url}>
+              {v.url}
+            </p>
+            <button
+              type="button"
+              onClick={copyUrl}
+              className="shrink-0 rounded px-1.5 py-0.5 text-[10px] text-zinc-400 hover:bg-zinc-800 hover:text-white"
+            >
+              Copy
+            </button>
+          </div>
           {v.pornstars && v.pornstars.length > 0 && (
             <p className="mt-1 truncate text-xs text-brand-400/80">{v.pornstars.join(", ")}</p>
           )}

@@ -23,6 +23,27 @@ export default function InteractiveScrapeForm() {
   const [cursors, setCursors] = useState<Record<string, number | string>>({});
   const [hasMore, setHasMore] = useState(false);
   const [searched, setSearched] = useState(false);
+  const [urlInput, setUrlInput] = useState("");
+  const [resolvingUrls, setResolvingUrls] = useState(false);
+  const [urlErrors, setUrlErrors] = useState<Array<{ url: string; error: string }>>([]);
+
+  function parseUrlLines(text: string): string[] {
+    return text
+      .split(/\r?\n/)
+      .map((line) => line.trim())
+      .filter((line) => line.startsWith("http://") || line.startsWith("https://"));
+  }
+
+  function mergeVideos(existing: ScrapeCandidate[], incoming: ScrapeCandidate[]): ScrapeCandidate[] {
+    const seen = new Set(existing.map((v) => v.url));
+    const merged = [...existing];
+    for (const v of incoming) {
+      if (seen.has(v.url)) continue;
+      seen.add(v.url);
+      merged.push(v);
+    }
+    return merged;
+  }
 
   function toggleSource(s: string) {
     setSources((prev) => (prev.includes(s) ? prev.filter((x) => x !== s) : [...prev, s]));
@@ -46,18 +67,22 @@ export default function InteractiveScrapeForm() {
     }
   }
 
-  async function fetchPreview(append: boolean) {
+  async function fetchPreview(append: boolean, urls?: string[]) {
     const res = await fetch("/api/admin/scrape-runs/preview", {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({
-        query,
-        sources,
-        minDurationSec: minMinutes * 60,
-        cursors: append ? cursors : undefined,
-        limit: PREVIEW_BATCH,
-        excludeUrls: append ? videos.map((v) => v.url) : undefined,
-      }),
+      body: JSON.stringify(
+        urls?.length
+          ? { urls }
+          : {
+              query,
+              sources,
+              minDurationSec: minMinutes * 60,
+              cursors: append ? cursors : undefined,
+              limit: PREVIEW_BATCH,
+              excludeUrls: append ? videos.map((v) => v.url) : undefined,
+            }
+      ),
     });
     const data = await res.json();
     if (!res.ok) throw new Error(data.error || "Search failed");
@@ -65,7 +90,49 @@ export default function InteractiveScrapeForm() {
       videos: ScrapeCandidate[];
       cursors: Record<string, number | string>;
       hasMore: boolean;
+      errors?: Array<{ url: string; error: string }>;
     };
+  }
+
+  async function resolveUrls() {
+    const urls = parseUrlLines(urlInput);
+    if (urls.length === 0) {
+      setError("Paste one or more video page URLs (https://…) from supported scrape sites.");
+      return;
+    }
+    setResolvingUrls(true);
+    setError(null);
+    setUrlErrors([]);
+    try {
+      const data = await fetchPreview(false, urls);
+      setVideos((prev) => mergeVideos(prev, data.videos));
+      setSelectedUrls((prev) => {
+        const next = new Set(prev);
+        for (const v of data.videos) {
+          if (!v.inCatalog) next.add(v.url);
+        }
+        return next;
+      });
+      setUrlErrors(data.errors ?? []);
+      setSearched(true);
+      if (data.videos.length === 0 && (data.errors?.length ?? 0) > 0) {
+        setError("Could not resolve any of the pasted URLs.");
+      }
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setResolvingUrls(false);
+    }
+  }
+
+  async function copySelectedUrls() {
+    const lines = videos.filter((v) => selectedUrls.has(v.url)).map((v) => v.url);
+    if (lines.length === 0) return;
+    try {
+      await navigator.clipboard.writeText(lines.join("\n"));
+    } catch {
+      setError("Could not copy URLs to clipboard.");
+    }
   }
 
   async function searchVideos() {
@@ -148,8 +215,8 @@ export default function InteractiveScrapeForm() {
           <div>
             <h2 className="text-lg font-semibold text-white">Interactive scrape</h2>
             <p className="mt-1 max-w-2xl text-sm text-zinc-400">
-              Step 1: search source sites and preview thumbnails. Step 2: pick videos to download.
-              Load 50 more at a time until a site runs out of results.
+              Search by query or paste video page URLs from supported sites. Preview thumbnails,
+              copy source URLs, pick videos to download, and load 50 more search results at a time.
             </p>
           </div>
           <Link
@@ -211,16 +278,54 @@ export default function InteractiveScrapeForm() {
         <button
           type="button"
           onClick={searchVideos}
-          disabled={searching || downloading || !query.trim() || sources.length === 0}
+          disabled={searching || downloading || resolvingUrls || !query.trim() || sources.length === 0}
           className="rounded-lg bg-zinc-700 px-5 py-2.5 text-sm font-medium text-white hover:bg-zinc-600 disabled:opacity-50"
         >
           {searching ? "Searching…" : "Step 1 — Search videos"}
         </button>
+
+        <div className="border-t border-zinc-800 pt-4">
+          <label className="mb-1.5 block text-sm font-medium text-zinc-300">
+            Or paste video URLs from scrape sites
+          </label>
+          <textarea
+            value={urlInput}
+            onChange={(e) => setUrlInput(e.target.value)}
+            disabled={searching || downloading || resolvingUrls}
+            rows={4}
+            placeholder={"https://www.pornhub.com/view_video.php?viewkey=…\nhttps://xhamster.com/videos/…"}
+            className="w-full rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm text-white placeholder:text-zinc-600"
+          />
+          <p className="mt-1 text-xs text-zinc-500">
+            One URL per line. Supported: {SOURCE_SITES.join(", ")}.
+          </p>
+          <button
+            type="button"
+            onClick={resolveUrls}
+            disabled={searching || downloading || resolvingUrls || !urlInput.trim()}
+            className="mt-3 rounded-lg border border-zinc-700 px-5 py-2.5 text-sm font-medium text-zinc-200 hover:bg-zinc-800 disabled:opacity-50"
+          >
+            {resolvingUrls ? "Resolving URLs…" : "Add URLs"}
+          </button>
+        </div>
       </div>
 
       {error && (
         <div className="rounded-lg border border-red-900/50 bg-red-950/40 px-4 py-3 text-sm text-red-300">
           {error}
+        </div>
+      )}
+
+      {urlErrors.length > 0 && (
+        <div className="rounded-lg border border-amber-900/40 bg-amber-950/30 px-4 py-3 text-sm text-amber-200">
+          <p className="font-medium">Some URLs could not be resolved:</p>
+          <ul className="mt-2 space-y-1 text-xs text-amber-200/80">
+            {urlErrors.map((e) => (
+              <li key={e.url}>
+                <span className="text-amber-100">{e.url}</span> — {e.error}
+              </li>
+            ))}
+          </ul>
         </div>
       )}
 
@@ -239,6 +344,14 @@ export default function InteractiveScrapeForm() {
                 className="rounded-lg border border-zinc-700 px-4 py-2 text-sm text-zinc-300 hover:bg-zinc-800 disabled:opacity-50"
               >
                 {allSelected ? "Deselect all" : "Select all new"}
+              </button>
+              <button
+                type="button"
+                onClick={copySelectedUrls}
+                disabled={selectedUrls.size === 0}
+                className="rounded-lg border border-zinc-700 px-4 py-2 text-sm text-zinc-300 hover:bg-zinc-800 disabled:opacity-50"
+              >
+                Copy selected URLs
               </button>
               {hasMore && (
                 <button

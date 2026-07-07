@@ -19,4 +19,5 @@ export type ScrapeSearchResult = {
   videos: ScrapeCandidate[];
   cursors: Record<string, number | string>;
   hasMore: boolean;
+  errors?: Array<{ url: string; error: string }>;
 };

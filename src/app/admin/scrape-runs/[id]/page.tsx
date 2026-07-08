@@ -2,7 +2,9 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { prisma } from "@/lib/db";
 import { requireAdmin } from "@/lib/session";
+import { loadScrapeRunOutcomes } from "@/lib/scrape-run-outcomes";
 import RunActions from "@/components/admin/RunActions";
+import ScrapeRunOutcomeLists from "@/components/admin/ScrapeRunOutcomeLists";
 
 export const dynamic = "force-dynamic";
 
@@ -26,6 +28,8 @@ export default async function RunDetailPage({ params }: { params: Promise<{ id: 
   });
   if (!run) notFound();
 
+  const { skipped, failed } = await loadScrapeRunOutcomes(run.id, run.selectedCandidates);
+
   return (
     <div className="space-y-8">
       <div>
@@ -47,7 +51,12 @@ export default async function RunDetailPage({ params }: { params: Promise<{ id: 
           </span>
         </div>
         <div className="mt-4">
-          <RunActions runId={run.id} status={run.status} />
+          <RunActions
+            runId={run.id}
+            status={run.status}
+            failed={run.failed}
+            hasSelectedCandidates={Boolean(run.selectedCandidates)}
+          />
         </div>
       </div>
 
@@ -86,14 +95,22 @@ export default async function RunDetailPage({ params }: { params: Promise<{ id: 
       <section>
         <h2 className="mb-3 text-lg font-semibold text-white">Videos added ({run.videos.length})</h2>
         <ul className="divide-y divide-zinc-800 rounded-xl border border-zinc-800">
-          {run.videos.map((v) => (
-            <li key={v.id} className="px-4 py-3 text-sm">
-              <Link href={`/videos/${v.slug}`} className="text-zinc-200 hover:text-white">{v.title}</Link>
-              <span className="ml-2 text-zinc-600">· {v.sourceSite}</span>
-            </li>
-          ))}
+          {run.videos.length === 0 ? (
+            <li className="px-4 py-8 text-center text-sm text-zinc-500">No videos added yet.</li>
+          ) : (
+            run.videos.map((v) => (
+              <li key={v.id} className="px-4 py-3 text-sm">
+                <Link href={`/admin/videos/${v.slug}`} className="text-zinc-200 hover:text-white">
+                  {v.title}
+                </Link>
+                <span className="ml-2 text-zinc-600">· {v.sourceSite}</span>
+              </li>
+            ))
+          )}
         </ul>
       </section>
+
+      <ScrapeRunOutcomeLists skipped={skipped} failed={failed} />
     </div>
   );
 }

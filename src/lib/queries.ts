@@ -92,7 +92,7 @@ export interface VideoCardData {
   pornstars: { name: string; slug: string }[];
 }
 
-async function toCard(v: {
+export async function toCard(v: {
   id: string;
   slug: string;
   title: string;

@@ -45,6 +45,7 @@ export default function AdminVideoEditor({ videoId }: { videoId: string }) {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [regenerating, setRegenerating] = useState(false);
+  const [redownloading, setRedownloading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
   const [taxonomyTags, setTaxonomyTags] = useState<string[]>([]);
@@ -130,6 +131,31 @@ export default function AdminVideoEditor({ videoId }: { videoId: string }) {
       setError(e instanceof Error ? e.message : "Regeneration failed");
     } finally {
       setRegenerating(false);
+    }
+  }
+
+  async function redownloadVideo() {
+    if (!form) return;
+    if (
+      !confirm(
+        "Re-download this video from the source site? Existing files will be replaced. This may take several minutes."
+      )
+    ) {
+      return;
+    }
+    setRedownloading(true);
+    setError(null);
+    setSuccess(null);
+    try {
+      const res = await fetch(`/api/admin/videos/${videoId}/redownload`, { method: "POST" });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Re-download failed");
+      setSuccess("Re-download queued — refresh in a few minutes when processing completes.");
+      await load();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Re-download failed");
+    } finally {
+      setRedownloading(false);
     }
   }
 
@@ -383,6 +409,15 @@ export default function AdminVideoEditor({ videoId }: { videoId: string }) {
           title="Rebuild ~4s scene montage hover preview and adaptive storyboard"
         >
           {regenerating ? "Queuing…" : "Regenerate preview (v2)"}
+        </button>
+        <button
+          type="button"
+          disabled={redownloading || !form.sourceUrl || form.sourceUrl.startsWith("upload://")}
+          onClick={redownloadVideo}
+          className="rounded-lg border border-amber-700/50 px-4 py-2 text-sm text-amber-300 hover:bg-amber-950/30 disabled:opacity-50"
+          title="Download fresh copy from source URL and replace stored video + previews"
+        >
+          {redownloading ? "Queuing…" : "Re-download from source"}
         </button>
         <button
           type="button"

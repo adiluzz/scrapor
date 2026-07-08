@@ -35,6 +35,9 @@ export const PREVIEW_QUEUE_KEY = "preview:queue";
 /** Redis queue for interactive scrape search requests (handled by worker). */
 export const SCRAPE_SEARCH_QUEUE_KEY = "scrape:search:queue";
 
+/** Redis queue for re-downloading a video from its source URL (Video ids). */
+export const REDOWNLOAD_QUEUE_KEY = "redownload:queue";
+
 export function scrapeSearchResultKey(requestId: string): string {
   return `scrape:search:result:${requestId}`;
 }

@@ -240,6 +240,34 @@ def load_video(conn, video_id: str):
     return {"id": row[0], "siteId": row[1], "durationSec": row[2], "status": row[3]}
 
 
+def load_video_redownload(conn, video_id: str):
+    """Load fields needed to re-download a video from its source page."""
+    with conn.cursor() as cur:
+        cur.execute(
+            'SELECT id,"siteId","sourceUrl","sourceSite",title,description,"durationSec",'
+            '"s3VideoKey","s3ThumbKey","s3PreviewKey","s3StoryboardKey","s3StoryboardVttKey" '
+            'FROM "Video" WHERE id=%s',
+            (video_id,),
+        )
+        row = cur.fetchone()
+    if not row:
+        return None
+    return {
+        "id": row[0],
+        "siteId": row[1],
+        "sourceUrl": row[2],
+        "sourceSite": row[3],
+        "title": row[4],
+        "description": row[5],
+        "durationSec": row[6],
+        "s3VideoKey": row[7],
+        "s3ThumbKey": row[8],
+        "s3PreviewKey": row[9],
+        "s3StoryboardKey": row[10],
+        "s3StoryboardVttKey": row[11],
+    }
+
+
 def load_video_media(conn, video_id: str):
     """Load S3 keys + duration for preview/storyboard regeneration."""
     with conn.cursor() as cur:
@@ -380,3 +408,33 @@ def set_run_site(conn, run_id, source_site, **fields):
             f'UPDATE "ScrapeRunSite" SET {",".join(cols)} WHERE "runId"=%s AND "sourceSite"=%s',
             (*vals, run_id, source_site),
         )
+
+
+def record_run_outcome(conn, run_id, video, source_site, outcome, reason, stage=None):
+    """Persist a skipped/failed video outcome for the admin scrape run UI."""
+    if outcome not in ("skip", "fail"):
+        return
+    url = (video.get("url") or "").strip()
+    if not url:
+        return
+    db_outcome = "SKIPPED" if outcome == "skip" else "FAILED"
+    title = (video.get("title") or "").strip()[:400] or None
+    site = (source_site or "")[:120] or None
+    reason_text = (reason or ("Skipped" if outcome == "skip" else "Failed"))[:1000]
+    stage_text = (stage or "")[:80] or None
+    oid = _cuid()
+    with conn.cursor() as cur:
+        cur.execute(
+            'INSERT INTO "ScrapeRunOutcome" '
+            '(id,"runId",url,title,"sourceSite",outcome,reason,stage,"createdAt") '
+            'VALUES (%s,%s,%s,%s,%s,%s::"ScrapeRunVideoOutcome",%s,%s,now()) '
+            'ON CONFLICT ("runId",url) DO UPDATE SET '
+            'title=EXCLUDED.title,"sourceSite"=EXCLUDED."sourceSite",'
+            'outcome=EXCLUDED.outcome,reason=EXCLUDED.reason,stage=EXCLUDED.stage',
+            (oid, run_id, url[:2000], title, site, db_outcome, reason_text, stage_text),
+        )
+
+
+def delete_run_outcomes(conn, run_id: str):
+    with conn.cursor() as cur:
+        cur.execute('DELETE FROM "ScrapeRunOutcome" WHERE "runId"=%s', (run_id,))

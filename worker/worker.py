@@ -27,6 +27,7 @@ import threading
 import time
 import traceback
 from concurrent.futures import ThreadPoolExecutor, as_completed
+from typing import NamedTuple
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, os.path.join(ROOT, "scripts"))
@@ -80,6 +81,26 @@ def _log_video_fail(stage: str, video, run, source_site, reason, **extra):
     _event("warning", "video_failed", stage=stage, reason=str(reason)[:500], **_video_ctx(video, run, source_site), **extra)
 
 
+class ProcessOutcome(NamedTuple):
+    result: str  # new | skip | fail
+    reason: str = ""
+    stage: str = ""
+
+
+def _apply_process_outcome(conn, run_id, video, source_site, po: ProcessOutcome, record_fn):
+    record_fn(po.result)
+    if po.result != "new":
+        db.record_run_outcome(
+            conn,
+            run_id,
+            video,
+            source_site,
+            po.result,
+            po.reason or ("Skipped" if po.result == "skip" else "Failed"),
+            po.stage or None,
+        )
+
+
 # How many videos to download+save concurrently.
 DOWNLOAD_CONCURRENCY = int(os.environ.get("SCRAPE_DOWNLOAD_CONCURRENCY", "5"))
 # Page size when paginating a source for a run.
@@ -89,6 +110,7 @@ ALL_CAP = int(os.environ.get("SCRAPE_ALL_MAX", "100000"))
 QUEUE_KEY = "scrape:queue"
 CREATOR_QUEUE_KEY = "creator:queue"
 PREVIEW_QUEUE_KEY = "preview:queue"
+REDOWNLOAD_QUEUE_KEY = "redownload:queue"
 SCRAPE_SEARCH_QUEUE_KEY = "scrape:search:queue"
 SCRAPE_SEARCH_RESULT_PREFIX = "scrape:search:result:"
 # Shared volume the web app writes creator uploads to (see docker-compose).
@@ -365,9 +387,9 @@ def _download(video, dest_dir, force_ytdlp: bool = False) -> tuple[bool, str, di
         return False, str(e), {"method": locals().get("method", "unknown"), "stderr": _stderr_tail(last_result)}
 
 
-def _process_one(run, source_site, video) -> str:
+def _process_one(run, source_site, video) -> ProcessOutcome:
     """
-    Download + save one video. Returns 'new' | 'skip' | 'fail'.
+    Download + save one video. Returns outcome with optional reason/stage.
 
     Opens short-lived DB connections around DB work only so threads do not hold
     a Postgres slot for the duration of multi-hour CDN downloads.
@@ -376,14 +398,14 @@ def _process_one(run, source_site, video) -> str:
     conn = db.connect()
     try:
         if db.get_run_status(conn, run["id"]) == "STOPPED":
-            return "skip"
+            return ProcessOutcome("skip", "Run stopped by admin", "stopped")
         if db.video_exists(conn, url):
-            return "skip"
+            return ProcessOutcome("skip", "Already in catalog", "catalog")
     except Exception as e:
         _log_video_fail("process", video, run, source_site, e,
                         errorType=type(e).__name__,
                         traceback=traceback.format_exc()[-800:])
-        return "fail"
+        return ProcessOutcome("fail", str(e)[:500], "process")
     finally:
         try:
             conn.close()
@@ -396,14 +418,14 @@ def _process_one(run, source_site, video) -> str:
         ok, reason, dl_extra = _download_with_retries(video, tmp_dir, source_site, run)
         if not ok:
             _log_video_fail("download", video, run, source_site, reason, **dl_extra)
-            return "fail"
+            return ProcessOutcome("fail", str(reason)[:500], "download")
 
         video_path = os.path.join(tmp_dir, "video.mp4")
         duration = video.get("duration_sec") or media.probe_duration(video_path)
         if not duration:
             _log_video_fail("probe_duration", video, run, source_site,
                             "could not determine video duration")
-            return "fail"
+            return ProcessOutcome("fail", "Could not determine video duration", "probe_duration")
 
         preview = os.path.join(tmp_dir, "preview.mp4")
         thumb = os.path.join(tmp_dir, "thumbnail.jpg")
@@ -412,10 +434,10 @@ def _process_one(run, source_site, video) -> str:
 
         if not media.make_preview(video_path, preview, duration=duration):
             _log_video_fail("make_preview", video, run, source_site, "ffmpeg preview generation failed")
-            return "fail"
+            return ProcessOutcome("fail", "Preview generation failed", "make_preview")
         if not media.make_thumbnail(video_path, thumb, video.get("thumbnail", "")):
             _log_video_fail("make_thumbnail", video, run, source_site, "thumbnail generation failed")
-            return "fail"
+            return ProcessOutcome("fail", "Thumbnail generation failed", "make_thumbnail")
         storyboard_ok = media.make_storyboard(video_path, sprite, vtt, duration)
         if not storyboard_ok:
             _event("warning", "storyboard_skipped", reason="storyboard generation failed",
@@ -424,9 +446,9 @@ def _process_one(run, source_site, video) -> str:
         conn = db.connect()
         try:
             if db.get_run_status(conn, run["id"]) == "STOPPED":
-                return "skip"
+                return ProcessOutcome("skip", "Run stopped by admin", "stopped")
             if db.video_exists(conn, url):
-                return "skip"
+                return ProcessOutcome("skip", "Already in catalog", "catalog")
 
             keys = dict(v=None, t=None, p=None, sb=None, vtt=None)
             vid, slug = db.create_video(
@@ -442,7 +464,7 @@ def _process_one(run, source_site, video) -> str:
                 keys["v"] = storage.upload(video_path, storage.key_video(site_id, vid), "video/mp4")
                 if not keys["v"]:
                     _log_video_fail("upload", video, run, source_site, "S3 video upload failed", videoId=vid)
-                    return "fail"
+                    return ProcessOutcome("fail", "S3 video upload failed", "upload")
                 if os.path.exists(thumb):
                     keys["t"] = storage.upload(thumb, storage.key_thumb(site_id, vid), "image/jpeg")
                 if os.path.exists(preview):
@@ -465,12 +487,12 @@ def _process_one(run, source_site, video) -> str:
                         shutil.copy(src, os.path.join(local, name))
 
             _event("info", "video_added", slug=slug, videoId=vid, durationSec=duration, **_video_ctx(video, run, source_site))
-            return "new"
+            return ProcessOutcome("new")
         except Exception as e:
             _log_video_fail("process", video, run, source_site, e,
                             errorType=type(e).__name__,
                             traceback=traceback.format_exc()[-800:])
-            return "fail"
+            return ProcessOutcome("fail", str(e)[:500], "process")
         finally:
             try:
                 conn.close()
@@ -480,7 +502,7 @@ def _process_one(run, source_site, video) -> str:
         _log_video_fail("process", video, run, source_site, e,
                         errorType=type(e).__name__,
                         traceback=traceback.format_exc()[-800:])
-        return "fail"
+        return ProcessOutcome("fail", str(e)[:500], "process")
     finally:
         shutil.rmtree(tmp_dir, ignore_errors=True)
 
@@ -643,6 +665,129 @@ def process_regenerate_preview(conn, video_id: str):
         shutil.rmtree(tmp_dir, ignore_errors=True)
 
 
+def process_redownload(conn, video_id: str):
+    """Re-download a video from its source URL and replace stored media."""
+    v = db.load_video_redownload(conn, video_id)
+    if not v:
+        _event("warning", "redownload_not_found", videoId=video_id)
+        return
+    source_url = (v.get("sourceUrl") or "").strip()
+    if not source_url or source_url.startswith("upload://"):
+        _event("warning", "redownload_no_source", videoId=video_id)
+        db.set_video_status(conn, video_id, "FAILED")
+        return
+
+    site_id = v["siteId"]
+    source_site = v.get("sourceSite") or ""
+    db.set_video_status(conn, video_id, "PROCESSING")
+    _event("info", "redownload_start", videoId=video_id, sourceUrl=source_url[:200])
+
+    video = {
+        "url": source_url,
+        "title": v.get("title") or "Unknown",
+        "description": v.get("description") or "",
+        "tags": [],
+        "pornstars": [],
+        "thumbnail": "",
+        "duration_sec": v.get("durationSec"),
+    }
+
+    try:
+        resolved = resolve_urls([source_url])
+        for item in resolved.get("videos") or []:
+            video["title"] = item.get("title") or video["title"]
+            video["description"] = item.get("description") or video["description"]
+            video["thumbnail"] = item.get("thumbnail") or video.get("thumbnail") or ""
+            if item.get("durationSec"):
+                video["duration_sec"] = item["durationSec"]
+            elif item.get("duration_sec"):
+                video["duration_sec"] = item["duration_sec"]
+            apply_download_urls(video, item)
+            break
+    except Exception as e:  # noqa: BLE001
+        _event("warning", "redownload_resolve_failed", videoId=video_id, reason=str(e)[:300])
+
+    tmp_dir = tempfile.mkdtemp(prefix="redownload_")
+    try:
+        ok, reason, dl_extra = _download_with_retries(video, tmp_dir, source_site, {})
+        if not ok:
+            _event("warning", "redownload_failed", videoId=video_id, stage="download",
+                   reason=str(reason)[:500], **dl_extra)
+            db.set_video_status(conn, video_id, "FAILED")
+            return
+
+        video_path = os.path.join(tmp_dir, "video.mp4")
+        duration = video.get("duration_sec") or media.probe_duration(video_path)
+        if not duration:
+            _event("warning", "redownload_failed", videoId=video_id, stage="probe_duration",
+                   reason="could not determine duration")
+            db.set_video_status(conn, video_id, "FAILED")
+            return
+
+        preview = os.path.join(tmp_dir, "preview.mp4")
+        thumb = os.path.join(tmp_dir, "thumbnail.jpg")
+        sprite = os.path.join(tmp_dir, "storyboard.jpg")
+        vtt = os.path.join(tmp_dir, "storyboard.vtt")
+
+        if not media.make_preview(video_path, preview, duration=duration, force=True):
+            _event("warning", "redownload_failed", videoId=video_id, stage="make_preview")
+            db.set_video_status(conn, video_id, "FAILED")
+            return
+        if not media.make_thumbnail(video_path, thumb, video.get("thumbnail", "")):
+            _event("warning", "redownload_failed", videoId=video_id, stage="make_thumbnail")
+            db.set_video_status(conn, video_id, "FAILED")
+            return
+        storyboard_ok = media.make_storyboard(video_path, sprite, vtt, duration, force=True)
+
+        keys = {
+            "v": v.get("s3VideoKey"),
+            "t": v.get("s3ThumbKey"),
+            "p": v.get("s3PreviewKey"),
+            "sb": v.get("s3StoryboardKey"),
+            "vtt": v.get("s3StoryboardVttKey"),
+        }
+        if storage.configured():
+            keys["v"] = storage.upload(video_path, storage.key_video(site_id, video_id), "video/mp4") or keys["v"]
+            if os.path.exists(thumb):
+                keys["t"] = storage.upload(thumb, storage.key_thumb(site_id, video_id), "image/jpeg") or keys["t"]
+            if os.path.exists(preview):
+                keys["p"] = storage.upload(preview, storage.key_preview(site_id, video_id), "video/mp4") or keys["p"]
+            if storyboard_ok:
+                keys["sb"] = storage.upload(sprite, storage.key_storyboard(site_id, video_id), "image/jpeg") or keys["sb"]
+                keys["vtt"] = storage.upload(vtt, storage.key_storyboard_vtt(site_id, video_id), "text/vtt") or keys["vtt"]
+        else:
+            local = os.path.join(ROOT, "downloads", video_id)
+            os.makedirs(local, exist_ok=True)
+            shutil.copy(video_path, os.path.join(local, "video.mp4"))
+            if os.path.exists(preview):
+                shutil.copy(preview, os.path.join(local, "preview.mp4"))
+            if os.path.exists(thumb):
+                shutil.copy(thumb, os.path.join(local, "thumbnail.jpg"))
+            if storyboard_ok:
+                shutil.copy(sprite, os.path.join(local, "storyboard.jpg"))
+                shutil.copy(vtt, os.path.join(local, "storyboard.vtt"))
+
+        db.update_video_media(
+            conn,
+            video_id,
+            s3_video_key=keys["v"],
+            s3_thumb_key=keys["t"],
+            s3_preview_key=keys["p"],
+            s3_storyboard_key=keys["sb"] if storyboard_ok else v.get("s3StoryboardKey"),
+            s3_storyboard_vtt_key=keys["vtt"] if storyboard_ok else v.get("s3StoryboardVttKey"),
+            duration_sec=duration,
+            status="READY",
+            preview_version=media.PREVIEW_VERSION,
+        )
+        _event("info", "redownload_done", videoId=video_id, durationSec=duration)
+    except Exception as e:  # noqa: BLE001
+        _event("warning", "redownload_failed", videoId=video_id, reason=str(e)[:500],
+               errorType=type(e).__name__, traceback=traceback.format_exc()[-800:])
+        db.set_video_status(conn, video_id, "FAILED")
+    finally:
+        shutil.rmtree(tmp_dir, ignore_errors=True)
+
+
 def _run_stopped(conn, run_id: str) -> bool:
     """True when an admin has stopped the run (polled to make STOP take effect)."""
     return db.get_run_status(conn, run_id) == "STOPPED"
@@ -700,6 +845,8 @@ def _process_selected(conn, run, candidates, totals) -> str:
             key = db.canonical_key(v.get("url") or "") or v.get("url") or ""
             if not key or key in seen:
                 record("skip")
+                reason = "Duplicate in this run" if key in seen else "Missing URL"
+                db.record_run_outcome(conn, run_id, v, source, "skip", reason, "dedup")
                 continue
             seen.add(key)
             fresh.append(v)
@@ -715,13 +862,13 @@ def _process_selected(conn, run, candidates, totals) -> str:
                 for fut in as_completed(futures):
                     v = futures[fut]
                     try:
-                        outcome = fut.result()
+                        po = fut.result()
                     except Exception as e:  # noqa: BLE001
                         _log_video_fail("thread", v, run, source, e,
                                         errorType=type(e).__name__,
                                         traceback=traceback.format_exc()[-800:])
-                        outcome = "fail"
-                    record(outcome)
+                        po = ProcessOutcome("fail", str(e)[:500], "thread")
+                    _apply_process_outcome(conn, run_id, v, source, po, record)
                     db.set_run_site(conn, run_id, source, status="RUNNING", **s)
                     db.update_run_totals(conn, run_id, totals["new"], totals["skip"],
                                          totals["fail"], totals["found"])
@@ -837,6 +984,9 @@ def _process_source(conn, run, source, min_dur, max_per_site, seen, totals) -> s
                 key = db.canonical_key(v["url"]) or v["url"]
                 if key in seen:
                     record("skip")
+                    db.record_run_outcome(
+                        conn, run_id, v, source, "skip", "Duplicate in this run", "dedup"
+                    )
                     continue
                 seen.add(key)
                 fresh.append(v)
@@ -858,13 +1008,13 @@ def _process_source(conn, run, source, min_dur, max_per_site, seen, totals) -> s
                     for fut in as_completed(futures):
                         v = futures[fut]
                         try:
-                            outcome = fut.result()
+                            po = fut.result()
                         except Exception as e:  # noqa: BLE001
                             _log_video_fail("thread", v, run, source, e,
                                             errorType=type(e).__name__,
                                             traceback=traceback.format_exc()[-800:])
-                            outcome = "fail"
-                        record(outcome)
+                            po = ProcessOutcome("fail", str(e)[:500], "thread")
+                        _apply_process_outcome(conn, run_id, v, source, po, record)
                         db.set_run_site(conn, run_id, source, status="RUNNING", **s)
                         db.update_run_totals(conn, run_id, totals["new"], totals["skip"],
                                              totals["fail"], totals["found"])
@@ -965,12 +1115,17 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--run", help="Process a single existing ScrapeRun id and exit")
     parser.add_argument("--regenerate-preview", help="Regenerate hover preview for a Video id and exit")
+    parser.add_argument("--redownload", help="Re-download source video for a Video id and exit")
     args = parser.parse_args()
 
     conn = db.connect()
 
     if args.regenerate_preview:
         process_regenerate_preview(conn, args.regenerate_preview)
+        return
+
+    if args.redownload:
+        process_redownload(conn, args.redownload)
         return
 
     if args.run:
@@ -994,7 +1149,7 @@ def main():
 
     log.info(_j("worker started, waiting for jobs"))
     # Search requests must not wait behind long scrape/creator jobs.
-    queue_priority = [SCRAPE_SEARCH_QUEUE_KEY, PREVIEW_QUEUE_KEY, CREATOR_QUEUE_KEY, QUEUE_KEY]
+    queue_priority = [SCRAPE_SEARCH_QUEUE_KEY, PREVIEW_QUEUE_KEY, REDOWNLOAD_QUEUE_KEY, CREATOR_QUEUE_KEY, QUEUE_KEY]
     while True:
         try:
             item = r.blpop(queue_priority, timeout=5)
@@ -1006,6 +1161,8 @@ def main():
                 process_scrape_search(r, job_id)
             elif queue == PREVIEW_QUEUE_KEY:
                 _run_background("preview", process_regenerate_preview, job_id)
+            elif queue == REDOWNLOAD_QUEUE_KEY:
+                _run_background("redownload", process_redownload, job_id)
             elif queue == CREATOR_QUEUE_KEY:
                 _run_background("creator", process_creator_upload, job_id)
             else:

@@ -1,8 +1,13 @@
 "use client";
 
 import Image from "next/image";
+import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 import { pornstarProfileFields, type PornstarProfileData } from "@/lib/pornstar-profile";
+import TpdbImagePicker, {
+  type TpdbPickerImage,
+  type TpdbPickerMatch,
+} from "@/components/admin/TpdbImagePicker";
 
 type PornstarRow = Omit<PornstarProfileData, "tpdbSyncedAt"> & {
   id: string;
@@ -12,14 +17,6 @@ type PornstarRow = Omit<PornstarProfileData, "tpdbSyncedAt"> & {
   hasImage: boolean;
   imageUrl: string | null;
   tpdbSyncedAt: string | null;
-};
-
-type TpdbMatch = {
-  id: string;
-  name: string;
-  disambiguation?: string | null;
-  imageUrl: string | null;
-  imageCount: number;
 };
 
 function cacheBust(url: string | null) {
@@ -40,44 +37,19 @@ function PornstarImageEditor({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [tpdbOpen, setTpdbOpen] = useState(false);
-  const [tpdbQ, setTpdbQ] = useState(star.name);
-  const [tpdbMatches, setTpdbMatches] = useState<TpdbMatch[]>([]);
-  const [tpdbSearching, setTpdbSearching] = useState(false);
 
   useEffect(() => {
     setImageUrl(star.imageUrl);
   }, [star.imageUrl]);
 
-  async function uploadFile(file: File) {
-    setBusy(true);
-    setError(null);
-    try {
-      const form = new FormData();
-      form.append("file", file);
-      const res = await fetch(`/api/admin/pornstars/${star.id}/image`, {
-        method: "POST",
-        body: form,
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Upload failed");
-      const url = cacheBust(`/media/pornstar/${star.id}`);
-      setImageUrl(url);
-      onUpdated(star.id, { hasImage: true, imageUrl: url });
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Upload failed");
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  async function fetchFromTpdb(tpdbId?: string) {
+  async function applyTpdbPick(match: TpdbPickerMatch, image: TpdbPickerImage) {
     setBusy(true);
     setError(null);
     try {
       const res = await fetch(`/api/admin/pornstars/${star.id}/fetch-image`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(tpdbId ? { tpdbId } : {}),
+        body: JSON.stringify({ tpdbId: match.id, imageUrl: image.url, imageId: image.id }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Fetch failed");
@@ -103,22 +75,57 @@ function PornstarImageEditor({
     }
   }
 
-  async function searchTpdb() {
-    if (tpdbQ.trim().length < 2) return;
-    setTpdbSearching(true);
+  async function uploadFile(file: File) {
+    setBusy(true);
     setError(null);
     try {
-      const res = await fetch(
-        `/api/admin/pornstars/search-external?q=${encodeURIComponent(tpdbQ.trim())}`
-      );
+      const form = new FormData();
+      form.append("file", file);
+      const res = await fetch(`/api/admin/pornstars/${star.id}/image`, {
+        method: "POST",
+        body: form,
+      });
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Search failed");
-      setTpdbMatches(data.performers ?? []);
+      if (!res.ok) throw new Error(data.error || "Upload failed");
+      const url = cacheBust(`/media/pornstar/${star.id}`);
+      setImageUrl(url);
+      onUpdated(star.id, { hasImage: true, imageUrl: url });
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Search failed");
-      setTpdbMatches([]);
+      setError(e instanceof Error ? e.message : "Upload failed");
     } finally {
-      setTpdbSearching(false);
+      setBusy(false);
+    }
+  }
+
+  async function fetchFromTpdbAuto() {
+    setBusy(true);
+    setError(null);
+    try {
+      const res = await fetch(`/api/admin/pornstars/${star.id}/fetch-image`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({}),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Fetch failed");
+      const url = data.imageSaved ? cacheBust(`/media/pornstar/${star.id}`) : imageUrl;
+      if (data.imageSaved) setImageUrl(url);
+      onUpdated(star.id, {
+        hasImage: Boolean(data.imageSaved) || star.hasImage,
+        imageUrl: data.imageSaved ? url : star.imageUrl,
+        tpdbId: data.tpdbId ?? star.tpdbId,
+        tpdbSyncedAt: data.syncedAt ?? new Date().toISOString(),
+      });
+      if (data.metadataSynced) {
+        const refresh = await fetch(`/api/admin/pornstars?limit=100&q=${encodeURIComponent(star.name)}`);
+        const refreshed = await refresh.json();
+        const row = refreshed.pornstars?.find((p: PornstarRow) => p.id === star.id);
+        if (row) onUpdated(star.id, row);
+      }
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Fetch failed");
+    } finally {
+      setBusy(false);
     }
   }
 
@@ -159,7 +166,12 @@ function PornstarImageEditor({
         </div>
 
         <div className="min-w-0 flex-1">
-          <p className="truncate font-medium text-white">{star.name}</p>
+          <Link
+            href={`/admin/pornstars/${star.slug}`}
+            className="truncate font-medium text-white hover:text-brand-300"
+          >
+            {star.name}
+          </Link>
           <p className="text-xs text-zinc-500">
             {star.videoCount} video{star.videoCount === 1 ? "" : "s"} · /pornstars/{star.slug}
           </p>
@@ -185,7 +197,7 @@ function PornstarImageEditor({
                 <button
                   type="button"
                   disabled={busy}
-                  onClick={() => fetchFromTpdb()}
+                  onClick={() => fetchFromTpdbAuto()}
                   className="rounded-lg bg-brand-600/90 px-3 py-1.5 text-xs text-white hover:bg-brand-500 disabled:opacity-50"
                 >
                   Auto-fetch (TPDB)
@@ -193,10 +205,7 @@ function PornstarImageEditor({
                 <button
                   type="button"
                   disabled={busy}
-                  onClick={() => {
-                    setTpdbOpen((v) => !v);
-                    if (!tpdbOpen) searchTpdb();
-                  }}
+                  onClick={() => setTpdbOpen((v) => !v)}
                   className="rounded-lg border border-zinc-700 px-3 py-1.5 text-xs text-zinc-300 hover:bg-zinc-800 disabled:opacity-50"
                 >
                   Pick from TPDB
@@ -243,60 +252,12 @@ function PornstarImageEditor({
       </div>
 
       {tpdbOpen && tpdbConfigured && (
-        <div className="mt-4 space-y-3 border-t border-zinc-800 pt-4">
-          <div className="flex gap-2">
-            <input
-              value={tpdbQ}
-              onChange={(e) => setTpdbQ(e.target.value)}
-              placeholder="Search ThePornDB…"
-              className="flex-1 rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-1.5 text-sm text-white"
-            />
-            <button
-              type="button"
-              onClick={searchTpdb}
-              disabled={tpdbSearching}
-              className="rounded-lg bg-zinc-800 px-3 py-1.5 text-xs text-zinc-200 hover:bg-zinc-700 disabled:opacity-50"
-            >
-              {tpdbSearching ? "…" : "Search"}
-            </button>
-          </div>
-
-          {tpdbMatches.length === 0 && !tpdbSearching && (
-            <p className="text-xs text-zinc-500">No performers found.</p>
-          )}
-
-          <ul className="max-h-48 space-y-2 overflow-y-auto">
-            {tpdbMatches.map((m) => (
-              <li key={m.id}>
-                <button
-                  type="button"
-                  disabled={busy}
-                  onClick={() => fetchFromTpdb(m.id)}
-                  className="flex w-full items-center gap-3 rounded-lg border border-zinc-800 bg-zinc-950/60 px-3 py-2 text-left hover:border-brand-500/40 disabled:opacity-50"
-                >
-                  {m.imageUrl ? (
-                    // eslint-disable-next-line @next/next/no-img-element
-                    <img
-                      src={m.imageUrl}
-                      alt=""
-                      className="h-10 w-10 rounded-full object-cover"
-                    />
-                  ) : (
-                    <span className="flex h-10 w-10 items-center justify-center rounded-full bg-zinc-800 text-xs text-zinc-400">
-                      ?
-                    </span>
-                  )}
-                  <span className="min-w-0 flex-1">
-                    <span className="block truncate text-sm text-white">{m.name}</span>
-                    {m.disambiguation && (
-                      <span className="block truncate text-xs text-zinc-500">{m.disambiguation}</span>
-                    )}
-                  </span>
-                  <span className="text-xs text-zinc-600">{m.imageCount} img</span>
-                </button>
-              </li>
-            ))}
-          </ul>
+        <div className="mt-4 border-t border-zinc-800 pt-4">
+          <TpdbImagePicker
+            initialQuery={star.name}
+            disabled={busy}
+            onSelect={applyTpdbPick}
+          />
         </div>
       )}
     </div>

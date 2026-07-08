@@ -35,6 +35,8 @@ export async function POST(
 
   const body = await request.json().catch(() => ({}));
   const tpdbId = typeof body.tpdbId === "string" ? body.tpdbId.trim() : "";
+  const imageUrl = typeof body.imageUrl === "string" ? body.imageUrl.trim() : "";
+  const imageId = typeof body.imageId === "string" ? body.imageId.trim() : "";
 
   try {
     let performer = tpdbId ? await findTpdbPerformer(tpdbId) : null;
@@ -59,7 +61,21 @@ export async function POST(
       data: tpdbPerformerToPornstarData(performer),
     });
 
-    const image = pickBestTpdbImage(performer.images);
+    let image = null;
+    if (imageUrl || imageId) {
+      image =
+        performer.images.find(
+          (img) => (imageUrl && img.url === imageUrl) || (imageId && img.id === imageId)
+        ) ?? null;
+      if (!image) {
+        return NextResponse.json(
+          { error: "Selected image not found on this performer" },
+          { status: 400 }
+        );
+      }
+    } else {
+      image = pickBestTpdbImage(performer.images);
+    }
     let imageSaved = false;
     if (image?.url) {
       const { buffer, contentType } = await downloadTpdbImage(image.url);

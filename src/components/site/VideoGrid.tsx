@@ -28,19 +28,21 @@ function Card({
   onEnter,
   onLeave,
   register,
+  href,
 }: {
   v: VideoCardData;
   playing: boolean;
   onEnter: () => void;
   onLeave: () => void;
   register: (el: HTMLElement | null) => void;
+  href: string;
 }) {
   const hasPreview = Boolean(v.preview.previewMp4 || v.preview.previewSprite);
 
   return (
     <Link
       ref={register as never}
-      href={`/videos/${v.slug}`}
+      href={href}
       onMouseEnter={onEnter}
       onMouseLeave={onLeave}
       className="group block overflow-hidden rounded-xl bg-zinc-900 border border-zinc-800 hover:border-zinc-600 transition-colors"
@@ -82,7 +84,14 @@ function Card({
  * Mobile (no hover): an IntersectionObserver plays the single most in-view
  * card's preview at a time.
  */
-export default function VideoGrid({ videos }: { videos: VideoCardData[] }) {
+export default function VideoGrid({
+  videos,
+  getHref,
+}: {
+  videos: VideoCardData[];
+  /** Override link target (default: public video page). */
+  getHref?: (v: VideoCardData) => string;
+}) {
   const [playingId, setPlayingId] = useState<string | null>(null);
   const [isTouch, setIsTouch] = useState(false);
   const els = useRef<Map<string, HTMLElement>>(new Map());
@@ -123,6 +132,7 @@ export default function VideoGrid({ videos }: { videos: VideoCardData[] }) {
         <Card
           key={v.id}
           v={v}
+          href={getHref ? getHref(v) : `/videos/${v.slug}`}
           playing={playingId === v.id}
           onEnter={() => !isTouch && setPlayingId(v.id)}
           onLeave={() => !isTouch && setPlayingId((p) => (p === v.id ? null : p))}

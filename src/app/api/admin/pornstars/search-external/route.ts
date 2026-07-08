@@ -30,6 +30,12 @@ export async function GET(request: Request) {
         disambiguation: p.disambiguation,
         imageUrl: p.images[0]?.url ?? null,
         imageCount: p.images.length,
+        images: p.images.map((img) => ({
+          id: img.id,
+          url: img.url,
+          width: img.width ?? null,
+          height: img.height ?? null,
+        })),
       })),
     });
   } catch (err) {

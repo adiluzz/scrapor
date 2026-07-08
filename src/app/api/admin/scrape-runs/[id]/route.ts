@@ -4,6 +4,7 @@ import { prisma } from "@/lib/db";
 import { guardAdmin } from "@/lib/admin-guard";
 import { redis, SCRAPE_QUEUE_KEY } from "@/lib/redis";
 import { logger } from "@/lib/logger";
+import { failedScrapeCandidates } from "@/lib/scrape-retry";
 
 export async function GET(_request: Request, { params }: { params: Promise<{ id: string }> }) {
   const g = await guardAdmin(_request);
@@ -15,13 +16,14 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
     include: {
       siteResults: { orderBy: { sourceSite: "asc" } },
       videos: { orderBy: { createdAt: "desc" }, take: 100 },
+      outcomes: { orderBy: { createdAt: "asc" } },
     },
   });
   if (!run) return NextResponse.json({ error: "Not found" }, { status: 404 });
   return NextResponse.json({ run });
 }
 
-const actionSchema = z.object({ action: z.enum(["stop", "continue"]) });
+const actionSchema = z.object({ action: z.enum(["stop", "continue", "retry-failed"]) });
 
 export async function POST(request: Request, { params }: { params: Promise<{ id: string }> }) {
   const g = await guardAdmin(request);
@@ -51,6 +53,65 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     }
     logger.info({ runId: id }, "scrape run stopped by admin");
     return NextResponse.json({ ok: true, status: "STOPPED" });
+  }
+
+  if (parsed.data.action === "retry-failed") {
+    if (run.status === "RUNNING" || run.status === "QUEUED") {
+      return NextResponse.json({ error: "Stop the run before retrying failed videos" }, { status: 409 });
+    }
+    if (!run.selectedCandidates) {
+      return NextResponse.json(
+        { error: "Retry failed is only available for interactive runs with selected candidates" },
+        { status: 400 }
+      );
+    }
+
+    const failed = await failedScrapeCandidates(id, run.selectedCandidates);
+    if (failed.length === 0) {
+      return NextResponse.json({ error: "No failed videos to retry" }, { status: 400 });
+    }
+
+    const sources = [...new Set(failed.map((c) => c.sourceSite))];
+
+    await prisma.$transaction([
+      prisma.scrapeRunOutcome.deleteMany({ where: { runId: id } }),
+      prisma.scrapeRun.update({
+        where: { id },
+        data: {
+          status: "QUEUED",
+          finishedAt: null,
+          selectedCandidates: JSON.stringify(failed),
+          maxPerSite: failed.length,
+          newVideos: 0,
+          skipped: 0,
+          failed: 0,
+          totalFound: failed.length,
+        },
+      }),
+      ...sources.map((sourceSite) =>
+        prisma.scrapeRunSite.updateMany({
+          where: { runId: id, sourceSite },
+          data: {
+            status: "QUEUED",
+            found: 0,
+            newVideos: 0,
+            skipped: 0,
+            failed: 0,
+            error: null,
+          },
+        })
+      ),
+    ]);
+
+    try {
+      await redis.rpush(SCRAPE_QUEUE_KEY, id);
+    } catch (err) {
+      logger.error({ err: String(err), runId: id }, "failed to enqueue retry-failed scrape run");
+      return NextResponse.json({ error: "Failed to enqueue (Redis unavailable)" }, { status: 503 });
+    }
+
+    logger.info({ runId: id, retryCount: failed.length }, "scrape run retry-failed queued");
+    return NextResponse.json({ ok: true, status: "QUEUED", retryCount: failed.length });
   }
 
   // action === "continue"

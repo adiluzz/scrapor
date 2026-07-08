@@ -248,6 +248,11 @@ enum RunStatus {
   STOPPED // stopped by an admin; not auto-resumed on worker restart
 }
 
+enum ScrapeRunVideoOutcome {
+  SKIPPED
+  FAILED
+}
+
 model ScrapeRun {
   id             String          @id @default(cuid())
   siteId         String
@@ -268,8 +273,26 @@ model ScrapeRun {
   createdAt      DateTime        @default(now())
   videos         Video[]
   siteResults    ScrapeRunSite[]
+  outcomes       ScrapeRunOutcome[]
 
   @@index([siteId, createdAt])
+}
+
+model ScrapeRunOutcome {
+  id         String                  @id @default(cuid())
+  runId      String
+  run        ScrapeRun               @relation(fields: [runId], references: [id], onDelete: Cascade)
+  url        String
+  title      String?
+  sourceSite String?
+  outcome    ScrapeRunVideoOutcome
+  reason     String
+  stage      String?
+  createdAt  DateTime                @default(now())
+
+  @@unique([runId, url])
+  @@index([runId])
+  @@index([runId, outcome])
 }
 
 model ScrapeRunSite {

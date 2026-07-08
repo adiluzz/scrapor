@@ -36,7 +36,7 @@ import db  # noqa: E402
 import storage  # noqa: E402
 import media  # noqa: E402
 from site_searchers import SEARCHERS  # noqa: E402
-from scrape_search import resolve_urls, search_candidates  # noqa: E402
+from scrape_search import apply_download_urls, refresh_download_urls, resolve_urls, search_candidates  # noqa: E402
 
 logging.basicConfig(
     level=logging.INFO,
@@ -99,6 +99,9 @@ SCRAPE_PROXY = os.environ.get("SCRAPE_HTTP_PROXY") or os.environ.get("HTTPS_PROX
 DOWNLOAD_TIMEOUT = int(os.environ.get("SCRAPE_DOWNLOAD_TIMEOUT_SEC", "900"))
 # ffmpeg concat / yt-dlp timeout (full multi-part merge or site extract).
 DOWNLOAD_LONG_TIMEOUT = int(os.environ.get("SCRAPE_DOWNLOAD_LONG_TIMEOUT_SEC", "3600"))
+# Fast-path download attempts with a fresh page URL each time; final attempt uses yt-dlp.
+DOWNLOAD_ATTEMPTS = max(1, int(os.environ.get("SCRAPE_DOWNLOAD_ATTEMPTS", "3")))
+DOWNLOAD_RETRY_DELAY_SEC = float(os.environ.get("SCRAPE_DOWNLOAD_RETRY_DELAY_SEC", "5"))
 # yt-dlp: best available video+audio; m3u8 fast path tries highest HLS rung first.
 YTDLP_FORMAT = "bestvideo+bestaudio/best"
 M3U8_QUALITIES = ("1080p", "720p", "480p", "240p")
@@ -175,8 +178,82 @@ def _download_eporner_once(page_url: str, dload_url: str, dest: str, dl_env: dic
         return False, str(e)
 
 
+def _clean_download_artifacts(dest_dir: str) -> None:
+    """Remove partial downloads before a retry."""
+    dest = os.path.join(dest_dir, "video.mp4")
+    if os.path.exists(dest):
+        try:
+            os.remove(dest)
+        except OSError:
+            pass
+    try:
+        names = os.listdir(dest_dir)
+    except OSError:
+        return
+    for name in names:
+        if name.startswith("part_") or name.startswith("dl.") or name == "concat.txt":
+            try:
+                os.remove(os.path.join(dest_dir, name))
+            except OSError:
+                pass
+
+
+def _refresh_video_download_urls(video: dict, source_site: str, attempt: int) -> None:
+    url = video.get("url") or ""
+    refreshed = refresh_download_urls(url, source_site)
+    if refreshed:
+        apply_download_urls(video, refreshed)
+    _event(
+        "info",
+        "download_urls_refreshed",
+        attempt=attempt,
+        hasCdn=bool(video.get("_cdn_url")),
+        hasM3u8=bool(video.get("_m3u8_base_url")),
+        hasParts=bool(video.get("_part_urls")),
+        url=url[:200],
+    )
+
+
+def _download_with_retries(video, dest_dir, source_site, run) -> tuple[bool, str, dict]:
+    """Download with fresh source URLs on each attempt; yt-dlp after fast-path retries."""
+    last_reason = "unknown"
+    last_extra: dict = {}
+
+    for attempt in range(1, DOWNLOAD_ATTEMPTS + 1):
+        if attempt > 1:
+            _clean_download_artifacts(dest_dir)
+            time.sleep(DOWNLOAD_RETRY_DELAY_SEC * (attempt - 1))
+
+        _refresh_video_download_urls(video, source_site, attempt)
+        ok, reason, extra = _download(video, dest_dir, force_ytdlp=False)
+        if ok:
+            if attempt > 1:
+                extra = {**extra, "attempt": attempt}
+            return True, reason, extra
+
+        last_reason = reason
+        last_extra = {**extra, "attempt": attempt}
+        _event(
+            "warning",
+            "download_attempt_failed",
+            attempt=attempt,
+            maxAttempts=DOWNLOAD_ATTEMPTS,
+            reason=str(reason)[:300],
+            method=extra.get("method"),
+            **_video_ctx(video, run, source_site),
+        )
+
+    _clean_download_artifacts(dest_dir)
+    _refresh_video_download_urls(video, source_site, DOWNLOAD_ATTEMPTS + 1)
+    ok, reason, extra = _download(video, dest_dir, force_ytdlp=True)
+    if ok:
+        return True, reason, {**extra, "attempt": DOWNLOAD_ATTEMPTS + 1, "fallback": "yt-dlp"}
+
+    return False, reason, {**extra, "attempts": DOWNLOAD_ATTEMPTS + 1, "fallback": "yt-dlp"}
+
+
 # ── Downloaders ───────────────────────────────────────────────────────
-def _download(video, dest_dir) -> tuple[bool, str, dict]:
+def _download(video, dest_dir, force_ytdlp: bool = False) -> tuple[bool, str, dict]:
     """
     Download source video to dest_dir/video.mp4.
     Returns (ok, reason, extra) where extra may hold method/stderr for logging.
@@ -190,9 +267,9 @@ def _download(video, dest_dir) -> tuple[bool, str, dict]:
     if free_mb and free_mb < 2048:
         return False, f"insufficient disk space ({free_mb}MB free)", {"method": "disk-check"}
 
-    m3u8 = video.get("_m3u8_base_url")
-    cdn = video.get("_cdn_url")
-    parts = video.get("_part_urls")
+    m3u8 = None if force_ytdlp else video.get("_m3u8_base_url")
+    cdn = None if force_ytdlp else video.get("_cdn_url")
+    parts = None if force_ytdlp else video.get("_part_urls")
     url = video.get("url") or ""
     last_result = None
     dl_env = os.environ.copy()
@@ -320,7 +397,7 @@ def _process_one_inner(conn, run, source_site, video) -> str:
     site_id = run["siteId"]
     tmp_dir = tempfile.mkdtemp(prefix="scrape_")
     try:
-        ok, reason, dl_extra = _download(video, tmp_dir)
+        ok, reason, dl_extra = _download_with_retries(video, tmp_dir, source_site, run)
         if not ok:
             _log_video_fail("download", video, run, source_site, reason, **dl_extra)
             return "fail"

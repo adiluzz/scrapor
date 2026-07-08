@@ -122,6 +122,47 @@ def _yt_dlp_metadata(url: str) -> dict:
     }
 
 
+_DETAIL_REFRESH_PARSERS: dict[str, tuple] = {
+    "Eporner": _eporner_parse_detail,
+    "ParadiseHill": _ph_parse_detail,
+    "PornOne": _po_parse_detail,
+}
+
+_DOWNLOAD_URL_KEYS = ("_cdn_url", "_m3u8_base_url", "_part_urls")
+
+
+def refresh_download_urls(url: str, source_site: str | None = None) -> dict:
+    """Fetch fresh direct-download URLs from the source page (called before each download)."""
+    raw = (url or "").strip()
+    if not raw:
+        return {}
+    source = source_site or detect_source_site(raw)
+    if not source:
+        return {}
+    parse_fn = _DETAIL_REFRESH_PARSERS.get(source)
+    if not parse_fn:
+        return {}
+    html = _html_get(raw)
+    if not html:
+        return {}
+    meta = parse_fn(html, raw)
+    return {key: meta.get(key) for key in _DOWNLOAD_URL_KEYS}
+
+
+def apply_download_urls(target: dict, refreshed: dict) -> None:
+    """Merge refreshed download URLs into a worker/search video dict."""
+    if not refreshed:
+        return
+    for key in _DOWNLOAD_URL_KEYS:
+        if key not in refreshed:
+            continue
+        val = refreshed[key]
+        if val:
+            target[key] = val
+        else:
+            target.pop(key, None)
+
+
 def resolve_video_url(url: str, conn) -> dict:
     """Resolve one supported source-site video URL into a scrape candidate."""
     raw = url.strip()

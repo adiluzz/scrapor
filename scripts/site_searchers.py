@@ -1366,6 +1366,305 @@ def search_pornone(query, count, cursor=0, min_duration=600):
     return out, next_page, exhausted
 
 
+# ── ABXXX ─────────────────────────────────────────────────────────────
+_AX_BASE = "https://abxxx.com"
+_AX_VIDEO_RE = re.compile(r"/video/(\d+)/([^/?#]+)", re.I)
+_AX_BASE164_CHARS = (
+    "АВСDЕFGHIJKLМNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789.,~"
+)
+_AX_API_LIFETIME = 86400
+_AX_SEARCH_BATCH = 60
+
+
+def _ax_abs(path):
+    from urllib.parse import urljoin
+    if not path:
+        return ""
+    if str(path).startswith("http"):
+        return str(path)
+    return urljoin(_AX_BASE, str(path))
+
+
+def _ax_video_page_url(video_id, slug):
+    slug = (slug or "video").strip("/") or "video"
+    return f"{_AX_BASE}/video/{video_id}/{slug}/"
+
+
+def _ax_video_api_prefix(video_id):
+    vid = int(video_id)
+    return f"{vid // 1_000_000}/{vid // 1_000}"
+
+
+def _ax_base164_decode(value):
+    """Decode ABXXX's obfuscated CDN paths (custom base64 alphabet)."""
+    from urllib.parse import unquote
+
+    s = re.sub(r"[^АВСЕМA-Za-z0-9\.,~]", "", str(value or ""))
+    out = []
+    n = 0
+    while n < len(s):
+        o = _AX_BASE164_CHARS.index(s[n])
+        n += 1
+        r = _AX_BASE164_CHARS.index(s[n])
+        n += 1
+        a = _AX_BASE164_CHARS.index(s[n])
+        n += 1
+        c = _AX_BASE164_CHARS.index(s[n])
+        n += 1
+        o = (o << 2) | (r >> 4)
+        r = ((r & 15) << 4) | (a >> 2)
+        i = ((a & 3) << 6) | c
+        out.append(chr(o))
+        if a != 64:
+            out.append(chr(r))
+        if c != 64:
+            out.append(chr(i))
+    return unquote("".join(out))
+
+
+def _ax_api_json(path):
+    """Fetch a JSON API endpoint; returns a dict/list or None."""
+    url = path if str(path).startswith("http") else _ax_abs(path)
+    text = _html_get(url)
+    if not text:
+        return None
+    try:
+        return json.loads(text)
+    except Exception:
+        return None
+
+
+def _ax_unescape(text):
+    if not text:
+        return ""
+    import html as _html
+    return _html.unescape(str(text).strip())
+
+
+def _ax_csv_names(value):
+    out = []
+    for part in re.split(r"[,;|]", str(value or "")):
+        name = _ax_unescape(part.strip())
+        if name and name not in out:
+            out.append(name)
+    return out
+
+
+def _ax_models_from_data(value):
+    out = []
+    for chunk in str(value or "").split(","):
+        chunk = chunk.strip()
+        if not chunk:
+            continue
+        parts = chunk.split("|")
+        if len(parts) >= 3:
+            name = _ax_unescape(parts[2].strip())
+            if name and name not in out:
+                out.append(name)
+    return out
+
+
+def _ax_titled_dict(value):
+    out = []
+    if isinstance(value, dict):
+        for item in value.values():
+            if not isinstance(item, dict):
+                continue
+            name = _ax_unescape(item.get("title") or "")
+            if name and name not in out:
+                out.append(name)
+    return out
+
+
+def _ax_models_suggested(value):
+    out = []
+    if isinstance(value, dict):
+        for name in value.values():
+            name = _ax_unescape(str(name or "").strip())
+            if name and name not in out:
+                out.append(name)
+    elif isinstance(value, list):
+        for name in value:
+            name = _ax_unescape(str(name or "").strip())
+            if name and name not in out:
+                out.append(name)
+    return out
+
+
+def _ax_search_url(query, page):
+    from urllib.parse import quote_plus
+    q = quote_plus(query or "")
+    return (
+        f"{_AX_BASE}/api/videos2.php?params="
+        f"{_AX_API_LIFETIME}/str/relevance/{_AX_SEARCH_BATCH}/search..{page}.all..&s={q}"
+    )
+
+
+def _ax_best_mp4(video_id):
+    data = _ax_api_json(
+        f"/api/videofile.php?video_id={video_id}&lifetime={_AX_API_LIFETIME}"
+    )
+    if not isinstance(data, list):
+        return None
+    best = None
+    for item in data:
+        if not isinstance(item, dict):
+            continue
+        if item.get("format") != ".mp4":
+            continue
+        encoded = item.get("video_url") or ""
+        if not encoded:
+            continue
+        decoded = _ax_base164_decode(encoded)
+        if decoded:
+            best = _ax_abs(decoded)
+    return best
+
+
+def _ax_parse_detail_by_id(video_id, stub=None):
+    """Load full metadata for one ABXXX video via the JSON detail API."""
+    stub = stub or {}
+    prefix = _ax_video_api_prefix(video_id)
+    payload = _ax_api_json(
+        f"/api/json/video/{_AX_API_LIFETIME}/{prefix}/{video_id}.json"
+    )
+    video = {}
+    if isinstance(payload, dict):
+        video = payload.get("video") or {}
+
+    slug = video.get("dir") or stub.get("dir") or "video"
+    url = _ax_video_page_url(video_id, slug)
+
+    categories = _ax_titled_dict(video.get("categories"))
+    if not categories:
+        categories = _ax_csv_names(stub.get("categories"))
+
+    tags = _ax_titled_dict(video.get("tags"))
+    if not tags:
+        tags = _ax_csv_names(stub.get("tags"))
+
+    pornstars = _ax_models_suggested(video.get("models_suggested"))
+    if not pornstars:
+        pornstars = _ax_csv_names(stub.get("models"))
+    if not pornstars:
+        pornstars = _ax_models_from_data(stub.get("models_data"))
+
+    description = _ax_unescape(video.get("description") or stub.get("description") or "")
+
+    merged_tags = []
+    for name in categories + tags:
+        if name and name not in merged_tags:
+            merged_tags.append(name)
+
+    duration = video.get("duration") or stub.get("duration") or ""
+    dur_s = _dur(duration)
+
+    thumb = (
+        video.get("thumb")
+        or video.get("thumbsrc")
+        or stub.get("scr")
+        or stub.get("thumbnail")
+        or ""
+    )
+
+    return {
+        "url": url,
+        "title": _ax_unescape(video.get("title") or stub.get("title") or "Unknown"),
+        "duration_sec": dur_s or None,
+        "tags": merged_tags,
+        "categories": categories,
+        "pornstars": pornstars,
+        "thumbnail": str(thumb or ""),
+        "description": description,
+        "_cdn_url": _ax_best_mp4(video_id),
+    }
+
+
+def _ax_parse_detail(html, url):
+    """Resolve one ABXXX page URL into metadata + CDN fast path."""
+    m = _AX_VIDEO_RE.search(str(url or ""))
+    if not m:
+        return {}
+    return _ax_parse_detail_by_id(m.group(1))
+
+
+def _ax_search_items(query, page):
+    """Return (videos, total_pages) from ABXXX search API."""
+    payload = _ax_api_json(_ax_search_url(query, page))
+    if not isinstance(payload, dict):
+        return [], 0
+    videos = payload.get("videos") or []
+    pages = int(payload.get("pages") or 0)
+    return videos, pages
+
+
+def search_abxxx(query, count, cursor=0, min_duration=600):
+    """Search ABXXX via JSON API; enrich each hit with detail metadata."""
+    page = _page_cursor(cursor)
+    stubs, seen = [], set()
+    total_pages = None
+    try:
+        while len(stubs) < count:
+            batch, pages = _ax_search_items(query, page)
+            if total_pages is None:
+                total_pages = pages
+            if not batch:
+                break
+            new_urls = 0
+            for item in batch:
+                vid = str(item.get("video_id") or "").strip()
+                if not vid:
+                    continue
+                slug = item.get("dir") or "video"
+                clean = _ax_video_page_url(vid, slug)
+                if clean in seen:
+                    continue
+                seen.add(clean)
+                new_urls += 1
+                dur_s = _dur(item.get("duration"))
+                if dur_s and dur_s < min_duration:
+                    continue
+                stubs.append((vid, item, dur_s, item.get("scr") or ""))
+                if len(stubs) >= count:
+                    break
+            if new_urls == 0:
+                break
+            if total_pages and page >= total_pages:
+                break
+            page += 1
+    except Exception as e:  # noqa: BLE001
+        print(f"[site_searchers] ABXXX search failed: {e!r}", file=sys.stderr, flush=True)
+        return [], page, True
+
+    out = []
+    for vid, stub, dur_s, thumb in stubs[:count]:
+        try:
+            meta = _ax_parse_detail_by_id(vid, stub)
+            out.append(_norm(
+                meta.get("url") or _ax_video_page_url(vid, stub.get("dir") or "video"),
+                meta.get("title") or stub.get("title") or "Unknown",
+                meta.get("duration_sec") or dur_s,
+                thumbnail=meta.get("thumbnail") or thumb,
+                tags=meta.get("tags"),
+                pornstars=meta.get("pornstars"),
+                description=meta.get("description") or "",
+                cdn=meta.get("_cdn_url"),
+            ))
+        except Exception:
+            out.append(_norm(
+                _ax_video_page_url(vid, stub.get("dir") or "video"),
+                stub.get("title") or "Unknown",
+                dur_s,
+                thumbnail=thumb,
+            ))
+
+    exhausted = (
+        len(stubs) < count
+        or (total_pages is not None and page >= total_pages)
+    )
+    return out, page, exhausted
+
+
 # ── YouPorn ───────────────────────────────────────────────────────────
 def search_youporn(query, count, cursor=0, min_duration=600):
     offset = _offset_cursor(cursor)
@@ -1481,4 +1780,5 @@ SEARCHERS = {
     "SpankBang": _html_spankbang,
     "ParadiseHill": search_paradisehill,
     "PornOne": search_pornone,
+    "ABXXX": search_abxxx,
 }

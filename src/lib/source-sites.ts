@@ -15,6 +15,7 @@ export const SOURCE_SITES = [
   "SpankBang",
   "ParadiseHill",
   "PornOne",
+  "ABXXX",
 ] as const;
 
 export type SourceSite = (typeof SOURCE_SITES)[number];

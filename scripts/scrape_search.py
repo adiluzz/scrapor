@@ -26,6 +26,7 @@ sys.path.insert(0, os.path.join(ROOT, "worker"))
 import db  # noqa: E402
 from site_searchers import (  # noqa: E402
     SEARCHERS,
+    _ax_parse_detail,
     _eporner_parse_detail,
     _html_get,
     _ph_parse_detail,
@@ -47,6 +48,7 @@ SITE_BY_HOST = (
     ("spankbang", "SpankBang"),
     ("paradisehill", "ParadiseHill"),
     ("pornone", "PornOne"),
+    ("abxxx", "ABXXX"),
 )
 
 
@@ -123,6 +125,7 @@ def _yt_dlp_metadata(url: str) -> dict:
 
 
 _DETAIL_REFRESH_PARSERS: dict[str, tuple] = {
+    "ABXXX": _ax_parse_detail,
     "Eporner": _eporner_parse_detail,
     "ParadiseHill": _ph_parse_detail,
     "PornOne": _po_parse_detail,
@@ -185,6 +188,8 @@ def resolve_video_url(url: str, conn) -> dict:
         html = _html_get(raw)
         if html:
             meta.update(_po_parse_detail(html, raw))
+    elif source == "ABXXX":
+        meta.update(_ax_parse_detail("", raw))
 
     if not meta.get("title") or meta.get("title") == "Unknown":
         meta.update(_yt_dlp_metadata(raw))

@@ -121,6 +121,10 @@ def canonical_key(url: str) -> str:
         m = re.search(r"/(\d+)/?$", path)
         if m:
             return f"pornone:{m.group(1)}"
+    if "abxxx" in host:
+        m = re.search(r"/video/(\d+)", path)
+        if m:
+            return f"abxxx:{m.group(1)}"
 
     # Generic fallback: normalized url (drop tracking params, sort the rest,
     # strip trailing slash) so cosmetic differences collapse to one key.

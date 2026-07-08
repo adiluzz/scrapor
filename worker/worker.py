@@ -369,14 +369,16 @@ def _process_one(run, source_site, video) -> str:
     """
     Download + save one video. Returns 'new' | 'skip' | 'fail'.
 
-    Opens its own DB connection so it is safe to run concurrently inside a thread
-    pool (psycopg connections must not be shared across threads).
+    Opens short-lived DB connections around DB work only so threads do not hold
+    a Postgres slot for the duration of multi-hour CDN downloads.
     """
+    url = video.get("url") or ""
     conn = db.connect()
     try:
         if db.get_run_status(conn, run["id"]) == "STOPPED":
             return "skip"
-        return _process_one_inner(conn, run, source_site, video)
+        if db.video_exists(conn, url):
+            return "skip"
     except Exception as e:
         _log_video_fail("process", video, run, source_site, e,
                         errorType=type(e).__name__,
@@ -387,12 +389,6 @@ def _process_one(run, source_site, video) -> str:
             conn.close()
         except Exception:
             pass
-
-
-def _process_one_inner(conn, run, source_site, video) -> str:
-    url = video["url"]
-    if db.video_exists(conn, url):
-        return "skip"
 
     site_id = run["siteId"]
     tmp_dir = tempfile.mkdtemp(prefix="scrape_")
@@ -425,44 +421,61 @@ def _process_one_inner(conn, run, source_site, video) -> str:
             _event("warning", "storyboard_skipped", reason="storyboard generation failed",
                    **_video_ctx(video, run, source_site))
 
-        keys = dict(v=None, t=None, p=None, sb=None, vtt=None)
-        vid, slug = db.create_video(
-            conn, site_id=site_id, source_url=url, title=video["title"],
-            description=video.get("description"), duration_sec=duration,
-            source_site=source_site, scrape_run_id=run["id"],
-            s3_video_key=None, s3_thumb_key=None, s3_preview_key=None,
-            s3_storyboard_key=None, s3_storyboard_vtt_key=None,
-            tags=video.get("tags"), pornstars=video.get("pornstars"),
-        )
+        conn = db.connect()
+        try:
+            if db.get_run_status(conn, run["id"]) == "STOPPED":
+                return "skip"
+            if db.video_exists(conn, url):
+                return "skip"
 
-        if storage.configured():
-            keys["v"] = storage.upload(video_path, storage.key_video(site_id, vid), "video/mp4")
-            if not keys["v"]:
-                _log_video_fail("upload", video, run, source_site, "S3 video upload failed", videoId=vid)
-                return "fail"
-            if os.path.exists(thumb):
-                keys["t"] = storage.upload(thumb, storage.key_thumb(site_id, vid), "image/jpeg")
-            if os.path.exists(preview):
-                keys["p"] = storage.upload(preview, storage.key_preview(site_id, vid), "video/mp4")
-            if os.path.exists(sprite):
-                keys["sb"] = storage.upload(sprite, storage.key_storyboard(site_id, vid), "image/jpeg")
-            if os.path.exists(vtt):
-                keys["vtt"] = storage.upload(vtt, storage.key_storyboard_vtt(site_id, vid), "text/vtt")
-            with conn.cursor() as cur:
-                cur.execute(
-                    'UPDATE "Video" SET "s3VideoKey"=%s,"s3ThumbKey"=%s,"s3PreviewKey"=%s,'
-                    '"s3StoryboardKey"=%s,"s3StoryboardVttKey"=%s,"previewVersion"=%s WHERE id=%s',
-                    (keys["v"], keys["t"], keys["p"], keys["sb"], keys["vtt"], media.PREVIEW_VERSION, vid),
-                )
-        else:
-            local = os.path.join(ROOT, "downloads", vid)
-            os.makedirs(local, exist_ok=True)
-            for src, name in [(video_path, "video.mp4"), (preview, "thumbnail.mp4"), (thumb, "thumbnail.jpg")]:
-                if os.path.exists(src):
-                    shutil.copy(src, os.path.join(local, name))
+            keys = dict(v=None, t=None, p=None, sb=None, vtt=None)
+            vid, slug = db.create_video(
+                conn, site_id=site_id, source_url=url, title=video["title"],
+                description=video.get("description"), duration_sec=duration,
+                source_site=source_site, scrape_run_id=run["id"],
+                s3_video_key=None, s3_thumb_key=None, s3_preview_key=None,
+                s3_storyboard_key=None, s3_storyboard_vtt_key=None,
+                tags=video.get("tags"), pornstars=video.get("pornstars"),
+            )
 
-        _event("info", "video_added", slug=slug, videoId=vid, durationSec=duration, **_video_ctx(video, run, source_site))
-        return "new"
+            if storage.configured():
+                keys["v"] = storage.upload(video_path, storage.key_video(site_id, vid), "video/mp4")
+                if not keys["v"]:
+                    _log_video_fail("upload", video, run, source_site, "S3 video upload failed", videoId=vid)
+                    return "fail"
+                if os.path.exists(thumb):
+                    keys["t"] = storage.upload(thumb, storage.key_thumb(site_id, vid), "image/jpeg")
+                if os.path.exists(preview):
+                    keys["p"] = storage.upload(preview, storage.key_preview(site_id, vid), "video/mp4")
+                if os.path.exists(sprite):
+                    keys["sb"] = storage.upload(sprite, storage.key_storyboard(site_id, vid), "image/jpeg")
+                if os.path.exists(vtt):
+                    keys["vtt"] = storage.upload(vtt, storage.key_storyboard_vtt(site_id, vid), "text/vtt")
+                with conn.cursor() as cur:
+                    cur.execute(
+                        'UPDATE "Video" SET "s3VideoKey"=%s,"s3ThumbKey"=%s,"s3PreviewKey"=%s,'
+                        '"s3StoryboardKey"=%s,"s3StoryboardVttKey"=%s,"previewVersion"=%s WHERE id=%s',
+                        (keys["v"], keys["t"], keys["p"], keys["sb"], keys["vtt"], media.PREVIEW_VERSION, vid),
+                    )
+            else:
+                local = os.path.join(ROOT, "downloads", vid)
+                os.makedirs(local, exist_ok=True)
+                for src, name in [(video_path, "video.mp4"), (preview, "thumbnail.mp4"), (thumb, "thumbnail.jpg")]:
+                    if os.path.exists(src):
+                        shutil.copy(src, os.path.join(local, name))
+
+            _event("info", "video_added", slug=slug, videoId=vid, durationSec=duration, **_video_ctx(video, run, source_site))
+            return "new"
+        except Exception as e:
+            _log_video_fail("process", video, run, source_site, e,
+                            errorType=type(e).__name__,
+                            traceback=traceback.format_exc()[-800:])
+            return "fail"
+        finally:
+            try:
+                conn.close()
+            except Exception:
+                pass
     except Exception as e:
         _log_video_fail("process", video, run, source_site, e,
                         errorType=type(e).__name__,

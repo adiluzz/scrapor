@@ -28,7 +28,11 @@ export default async function RunDetailPage({ params }: { params: Promise<{ id: 
   });
   if (!run) notFound();
 
-  const { skipped, failed } = await loadScrapeRunOutcomes(run.id, run.selectedCandidates);
+  const { skipped, failed } = await loadScrapeRunOutcomes(
+    run.id,
+    run.selectedCandidates,
+    run.status
+  );
 
   return (
     <div className="space-y-8">
@@ -110,7 +114,11 @@ export default async function RunDetailPage({ params }: { params: Promise<{ id: 
         </ul>
       </section>
 
-      <ScrapeRunOutcomeLists skipped={skipped} failed={failed} />
+      <ScrapeRunOutcomeLists
+        skipped={skipped}
+        failed={failed}
+        runStatus={run.status}
+      />
     </div>
   );
 }

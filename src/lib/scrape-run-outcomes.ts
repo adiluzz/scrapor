@@ -103,7 +103,8 @@ async function deriveOutcomesFromCandidates(
 /** Load persisted outcomes, or derive from interactive candidates for older runs. */
 export async function loadScrapeRunOutcomes(
   runId: string,
-  selectedCandidatesJson: string | null
+  selectedCandidatesJson: string | null,
+  runStatus?: string
 ): Promise<{ skipped: RunVideoOutcomeRow[]; failed: RunVideoOutcomeRow[] }> {
   const rows = await prisma.scrapeRunOutcome.findMany({
     where: { runId },
@@ -126,6 +127,11 @@ export async function loadScrapeRunOutcomes(
       else failed.push(row);
     }
     return { skipped, failed };
+  }
+
+  // While a run is active, unprocessed candidates are pending — not failed.
+  if (runStatus === "RUNNING" || runStatus === "QUEUED") {
+    return { skipped: [], failed: [] };
   }
 
   if (selectedCandidatesJson) {

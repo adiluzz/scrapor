@@ -54,6 +54,7 @@ function OutcomeList({
 export default function ScrapeRunOutcomeLists({
   skipped,
   failed,
+  runStatus,
 }: {
   skipped: Array<{
     url: string;
@@ -69,19 +70,28 @@ export default function ScrapeRunOutcomeLists({
     reason: string;
     stage: string | null;
   }>;
+  runStatus?: string;
 }) {
+  const inProgress = runStatus === "RUNNING" || runStatus === "QUEUED";
+  const pendingNote = inProgress
+    ? "Videos still processing — skipped/failed entries appear here as each one finishes."
+    : null;
+
   return (
     <>
+      {pendingNote && <p className="text-sm text-zinc-500">{pendingNote}</p>}
       <OutcomeList
         title="Skipped videos"
         items={skipped}
-        emptyLabel="No skipped videos recorded."
+        emptyLabel={
+          inProgress ? "None skipped yet." : "No skipped videos recorded."
+        }
         tone="skip"
       />
       <OutcomeList
         title="Failed videos"
         items={failed}
-        emptyLabel="No failed videos recorded."
+        emptyLabel={inProgress ? "None failed yet." : "No failed videos recorded."}
         tone="fail"
       />
     </>

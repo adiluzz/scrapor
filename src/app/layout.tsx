@@ -12,6 +12,13 @@ export const metadata: Metadata = {
   description:
     "Free HD piss drinking porn, golden shower & watersports videos. Pee drinking, piss swallowing & urine fetish tube updated daily.",
   robots: { index: true, follow: true },
+  icons: {
+    icon: [
+      { url: "/icon", type: "image/png", sizes: "48x48" },
+      { url: "/apple-icon", type: "image/png", sizes: "180x180" },
+    ],
+    apple: { url: "/apple-icon", type: "image/png", sizes: "180x180" },
+  },
 };
 
 export default function RootLayout({

@@ -18,7 +18,7 @@ import {
   videoObjectJsonLd,
   videoPageDescription,
 } from "@/lib/seo";
-import { publicVideoContentUrl } from "@/lib/video-sitemap";
+import { publicVideoContentUrl, publicVideoThumbnailUrl } from "@/lib/video-sitemap";
 import AdZone from "@/components/ads/AdZone";
 import ExoFullscreenOverlay from "@/components/ads/ExoFullscreenOverlay";
 import TagBadge from "@/components/site/TagBadge";
@@ -56,10 +56,11 @@ export async function generateMetadata({
   const site = await getCurrentSite();
   const video = await getVideo(site.id, slug);
   if (!video) return { title: "Not found" };
-  const [poster] = await Promise.all([thumbUrl(video)]);
   const description = videoPageDescription(video.title, site.name, video.description);
   const tagNames = video.tags.map((t) => t.tag.name);
   const title = `${video.title} — Piss Drinking Porn`;
+  const base = await getSiteBaseUrl();
+  const poster = publicVideoThumbnailUrl(base, video.id);
   return {
     title,
     description,
@@ -131,7 +132,7 @@ export default async function VideoPage({
         data={videoObjectJsonLd({
           title: video.title,
           description: video.description,
-          thumbnailUrl: poster,
+          thumbnailUrl: publicVideoThumbnailUrl(base, video.id),
           contentUrl: publicVideoContentUrl(base, video.id),
           uploadDate: (video.sourceUploadDate || video.createdAt).toISOString(),
           durationIso: isoDuration(video.durationSec),

@@ -137,11 +137,18 @@ export function websiteJsonLd(baseUrl: string, siteName: string) {
 }
 
 export function organizationJsonLd(baseUrl: string, siteName: string) {
+  const logoUrl = `${baseUrl}/apple-icon`;
   return {
     "@context": "https://schema.org",
     "@type": "Organization",
     name: siteName,
     url: baseUrl,
+    logo: {
+      "@type": "ImageObject",
+      url: logoUrl,
+      width: 180,
+      height: 180,
+    },
     description: SITE_TAGLINE,
   };
 }

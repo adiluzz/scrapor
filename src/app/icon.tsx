@@ -1,6 +1,6 @@
 import { ImageResponse } from "next/og";
 
-export const size = { width: 32, height: 32 };
+export const size = { width: 48, height: 48 };
 export const contentType = "image/png";
 
 /** Browser tab favicon — golden drop on dark background. */
@@ -18,7 +18,7 @@ export default function Icon() {
           borderRadius: 6,
         }}
       >
-        <svg width="22" height="26" viewBox="0 0 32 40" fill="none">
+        <svg width="30" height="36" viewBox="0 0 32 40" fill="none">
           <defs>
             <linearGradient id="g" x1="16" y1="2" x2="16" y2="38" gradientUnits="userSpaceOnUse">
               <stop offset="0%" stopColor="#F5E6A3" />

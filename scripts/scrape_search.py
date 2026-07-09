@@ -31,6 +31,8 @@ from site_searchers import (  # noqa: E402
     _html_get,
     _ph_parse_detail,
     _po_parse_detail,
+    _xh_parse_detail,
+    _xhamster_get,
 )
 
 PREVIEW_BATCH = int(os.environ.get("SCRAPE_PAGE_BATCH", "50"))
@@ -129,6 +131,7 @@ _DETAIL_REFRESH_PARSERS: dict[str, tuple] = {
     "Eporner": _eporner_parse_detail,
     "ParadiseHill": _ph_parse_detail,
     "PornOne": _po_parse_detail,
+    "XHamster": _xh_parse_detail,
 }
 
 _DOWNLOAD_URL_KEYS = ("_cdn_url", "_m3u8_base_url", "_part_urls")
@@ -145,7 +148,10 @@ def refresh_download_urls(url: str, source_site: str | None = None) -> dict:
     parse_fn = _DETAIL_REFRESH_PARSERS.get(source)
     if not parse_fn:
         return {}
-    html = _html_get(raw)
+    if source == "XHamster":
+        html = _xhamster_get(raw)
+    else:
+        html = _html_get(raw)
     if not html:
         return {}
     meta = parse_fn(html, raw)
@@ -190,6 +196,10 @@ def resolve_video_url(url: str, conn) -> dict:
             meta.update(_po_parse_detail(html, raw))
     elif source == "ABXXX":
         meta.update(_ax_parse_detail("", raw))
+    elif source == "XHamster":
+        html = _xhamster_get(raw)
+        if html:
+            meta.update(_xh_parse_detail(html, raw))
 
     if not meta.get("title") or meta.get("title") == "Unknown":
         meta.update(_yt_dlp_metadata(raw))

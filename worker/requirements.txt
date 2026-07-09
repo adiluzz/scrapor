@@ -11,7 +11,6 @@ yt-dlp>=2026.6.9   # keep current — yt-dlp must track site changes; bump the f
 phub==5.1.2
 xnxx-api==2.1
 xvideos-api==2.2.2
-xhamster-api==2.2
 youporn-api==1.5.2
 hqporner-api==2.1.1
 # HTML scraping for sources without a working API (Eporner, RedTube, SpankBang).

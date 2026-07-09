@@ -25,7 +25,7 @@ Eporner / ParadiseHill; result offset for API libraries), and `exhausted` is Tru
 when the source has no more result pages.
 
 The "EchterAlsFake" site-API libraries (phub, xnxx_api, xvideos_api,
-xhamster_api, youporn_api, hqporner_api) are async-first: their
+youporn_api, hqporner_api) are async-first: their
 `search`/`search_videos` methods return async generators (xnxx returns an
 awaitable Search object). The worker calls these searchers synchronously, so
 each one drives its async work through `asyncio.run(...)` and collects results
@@ -47,6 +47,14 @@ import sys
 _XH_BASE = "https://xhamster.com"
 # Age-verification interstitials are ~50 KB; real search pages are 300 KB+.
 _XH_MIN_SEARCH_BYTES = 100_000
+# Proactive cookies help on some regions; US datacenter IPs still need VPN (see docker-compose.vpn.yml).
+_XH_COOKIES = {"x_age_verified": "1", "cookie_accept": "1"}
+_XH_M3U8_TPL_RES = (
+    re.compile(r"https://video-am[^\"']+_TPL_\.h264\.mp4\.m3u8"),
+    re.compile(r"https://video-h[^\"']+_TPL_\.h264\.mp4\.m3u8"),
+    re.compile(r"https://video-am[^\"']+_TPL_\.av1\.mp4\.m3u8"),
+    re.compile(r"https://video-h[^\"']+_TPL_\.av1\.mp4\.m3u8"),
+)
 
 
 def _norm(url, title, duration_sec, thumbnail="", tags=None, pornstars=None,
@@ -202,7 +210,7 @@ def _html_get(url):
     proxies = {"http": proxy, "https": proxy} if proxy else None
     try:
         from curl_cffi import requests as _cr
-        r = _cr.get(url, impersonate="chrome", timeout=30, proxies=proxies)
+        r = _cr.get(url, impersonate="chrome120", timeout=30, proxies=proxies)
         if r.status_code == 200 and r.text:
             return r.text
     except Exception:
@@ -228,6 +236,22 @@ def _html_get(url):
             return resp.read().decode("utf-8", "ignore")
     except Exception:
         return ""
+
+
+def _xhamster_get(url):
+    """Fetch an xHamster page with age/cookie headers, then fall back to _html_get."""
+    proxy = _scrape_proxy()
+    proxies = {"http": proxy, "https": proxy} if proxy else None
+    try:
+        from curl_cffi import requests as _cr
+        session = _cr.Session(impersonate="chrome120")
+        session.cookies.update(_XH_COOKIES)
+        r = session.get(url, timeout=30, proxies=proxies)
+        if r.status_code == 200 and r.text:
+            return r.text
+    except Exception:
+        pass
+    return _html_get(url)
 
 
 def _extract_initials_json(html):
@@ -487,13 +511,72 @@ def _xhamster_new_urls_on_page(html, seen):
     return n
 
 
-def _html_xhamster(query, count, cursor=0, min_duration=600):
-    """Search xHamster via embedded JSON + HTML links.
+def _xh_extract_m3u8(html):
+    """Best-effort HLS template URL for the worker ffmpeg fast path."""
+    for pat in _XH_M3U8_TPL_RES:
+        m = pat.search(html or "")
+        if m:
+            return m.group(0)
+    return None
 
-    Skips the broken xhamster-api search_videos() (wrong HTML extractor in 2.2).
-    Detects the US age-verification interstitial and logs a clear hint to use VPN.
-    """
+
+def _xh_parse_detail(html, url):
+    """Parse a video page for metadata and download URLs (window.initials JSON)."""
+    m3u8 = _xh_extract_m3u8(html)
+    data = _extract_initials_json(html)
+    if not data:
+        return {"_m3u8_base_url": m3u8} if m3u8 else {}
+    vm = data.get("videoModel") if isinstance(data.get("videoModel"), dict) else {}
+    ve = data.get("videoEntity") if isinstance(data.get("videoEntity"), dict) else {}
+    vtc = data.get("videoTagsComponent") if isinstance(data.get("videoTagsComponent"), dict) else {}
+
+    title = str(vm.get("title") or ve.get("title") or "")
+    dur_raw = vm.get("duration") or ve.get("duration")
+    dur_s = int(dur_raw) if dur_raw else None
+    description = str(vm.get("description") or ve.get("description") or "")
+    thumb = str(
+        vm.get("thumbURL") or ve.get("thumbBig") or vm.get("previewThumbURL") or ""
+    )
+
+    tags: list[str] = []
+    pornstars: list[str] = []
+    for t in vtc.get("tags") or []:
+        if not isinstance(t, dict):
+            continue
+        name = t.get("name")
+        if not name:
+            continue
+        name = str(name)
+        if name not in tags:
+            tags.append(name)
+        if t.get("isPornstar") or t.get("isCreator"):
+            if name not in pornstars:
+                pornstars.append(name)
+    for p in ve.get("pornstarModels") or []:
+        if not isinstance(p, dict):
+            continue
+        name = p.get("name") or p.get("title")
+        if name:
+            name = str(name)
+            if name not in pornstars:
+                pornstars.append(name)
+
+    return {
+        "url": url,
+        "title": title,
+        "duration_sec": dur_s,
+        "tags": tags,
+        "pornstars": pornstars,
+        "thumbnail": thumb,
+        "description": description,
+        "_m3u8_base_url": m3u8 or _xh_extract_m3u8(html),
+    }
+
+
+def _xhamster_list_search(query, count, cursor=0, min_duration=600):
+    """Listing-only xHamster search via embedded JSON + HTML links."""
     from urllib.parse import quote_plus
+
     md = _xhamster_min_duration_param(min_duration)
     q = quote_plus(query)
     out, seen = [], set()
@@ -502,9 +585,9 @@ def _html_xhamster(query, count, cursor=0, min_duration=600):
     try:
         while len(out) < count:
             url = f"{_XH_BASE}/search/{q}?sort=longest&min-duration={md}&page={page}"
-            html = _html_get(url)
+            html = _xhamster_get(url)
             if not html:
-                return out, page, page == _page_cursor(cursor)
+                return out, page, page == _page_cursor(cursor), age_gate
             if _is_xhamster_age_gate(html):
                 age_gate = True
                 if page == _page_cursor(cursor):
@@ -513,19 +596,26 @@ def _html_xhamster(query, count, cursor=0, min_duration=600):
                         "Run the worker through NordVPN — see docker-compose.vpn.yml",
                         file=sys.stderr, flush=True,
                     )
-                return out, page, True
+                return out, page, True, age_gate
             new_urls = _xhamster_new_urls_on_page(html, seen)
             batch = _xhamster_videos_from_html(html, count - len(out), min_duration, seen)
             if batch:
                 out.extend(batch)
             if new_urls == 0:
-                return out, page, True
+                return out, page, True, age_gate
             page += 1
     except Exception as e:  # noqa: BLE001
-        print(f"[site_searchers] XHamster html failed: {e!r}", file=sys.stderr, flush=True)
+        print(f"[site_searchers] XHamster search failed: {e!r}", file=sys.stderr, flush=True)
+    exhausted = len(out) < count or age_gate
+    return out, page, exhausted, age_gate
+
+
+def _html_xhamster(query, count, cursor=0, min_duration=600):
+    """Legacy listing-only entry (tests); prefer search_xhamster for enrichment."""
+    out, page, exhausted, age_gate = _xhamster_list_search(query, count, cursor, min_duration)
     if age_gate and not out:
         return [], page, True
-    return out, page, len(out) < count
+    return out, page, exhausted
 
 
 def _html_youporn(query, count, cursor=0, min_duration=600):
@@ -840,7 +930,36 @@ def search_pornhub(query, count, cursor=0, min_duration=600):
 
 # ── XHamster ──────────────────────────────────────────────────────────
 def search_xhamster(query, count, cursor=0, min_duration=600):
-    return _html_xhamster(query, count, cursor, min_duration)
+    """Search xHamster via HTML + window.initials; enrich each hit from its video page."""
+    stubs, page, exhausted, age_gate = _xhamster_list_search(query, count, cursor, min_duration)
+    if age_gate and not stubs:
+        return [], page, True
+
+    out = []
+    for stub in stubs[:count]:
+        clean = stub.get("url") or ""
+        if not clean:
+            continue
+        try:
+            detail_html = _xhamster_get(clean)
+            if not detail_html:
+                out.append(stub)
+                continue
+            meta = _xh_parse_detail(detail_html, clean)
+            out.append(_norm(
+                clean,
+                meta.get("title") or stub.get("title"),
+                meta.get("duration_sec") or stub.get("duration_sec"),
+                thumbnail=meta.get("thumbnail") or stub.get("thumbnail"),
+                tags=meta.get("tags"),
+                pornstars=meta.get("pornstars"),
+                description=meta.get("description") or "",
+                m3u8=meta.get("_m3u8_base_url"),
+            ))
+        except Exception:
+            out.append(stub)
+
+    return out, page, exhausted
 
 
 # ── XVideos ───────────────────────────────────────────────────────────

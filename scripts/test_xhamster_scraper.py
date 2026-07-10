@@ -25,7 +25,13 @@ window.initials={"videoModel":{"title":"Test Video","duration":720,"description"
   {"name":"Some Channel","url":"https://xhamster.com/creators/some-channel","isCreator":true}
 ]}}
 </script>
-https://video-am.xhcdn.com/token==,123/media=hls4/multi=256x144:144p:,426x240:240p:/path/_TPL_.h264.mp4.m3u8
+https://video-nss.xhcdn.com/token==,123/media=hls4/multi=256x144:144p:,426x240:240p:/path/_TPL_.h264.mp4.m3u8
+</body></html>
+"""
+
+SAMPLE_DETAIL_AV1_ONLY = """
+<html><body>
+https://video-nss.xhcdn.com/token==,123/media=hls4/multi=256x144:144p:,426x240:240p:/path/_TPL_.av1.mp4.m3u8
 </body></html>
 """
 
@@ -43,6 +49,12 @@ class XHamsterParseTests(unittest.TestCase):
     def test_extract_m3u8_prefers_h264_template(self):
         url = ss._xh_extract_m3u8(SAMPLE_DETAIL_HTML)
         self.assertIn("_TPL_.h264.mp4.m3u8", url or "")
+        self.assertIn("video-nss.xhcdn.com", url or "")
+
+    def test_extract_m3u8_accepts_av1_when_no_h264(self):
+        url = ss._xh_extract_m3u8(SAMPLE_DETAIL_AV1_ONLY)
+        self.assertIn("_TPL_.av1.mp4.m3u8", url or "")
+        self.assertIn("video-nss.xhcdn.com", url or "")
 
     def test_parse_detail_reads_initials(self):
         meta = ss._xh_parse_detail(

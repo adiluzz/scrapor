@@ -50,11 +50,12 @@ _XH_BASE = "https://xhamster.com"
 _XH_MIN_SEARCH_BYTES = 100_000
 # Proactive cookies help on some regions; US datacenter IPs still need VPN (see docker-compose.vpn.yml).
 _XH_COOKIES = {"x_age_verified": "1", "cookie_accept": "1"}
+# CDN host varies by region (video-am, video-h, video-nss, …). Prefer h264 over av1.
 _XH_M3U8_TPL_RES = (
-    re.compile(r"https://video-am[^\"']+_TPL_\.h264\.mp4\.m3u8"),
-    re.compile(r"https://video-h[^\"']+_TPL_\.h264\.mp4\.m3u8"),
-    re.compile(r"https://video-am[^\"']+_TPL_\.av1\.mp4\.m3u8"),
-    re.compile(r"https://video-h[^\"']+_TPL_\.av1\.mp4\.m3u8"),
+    re.compile(r"https://video-[a-z0-9.-]+[^\"'\s]+_TPL_\.h264\.mp4\.m3u8", re.I),
+    re.compile(r"https://video-[a-z0-9.-]+[^\"'\s]+_TPL_\.av1\.mp4\.m3u8", re.I),
+    re.compile(r"https://[^\"'\s]+_TPL_\.h264\.mp4\.m3u8", re.I),
+    re.compile(r"https://[^\"'\s]+_TPL_\.av1\.mp4\.m3u8", re.I),
 )
 
 

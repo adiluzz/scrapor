@@ -115,6 +115,24 @@ export async function linkTags(siteId: string, videoId: string, names: string[])
   }
 }
 
+/** Upsert Categories for a site and link them to a video. */
+export async function linkCategories(siteId: string, videoId: string, names: string[]) {
+  for (const raw of names) {
+    const name = raw.trim();
+    if (!name) continue;
+    const slug = slugify(name);
+    if (!slug) continue;
+    const category = await prisma.category.upsert({
+      where: { siteId_slug: { siteId, slug } },
+      update: { name },
+      create: { siteId, slug, name },
+    });
+    await prisma.videoCategory
+      .create({ data: { videoId, categoryId: category.id } })
+      .catch(() => {});
+  }
+}
+
 /**
  * Create or update a Video from scraped/uploaded metadata, keyed on the globally
  * unique `sourceUrl` (dedup incl. soft-deleted). Links tags + pornstars.
@@ -137,6 +155,7 @@ export async function upsertVideoWithMedia(input: {
   s3StoryboardVttKey?: string | null;
   tags?: string[];
   pornstars?: string[];
+  categories?: string[];
 }) {
   const existing = await prisma.video.findUnique({ where: { sourceUrl: input.sourceUrl } });
 
@@ -170,6 +189,7 @@ export async function upsertVideoWithMedia(input: {
 
   if (input.pornstars?.length) await linkPornstars(input.siteId, video.id, input.pornstars);
   if (input.tags?.length) await linkTags(input.siteId, video.id, input.tags);
+  if (input.categories?.length) await linkCategories(input.siteId, video.id, input.categories);
 
   return video;
 }

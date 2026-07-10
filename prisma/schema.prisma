@@ -20,6 +20,7 @@ model Site {
   users        User[]
   scrapeRuns   ScrapeRun[]
   pornstars    Pornstar[]
+  categories   Category[]
   creators     CreatorProfile[]
   searches     SearchQuery[]
   applications CreatorApplication[]
@@ -119,6 +120,7 @@ model Video {
   scrapeRun          ScrapeRun?      @relation(fields: [scrapeRunId], references: [id])
   pornstars          VideoPornstar[]
   tags               VideoTag[]
+  categories         VideoCategory[]
   heatmap            VideoHeatmap?
   createdAt          DateTime        @default(now())
   updatedAt          DateTime        @updatedAt
@@ -190,6 +192,27 @@ model VideoTag {
 
   @@id([videoId, tagId])
   @@index([tagId])
+}
+
+model Category {
+  id     String          @id @default(cuid())
+  siteId String
+  site   Site            @relation(fields: [siteId], references: [id])
+  slug   String
+  name   String
+  videos VideoCategory[]
+
+  @@unique([siteId, slug])
+}
+
+model VideoCategory {
+  videoId    String
+  categoryId String
+  video      Video    @relation(fields: [videoId], references: [id], onDelete: Cascade)
+  category   Category @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+
+  @@id([videoId, categoryId])
+  @@index([categoryId])
 }
 
 // ─────────────────────────────────────────────────────────────

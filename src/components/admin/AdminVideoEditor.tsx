@@ -22,6 +22,7 @@ type VideoForm = {
   sourceUploadDate: string;
   tags: string[];
   pornstars: string[];
+  categories: string[];
   tagDetails: { name: string; slug: string; icon: string | null }[];
   previewVersion: number | null;
   hasPreview: boolean;
@@ -42,6 +43,7 @@ export default function AdminVideoEditor({ videoId }: { videoId: string }) {
   const [form, setForm] = useState<VideoForm | null>(null);
   const [tagsText, setTagsText] = useState("");
   const [pornstarsText, setPornstarsText] = useState("");
+  const [categoriesText, setCategoriesText] = useState("");
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [regenerating, setRegenerating] = useState(false);
@@ -50,6 +52,7 @@ export default function AdminVideoEditor({ videoId }: { videoId: string }) {
   const [success, setSuccess] = useState<string | null>(null);
   const [taxonomyTags, setTaxonomyTags] = useState<string[]>([]);
   const [taxonomyStars, setTaxonomyStars] = useState<string[]>([]);
+  const [taxonomyCategories, setTaxonomyCategories] = useState<string[]>([]);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -77,6 +80,7 @@ export default function AdminVideoEditor({ videoId }: { videoId: string }) {
         sourceUploadDate: v.sourceUploadDate ? v.sourceUploadDate.slice(0, 16) : "",
         tags: v.tags ?? [],
         pornstars: v.pornstars ?? [],
+        categories: v.categories ?? [],
         tagDetails: v.tagDetails ?? [],
         previewVersion: v.previewVersion ?? null,
         hasPreview: Boolean(v.hasPreview),
@@ -84,8 +88,10 @@ export default function AdminVideoEditor({ videoId }: { videoId: string }) {
       });
       setTagsText((v.tags ?? []).join(", "));
       setPornstarsText((v.pornstars ?? []).join(", "));
+      setCategoriesText((v.categories ?? []).join(", "));
       setTaxonomyTags((taxData.tags ?? []).map((t: { name: string }) => t.name));
       setTaxonomyStars((taxData.pornstars ?? []).map((p: { name: string }) => p.name));
+      setTaxonomyCategories((taxData.categories ?? []).map((c: { name: string }) => c.name));
     } catch (e) {
       setError(e instanceof Error ? e.message : "Load failed");
     } finally {
@@ -177,6 +183,7 @@ export default function AdminVideoEditor({ videoId }: { videoId: string }) {
         isDeleted: form.isDeleted,
         tags: parseList(tagsText),
         pornstars: parseList(pornstarsText),
+        categories: parseList(categoriesText),
       };
       if (form.sourceUploadDate) {
         body.sourceUploadDate = new Date(form.sourceUploadDate).toISOString();
@@ -375,6 +382,21 @@ export default function AdminVideoEditor({ videoId }: { videoId: string }) {
             Verified badge means the video contains piss swallow (AI-reviewed or admin-confirmed).
           </p>
         </div>
+
+        <label className="block text-sm text-zinc-300">
+          Categories (comma-separated)
+          <input
+            className={inputClass}
+            value={categoriesText}
+            onChange={(e) => setCategoriesText(e.target.value)}
+            list="admin-category-suggestions"
+          />
+          <datalist id="admin-category-suggestions">
+            {taxonomyCategories.map((c) => (
+              <option key={c} value={c} />
+            ))}
+          </datalist>
+        </label>
 
         <label className="block text-sm text-zinc-300">
           Pornstars (comma-separated)

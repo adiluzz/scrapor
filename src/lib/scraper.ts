@@ -181,16 +181,29 @@ export async function scrapeVideoDetail(
   const duration = (videoModel?.duration as string) || (videoEntity?.duration as string) || "";
 
   const tags: string[] = [];
+  const categories: string[] = [];
   const pornstars: string[] = [];
 
-  const tagsData = videoTagsComponent?.tags as Array<{ name?: string; isPornstar?: boolean; isCreator?: boolean }> | undefined;
+  const tagsData = videoTagsComponent?.tags as Array<{
+    name?: string;
+    url?: string;
+    link?: string;
+    pageURL?: string;
+    isPornstar?: boolean;
+    isCreator?: boolean;
+  }> | undefined;
   if (Array.isArray(tagsData)) {
     for (const t of tagsData) {
-      if (t?.name) {
+      if (!t?.name) continue;
+      const href = (t.url || t.link || t.pageURL || "").toLowerCase();
+      if (href.includes("/categories/")) {
+        if (!categories.includes(t.name)) categories.push(t.name);
+      } else if (href.includes("/pornstars/") || t.isPornstar) {
+        if (!pornstars.includes(t.name)) pornstars.push(t.name);
+      } else if (href.includes("/creators/") || href.includes("/channels/") || t.isCreator) {
+        // creators/channels are not pornstars or categories
+      } else if (!tags.includes(t.name)) {
         tags.push(t.name);
-        if (t.isPornstar || t.isCreator) {
-          pornstars.push(t.name);
-        }
       }
     }
   }
@@ -213,6 +226,7 @@ export async function scrapeVideoDetail(
     duration: duration ? String(duration) : undefined,
     description: description || undefined,
     tags,
+    categories,
     pornstars,
   };
 }

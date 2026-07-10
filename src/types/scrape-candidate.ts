@@ -10,6 +10,7 @@ export type ScrapeCandidate = {
   description?: string;
   tags?: string[];
   pornstars?: string[];
+  categories?: string[];
   _m3u8_base_url?: string | null;
   _cdn_url?: string | null;
   _part_urls?: string[] | null;

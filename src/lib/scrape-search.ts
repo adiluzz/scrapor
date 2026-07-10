@@ -15,11 +15,14 @@ export type ScrapeSearchParams = {
   minDurationSec?: number;
   cursors?: Record<string, number | string>;
   limit?: number;
+  /** Skip this many unique search hits before returning results (initial search only). */
+  skip?: number;
   excludeUrls?: string[];
 };
 
-const SEARCH_TIMEOUT_MS = 120_000;
-const POLL_MS = 400;
+/** How long the web app waits for the worker to finish an interactive search. */
+const SEARCH_TIMEOUT_MS = 1_800_000; // 30 minutes
+const POLL_MS = 1_000;
 const PREVIEW_BATCH = 50;
 
 function formatDuration(sec: number | null | undefined): string {
@@ -63,6 +66,7 @@ async function runLocalPythonSearch(params: ScrapeSearchParams): Promise<ScrapeS
     minDurationSec: params.minDurationSec ?? 600,
     cursors: params.cursors,
     limit: params.limit ?? PREVIEW_BATCH,
+    skip: params.skip ?? 0,
     excludeUrls: params.excludeUrls,
   });
 
@@ -113,6 +117,7 @@ async function runRedisSearch(params: ScrapeSearchParams): Promise<ScrapeSearchR
       minDurationSec: params.minDurationSec ?? 600,
       cursors: params.cursors,
       limit: params.limit ?? PREVIEW_BATCH,
+      skip: params.skip ?? 0,
       excludeUrls: params.excludeUrls,
     })
   );

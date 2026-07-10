@@ -16,5 +16,6 @@ export interface VideoDetail {
   duration?: string;
   description?: string;
   tags: string[];
+  categories?: string[];
   pornstars: string[];
 }

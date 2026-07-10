@@ -187,10 +187,22 @@ def upsert_tag(conn, site_id: str, name: str) -> str:
         return cur.fetchone()[0]
 
 
+def upsert_category(conn, site_id: str, name: str) -> str:
+    slug = slugify(name)
+    cid = _cuid()
+    with conn.cursor() as cur:
+        cur.execute(
+            'INSERT INTO "Category" (id,"siteId",name,slug) VALUES (%s,%s,%s,%s) '
+            'ON CONFLICT ("siteId",slug) DO UPDATE SET name=EXCLUDED.name RETURNING id',
+            (cid, site_id, name, slug),
+        )
+        return cur.fetchone()[0]
+
+
 def create_video(conn, *, site_id, source_url, title, description, duration_sec,
                  source_site, scrape_run_id, s3_video_key, s3_thumb_key,
                  s3_preview_key, s3_storyboard_key, s3_storyboard_vtt_key,
-                 tags, pornstars):
+                 tags, pornstars, categories=None):
     vid = _cuid()
     slug = _unique_slug(conn, site_id, title)
     dedupe_key = canonical_key(source_url) or None
@@ -223,6 +235,16 @@ def create_video(conn, *, site_id, source_url, title, description, duration_sec,
             cur.execute(
                 'INSERT INTO "VideoTag" ("videoId","tagId") VALUES (%s,%s) ON CONFLICT DO NOTHING',
                 (vid, tid),
+            )
+    for name in categories or []:
+        if not name.strip():
+            continue
+        cid = upsert_category(conn, site_id, name.strip())
+        with conn.cursor() as cur:
+            cur.execute(
+                'INSERT INTO "VideoCategory" ("videoId","categoryId") VALUES (%s,%s) '
+                'ON CONFLICT DO NOTHING',
+                (vid, cid),
             )
     return vid, slug
 

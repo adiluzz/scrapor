@@ -15,6 +15,7 @@ const candidateSchema = z.object({
   description: z.string().optional(),
   tags: z.array(z.string()).optional(),
   pornstars: z.array(z.string()).optional(),
+  categories: z.array(z.string()).optional(),
   _m3u8_base_url: z.string().nullable().optional(),
   _cdn_url: z.string().nullable().optional(),
   _part_urls: z.array(z.string()).nullable().optional(),
@@ -28,7 +29,7 @@ const schema = z
     // Videos to download per source this run. null/omitted = download ALL results.
     maxPerSite: z.number().int().min(1).max(10000).nullable().optional(),
     // Interactive mode: download only these pre-selected candidates.
-    candidates: z.array(candidateSchema).min(1).max(500).optional(),
+    candidates: z.array(candidateSchema).min(1).optional(),
   })
   .refine((d) => Boolean(d.query?.trim()) || (d.candidates?.length ?? 0) > 0, {
     message: "Provide a search query or selected video candidates",

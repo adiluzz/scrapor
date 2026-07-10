@@ -14,6 +14,7 @@ export default function InteractiveScrapeForm() {
   const [query, setQuery] = useState("");
   const [sources, setSources] = useState<string[]>([...SOURCE_SITES]);
   const [minMinutes, setMinMinutes] = useState(10);
+  const [skip, setSkip] = useState(0);
   const [error, setError] = useState<string | null>(null);
   const [searching, setSearching] = useState(false);
   const [loadingMore, setLoadingMore] = useState(false);
@@ -80,6 +81,7 @@ export default function InteractiveScrapeForm() {
               minDurationSec: minMinutes * 60,
               cursors: append ? cursors : undefined,
               limit: PREVIEW_BATCH,
+              skip: append ? 0 : skip,
               excludeUrls: append ? videos.map((v) => v.url) : undefined,
             }
       ),
@@ -217,6 +219,7 @@ export default function InteractiveScrapeForm() {
             <p className="mt-1 max-w-2xl text-sm text-zinc-400">
               Search by query or paste video page URLs from supported sites. Preview thumbnails,
               copy source URLs, pick videos to download, and load 50 more search results at a time.
+              Use “Skip first N videos” to offset into search results.
             </p>
           </div>
           <Link
@@ -261,19 +264,35 @@ export default function InteractiveScrapeForm() {
           </div>
         </div>
 
-        <label className="flex items-center gap-2 text-sm text-zinc-400">
-          Minimum duration
-          <input
-            type="number"
-            min={0}
-            max={600}
-            value={minMinutes}
-            onChange={(e) => setMinMinutes(parseInt(e.target.value || "0", 10))}
-            disabled={searching || downloading}
-            className="w-20 rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-1.5 text-white focus:border-brand-500 focus:outline-none"
-          />
-          minutes
-        </label>
+        <div className="flex flex-wrap items-center gap-4">
+          <label className="flex items-center gap-2 text-sm text-zinc-400">
+            Minimum duration
+            <input
+              type="number"
+              min={0}
+              max={600}
+              value={minMinutes}
+              onChange={(e) => setMinMinutes(parseInt(e.target.value || "0", 10))}
+              disabled={searching || downloading}
+              className="w-20 rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-1.5 text-white focus:border-brand-500 focus:outline-none"
+            />
+            minutes
+          </label>
+
+          <label className="flex items-center gap-2 text-sm text-zinc-400">
+            Skip first
+            <input
+              type="number"
+              min={0}
+              max={100000}
+              value={skip}
+              onChange={(e) => setSkip(Math.max(0, parseInt(e.target.value || "0", 10) || 0))}
+              disabled={searching || downloading}
+              className="w-24 rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-1.5 text-white focus:border-brand-500 focus:outline-none"
+            />
+            videos
+          </label>
+        </div>
 
         <button
           type="button"

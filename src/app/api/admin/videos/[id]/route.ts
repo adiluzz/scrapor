@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { prisma } from "@/lib/db";
 import { guardAdmin } from "@/lib/admin-guard";
-import { linkTags, linkPornstars, resolveAdminVideoSlug } from "@/lib/videos";
+import { linkTags, linkPornstars, linkCategories, resolveAdminVideoSlug } from "@/lib/videos";
 import { logger } from "@/lib/logger";
 
 const patchSchema = z.object({
@@ -18,6 +18,7 @@ const patchSchema = z.object({
   sourceUploadDate: z.string().datetime().nullable().optional(),
   tags: z.array(z.string()).optional(),
   pornstars: z.array(z.string()).optional(),
+  categories: z.array(z.string()).optional(),
 });
 
 export async function GET(_request: Request, { params }: { params: Promise<{ id: string }> }) {
@@ -30,6 +31,7 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
     include: {
       pornstars: { include: { pornstar: true } },
       tags: { include: { tag: true } },
+      categories: { include: { category: true } },
     },
   });
   if (!video) return NextResponse.json({ error: "Not found" }, { status: 404 });
@@ -59,6 +61,7 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
         icon: t.tag.icon,
       })),
       pornstars: video.pornstars.map((p) => p.pornstar.name),
+      categories: video.categories.map((c) => c.category.name),
     },
   });
 }
@@ -128,6 +131,10 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
   if (d.pornstars) {
     await prisma.videoPornstar.deleteMany({ where: { videoId: id } });
     await linkPornstars(g.siteId, id, d.pornstars);
+  }
+  if (d.categories) {
+    await prisma.videoCategory.deleteMany({ where: { videoId: id } });
+    await linkCategories(g.siteId, id, d.categories);
   }
 
   logger.info({ videoId: id, fields: Object.keys(d) }, "admin updated video");

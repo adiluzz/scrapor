@@ -6,7 +6,7 @@ export async function GET(request: Request) {
   const auth = await guardAdmin(request, "GET");
   if (auth instanceof NextResponse) return auth;
 
-  const [tags, pornstars] = await Promise.all([
+  const [tags, pornstars, categories] = await Promise.all([
     prisma.tag.findMany({
       where: { siteId: auth.siteId },
       orderBy: { name: "asc" },
@@ -17,7 +17,12 @@ export async function GET(request: Request) {
       orderBy: { name: "asc" },
       select: { id: true, name: true, slug: true },
     }),
+    prisma.category.findMany({
+      where: { siteId: auth.siteId },
+      orderBy: { name: "asc" },
+      select: { id: true, name: true, slug: true },
+    }),
   ]);
 
-  return NextResponse.json({ tags, pornstars });
+  return NextResponse.json({ tags, pornstars, categories });
 }

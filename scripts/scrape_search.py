@@ -65,6 +65,7 @@ def _public_video(v: dict, source: str, in_catalog: bool) -> dict:
         "description": v.get("description") or "",
         "tags": v.get("tags") or [],
         "pornstars": v.get("pornstars") or [],
+        "categories": v.get("categories") or [],
         "_m3u8_base_url": v.get("_m3u8_base_url"),
         "_cdn_url": v.get("_cdn_url"),
         "_part_urls": v.get("_part_urls"),
@@ -121,7 +122,8 @@ def _yt_dlp_metadata(url: str) -> dict:
         "thumbnail": info.get("thumbnail") or "",
         "duration_sec": int(info["duration"]) if info.get("duration") else None,
         "description": info.get("description") or "",
-        "tags": info.get("tags") or info.get("categories") or [],
+        "tags": info.get("tags") or [],
+        "categories": info.get("categories") or [],
         "pornstars": [str(c) for c in cast if c],
     }
 
@@ -243,13 +245,20 @@ def search_candidates(
     cursors: dict | None = None,
     limit: int = 50,
     exclude_urls: list[str] | None = None,
+    skip: int = 0,
 ) -> dict:
-    """Collect up to `limit` unique video candidates across `sources`."""
+    """Collect up to `limit` unique video candidates across `sources`.
+
+    When `skip` > 0, the first `skip` unique hits are discarded (used to offset
+    into search results on the initial interactive preview).
+    """
     cursors = dict(cursors or {})
     exhausted: dict[str, bool] = {s: False for s in sources}
     exclude = set(exclude_urls or [])
     seen: set[str] = set(exclude)
     videos: list[dict] = []
+    skip = max(0, int(skip or 0))
+    skipped = 0
 
     conn = db.connect()
     try:
@@ -266,7 +275,9 @@ def search_candidates(
                     continue
 
                 cursor = cursors.get(source, 0)
-                need = min(PREVIEW_BATCH, limit - len(videos))
+                # Fetch enough to cover remaining skip + remaining limit.
+                remaining_skip = max(0, skip - skipped)
+                need = min(PREVIEW_BATCH, remaining_skip + (limit - len(videos)))
                 batch, next_cursor, is_exhausted = searcher(query, need, cursor, min_duration_sec)
                 cursors[source] = next_cursor
                 if is_exhausted:
@@ -285,6 +296,9 @@ def search_candidates(
                         continue
                     seen.add(url)
                     seen.add(key)
+                    if skipped < skip:
+                        skipped += 1
+                        continue
                     in_catalog = db.video_exists(conn, url)
                     videos.append(_public_video(v, source, in_catalog))
                     if len(videos) >= limit:
@@ -311,6 +325,7 @@ def main() -> None:
             cursors=req.get("cursors"),
             limit=int(req.get("limit", 50)),
             exclude_urls=req.get("excludeUrls"),
+            skip=int(req.get("skip", 0) or 0),
         )
     json.dump(result, sys.stdout)
 

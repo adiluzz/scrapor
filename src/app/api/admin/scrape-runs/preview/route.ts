@@ -5,6 +5,9 @@ import { isSourceSite } from "@/lib/source-sites";
 import { PREVIEW_BATCH, searchScrapeCandidates } from "@/lib/scrape-search";
 import { logger } from "@/lib/logger";
 
+/** Interactive search can take a long time when the worker is busy / sites are slow. */
+export const maxDuration = 1800;
+
 const schema = z
   .object({
     query: z.string().max(200).optional(),
@@ -13,6 +16,7 @@ const schema = z
     minDurationSec: z.number().int().min(0).max(36000).optional(),
     cursors: z.record(z.union([z.number(), z.string()])).optional(),
     limit: z.number().int().min(1).max(100).optional(),
+    skip: z.number().int().min(0).max(100_000).optional(),
     excludeUrls: z.array(z.string().url()).optional(),
   })
   .refine(
@@ -47,6 +51,7 @@ export async function POST(request: Request) {
       minDurationSec: parsed.data.minDurationSec,
       cursors: parsed.data.cursors,
       limit: parsed.data.limit ?? PREVIEW_BATCH,
+      skip: parsed.data.skip ?? 0,
       excludeUrls: parsed.data.excludeUrls,
     });
     return NextResponse.json(result);

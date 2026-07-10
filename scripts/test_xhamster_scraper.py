@@ -19,8 +19,10 @@ window.initials={"videoModel":{"title":"Test Video","duration":720,"description"
 "thumbURL":"https://ic-vt-nss.xhcdn.com/thumb.jpg"},
 "videoEntity":{"pornstarModels":[{"name":"Jane Doe"}]},
 "videoTagsComponent":{"tags":[
-  {"name":"Pissing","isPornstar":false},
-  {"name":"Jane Doe","isPornstar":true}
+  {"name":"Pissing","url":"https://xhamster.com/categories/pissing","isPornstar":false},
+  {"name":"Outdoor","url":"https://xhamster.com/tags/outdoor","isPornstar":false},
+  {"name":"Jane Doe","url":"https://xhamster.com/pornstars/jane-doe","isPornstar":true},
+  {"name":"Some Channel","url":"https://xhamster.com/creators/some-channel","isCreator":true}
 ]}}
 </script>
 https://video-am.xhcdn.com/token==,123/media=hls4/multi=256x144:144p:,426x240:240p:/path/_TPL_.h264.mp4.m3u8
@@ -49,9 +51,26 @@ class XHamsterParseTests(unittest.TestCase):
         )
         self.assertEqual(meta["title"], "Test Video")
         self.assertEqual(meta["duration_sec"], 720)
-        self.assertIn("Pissing", meta["tags"])
-        self.assertIn("Jane Doe", meta["pornstars"])
+        self.assertEqual(meta["categories"], ["Pissing"])
+        self.assertEqual(meta["tags"], ["Outdoor"])
+        self.assertEqual(meta["pornstars"], ["Jane Doe"])
+        self.assertNotIn("Pissing", meta["pornstars"])
+        self.assertNotIn("Some Channel", meta["pornstars"])
         self.assertIn("_TPL_.h264.mp4.m3u8", meta["_m3u8_base_url"] or "")
+
+    def test_tag_kind_classifies_by_url(self):
+        self.assertEqual(
+            ss._xh_tag_kind({"name": "Pissing", "url": "/categories/pissing"}),
+            "category",
+        )
+        self.assertEqual(
+            ss._xh_tag_kind({"name": "Jane", "url": "/pornstars/jane", "isPornstar": True}),
+            "pornstar",
+        )
+        self.assertEqual(
+            ss._xh_tag_kind({"name": "Outdoor", "url": "/tags/outdoor"}),
+            "tag",
+        )
 
 
 class XHamsterSearchTests(unittest.TestCase):
@@ -64,7 +83,9 @@ class XHamsterSearchTests(unittest.TestCase):
         self.assertEqual(len(batch), 1)
         self.assertEqual(batch[0]["title"], "Test Video")
         self.assertEqual(batch[0]["duration_sec"], 720)
-        self.assertIn("Pissing", batch[0]["tags"])
+        self.assertEqual(batch[0]["categories"], ["Pissing"])
+        self.assertEqual(batch[0]["tags"], ["Outdoor"])
+        self.assertEqual(batch[0]["pornstars"], ["Jane Doe"])
         self.assertIn("_TPL_.h264.mp4.m3u8", batch[0]["_m3u8_base_url"] or "")
         self.assertEqual(cursor, 2)
         self.assertFalse(exhausted)
@@ -84,7 +105,7 @@ def live_search(limit=3):
         print(json.dumps({
             k: v[k] for k in (
                 "url", "title", "duration_sec", "thumbnail", "description",
-                "tags", "pornstars", "_m3u8_base_url",
+                "tags", "categories", "pornstars", "_m3u8_base_url",
             )
             if k in v
         }, indent=2))

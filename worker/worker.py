@@ -458,6 +458,7 @@ def _process_one(run, source_site, video) -> ProcessOutcome:
                 s3_video_key=None, s3_thumb_key=None, s3_preview_key=None,
                 s3_storyboard_key=None, s3_storyboard_vtt_key=None,
                 tags=video.get("tags"), pornstars=video.get("pornstars"),
+                categories=video.get("categories"),
             )
 
             if storage.configured():
@@ -801,6 +802,7 @@ def _normalize_candidate(c: dict) -> dict:
         "description": c.get("description") or "",
         "tags": c.get("tags") or [],
         "pornstars": c.get("pornstars") or [],
+        "categories": c.get("categories") or [],
         "thumbnail": c.get("thumbnail") or "",
         "duration_sec": c.get("duration_sec") if c.get("duration_sec") is not None else c.get("durationSec"),
         "_m3u8_base_url": c.get("_m3u8_base_url"),
@@ -902,11 +904,13 @@ def process_scrape_search(r, payload_json: str):
                 cursors=req.get("cursors"),
                 limit=int(req.get("limit", 50)),
                 exclude_urls=req.get("excludeUrls"),
+                skip=int(req.get("skip", 0) or 0),
             )
         payload = {"ok": True, **result}
     except Exception as e:  # noqa: BLE001
         payload = {"ok": False, "error": str(e)[:500]}
-    r.set(result_key, json.dumps(payload), ex=120)
+    # Keep result long enough for the web app's 30-minute poll window.
+    r.set(result_key, json.dumps(payload), ex=3600)
     _event("info", "scrape_search_done", requestId=rid, videos=len(payload.get("videos") or []),
            ok=payload.get("ok", True))
 

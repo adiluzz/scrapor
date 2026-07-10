@@ -8,6 +8,7 @@ Each searcher returns a list of normalized dicts:
     "title": str,
     "description": str,
     "tags": list[str],
+    "categories": list[str],
     "pornstars": list[str],
     "thumbnail": str,           # remote thumbnail URL (may be empty)
     "duration_sec": int | None,
@@ -58,13 +59,14 @@ _XH_M3U8_TPL_RES = (
 
 
 def _norm(url, title, duration_sec, thumbnail="", tags=None, pornstars=None,
-          description="", m3u8=None, cdn=None):
+          categories=None, description="", m3u8=None, cdn=None):
     return {
         "url": str(url or ""),
         "title": str(title or "Unknown"),
         "description": str(description or ""),
         "tags": [str(t) for t in (tags or [])],
         "pornstars": [str(p) for p in (pornstars or [])],
+        "categories": [str(c) for c in (categories or [])],
         "thumbnail": str(thumbnail or ""),
         "duration_sec": int(duration_sec) if duration_sec else None,
         "_m3u8_base_url": (str(m3u8) if m3u8 else None),
@@ -520,6 +522,27 @@ def _xh_extract_m3u8(html):
     return None
 
 
+def _xh_tag_kind(tag: dict) -> str:
+    """Classify an xHamster videoTagsComponent entry: category | tag | pornstar | other."""
+    from urllib.parse import urlparse
+
+    url = str(tag.get("url") or tag.get("link") or tag.get("pageURL") or "").lower()
+    path = urlparse(url).path if url else ""
+    if "/categories/" in path or "/categories/" in url:
+        return "category"
+    if "/pornstars/" in path or "/pornstars/" in url:
+        return "pornstar"
+    if "/creators/" in path or "/channels/" in path or "/creators/" in url or "/channels/" in url:
+        return "other"
+    if "/tags/" in path or "/tags/" in url:
+        return "tag"
+    if tag.get("isPornstar"):
+        return "pornstar"
+    if tag.get("isCreator"):
+        return "other"
+    return "tag"
+
+
 def _xh_parse_detail(html, url):
     """Parse a video page for metadata and download URLs (window.initials JSON)."""
     m3u8 = _xh_extract_m3u8(html)
@@ -539,6 +562,7 @@ def _xh_parse_detail(html, url):
     )
 
     tags: list[str] = []
+    categories: list[str] = []
     pornstars: list[str] = []
     for t in vtc.get("tags") or []:
         if not isinstance(t, dict):
@@ -547,11 +571,16 @@ def _xh_parse_detail(html, url):
         if not name:
             continue
         name = str(name)
-        if name not in tags:
-            tags.append(name)
-        if t.get("isPornstar") or t.get("isCreator"):
+        kind = _xh_tag_kind(t)
+        if kind == "category":
+            if name not in categories:
+                categories.append(name)
+        elif kind == "pornstar":
             if name not in pornstars:
                 pornstars.append(name)
+        elif kind == "tag":
+            if name not in tags:
+                tags.append(name)
     for p in ve.get("pornstarModels") or []:
         if not isinstance(p, dict):
             continue
@@ -566,6 +595,7 @@ def _xh_parse_detail(html, url):
         "title": title,
         "duration_sec": dur_s,
         "tags": tags,
+        "categories": categories,
         "pornstars": pornstars,
         "thumbnail": thumb,
         "description": description,
@@ -732,7 +762,8 @@ def _ph_parse_detail(html, url):
     return {
         "title": title,
         "description": description,
-        "tags": tags,
+        "tags": [],
+        "categories": tags,
         "pornstars": pornstars,
         "thumbnail": thumbnail,
         "_part_urls": part_urls or None,
@@ -820,7 +851,7 @@ def search_paradisehill(query, count, cursor=0, min_duration=600):
         try:
             detail_html = _html_get(clean)
             if not detail_html:
-                out.append(_norm(clean, title, None, thumbnail=thumb, tags=tags))
+                out.append(_norm(clean, title, None, thumbnail=thumb, categories=tags))
                 continue
             meta = _ph_parse_detail(detail_html, clean)
             item = _norm(
@@ -828,7 +859,8 @@ def search_paradisehill(query, count, cursor=0, min_duration=600):
                 meta.get("title") or title,
                 None,
                 thumbnail=meta.get("thumbnail") or thumb,
-                tags=meta.get("tags") or tags,
+                tags=meta.get("tags"),
+                categories=meta.get("categories") or tags,
                 pornstars=meta.get("pornstars"),
                 description=meta.get("description") or "",
                 cdn=meta.get("_cdn_url"),
@@ -838,7 +870,7 @@ def search_paradisehill(query, count, cursor=0, min_duration=600):
                 item["_part_urls"] = parts
             out.append(item)
         except Exception:
-            out.append(_norm(clean, title, None, thumbnail=thumb, tags=tags))
+            out.append(_norm(clean, title, None, thumbnail=thumb, categories=tags))
     next_cursor = offset + len(stubs)
     exhausted = len(all_stubs) < need
     return out, next_cursor, exhausted
@@ -953,6 +985,7 @@ def search_xhamster(query, count, cursor=0, min_duration=600):
                 thumbnail=meta.get("thumbnail") or stub.get("thumbnail"),
                 tags=meta.get("tags"),
                 pornstars=meta.get("pornstars"),
+                categories=meta.get("categories"),
                 description=meta.get("description") or "",
                 m3u8=meta.get("_m3u8_base_url"),
             ))
@@ -1095,9 +1128,16 @@ def _eporner_parse_detail(html, url):
             if isinstance(data, dict) and data.get("duration"):
                 dur_s = _dur(data["duration"]) or dur_s
     tags = []
+    categories = []
     for a in soup.select('a[href*="/cat/"], a[href*="/tag/"]'):
         name = a.get_text(strip=True)
-        if name and name not in tags:
+        if not name:
+            continue
+        href = (a.get("href") or "").lower()
+        if "/cat/" in href:
+            if name not in categories:
+                categories.append(name)
+        elif name not in tags:
             tags.append(name)
     pornstars = []
     info = soup.select_one("#video-info")
@@ -1124,6 +1164,7 @@ def _eporner_parse_detail(html, url):
         "title": title,
         "duration_sec": dur_s,
         "tags": tags,
+        "categories": categories,
         "pornstars": pornstars,
         "thumbnail": thumb,
         "description": desc,
@@ -1175,6 +1216,7 @@ def search_eporner(query, count, cursor=0, min_duration=600):
                 meta.get("duration_sec") or dur_s,
                 thumbnail=meta.get("thumbnail") or thumb,
                 tags=meta.get("tags"),
+                categories=meta.get("categories"),
                 pornstars=meta.get("pornstars"),
                 description=meta.get("description") or "",
                 cdn=meta.get("_cdn_url"),
@@ -1405,15 +1447,10 @@ def _po_parse_detail(html, url):
                     thumb = _po_abs(thumbs)
                 break
 
-    merged_tags = []
-    for name in categories + tags:
-        if name and name not in merged_tags:
-            merged_tags.append(name)
-
     return {
         "title": title,
         "duration_sec": dur_s,
-        "tags": merged_tags,
+        "tags": tags,
         "categories": categories,
         "pornstars": pornstars,
         "thumbnail": thumb,
@@ -1474,6 +1511,7 @@ def search_pornone(query, count, cursor=0, min_duration=600):
                 meta.get("duration_sec") or dur_s,
                 thumbnail=meta.get("thumbnail") or thumb,
                 tags=meta.get("tags"),
+                categories=meta.get("categories"),
                 pornstars=meta.get("pornstars"),
                 description=meta.get("description") or "",
                 cdn=meta.get("_cdn_url"),
@@ -1670,11 +1708,6 @@ def _ax_parse_detail_by_id(video_id, stub=None):
 
     description = _ax_unescape(video.get("description") or stub.get("description") or "")
 
-    merged_tags = []
-    for name in categories + tags:
-        if name and name not in merged_tags:
-            merged_tags.append(name)
-
     duration = video.get("duration") or stub.get("duration") or ""
     dur_s = _dur(duration)
 
@@ -1690,7 +1723,7 @@ def _ax_parse_detail_by_id(video_id, stub=None):
         "url": url,
         "title": _ax_unescape(video.get("title") or stub.get("title") or "Unknown"),
         "duration_sec": dur_s or None,
-        "tags": merged_tags,
+        "tags": tags,
         "categories": categories,
         "pornstars": pornstars,
         "thumbnail": str(thumb or ""),
@@ -1765,6 +1798,7 @@ def search_abxxx(query, count, cursor=0, min_duration=600):
                 meta.get("duration_sec") or dur_s,
                 thumbnail=meta.get("thumbnail") or thumb,
                 tags=meta.get("tags"),
+                categories=meta.get("categories"),
                 pornstars=meta.get("pornstars"),
                 description=meta.get("description") or "",
                 cdn=meta.get("_cdn_url"),

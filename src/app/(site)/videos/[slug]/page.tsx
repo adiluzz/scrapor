@@ -34,6 +34,7 @@ async function getVideo(siteId: string, slug: string, includeHidden = false) {
     include: {
       pornstars: { include: { pornstar: true } },
       tags: { include: { tag: true } },
+      categories: { include: { category: true } },
       heatmap: true,
     },
   });
@@ -58,13 +59,14 @@ export async function generateMetadata({
   if (!video) return { title: "Not found" };
   const description = videoPageDescription(video.title, site.name, video.description);
   const tagNames = video.tags.map((t) => t.tag.name);
+  const categoryNames = video.categories.map((c) => c.category.name);
   const title = `${video.title} — Piss Drinking Porn`;
   const base = await getSiteBaseUrl();
   const poster = publicVideoThumbnailUrl(base, video.id);
   return {
     title,
     description,
-    keywords: keywordsMeta([...tagNames, video.title]),
+    keywords: keywordsMeta([...categoryNames, ...tagNames, video.title]),
     alternates: { canonical: `/videos/${video.slug}` },
     openGraph: buildOpenGraph({
       title: video.title,
@@ -181,6 +183,19 @@ export default async function VideoPage({
                 >
                   {p.pornstar.name}
                 </Link>
+              ))}
+            </div>
+          )}
+
+          {video.categories.length > 0 && (
+            <div className="mt-3 flex flex-wrap gap-2">
+              {video.categories.map((c) => (
+                <span
+                  key={c.categoryId}
+                  className="rounded-full bg-zinc-800 px-3 py-1 text-sm text-zinc-300"
+                >
+                  {c.category.name}
+                </span>
               ))}
             </div>
           )}

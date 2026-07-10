@@ -6,15 +6,21 @@ import AdminPornstars from "@/components/admin/AdminPornstars";
 
 export const dynamic = "force-dynamic";
 
+const PAGE_SIZE = 50;
+
 export default async function AdminPornstarsPage() {
   const user = await requireAdmin();
 
-  const stars = await prisma.pornstar.findMany({
-    where: { siteId: user.siteId },
-    orderBy: [{ videos: { _count: "desc" } }, { name: "asc" }],
-    include: { _count: { select: { videos: true } } },
-    take: 100,
-  });
+  const where = { siteId: user.siteId };
+  const [stars, total] = await Promise.all([
+    prisma.pornstar.findMany({
+      where,
+      orderBy: [{ videos: { _count: "desc" } }, { name: "asc" }],
+      include: { _count: { select: { videos: true } } },
+      take: PAGE_SIZE,
+    }),
+    prisma.pornstar.count({ where }),
+  ]);
 
   const initialPornstars = stars.map((s) => ({
     id: s.id,
@@ -47,7 +53,9 @@ export default async function AdminPornstarsPage() {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-xl font-bold text-white sm:text-2xl">Pornstars</h1>
+        <h1 className="text-xl font-bold text-white sm:text-2xl">
+          Pornstars <span className="text-base font-normal text-zinc-500">({total})</span>
+        </h1>
         <p className="mt-1 max-w-2xl text-sm text-zinc-400">
           Upload portrait images or fetch profile data and images from{" "}
           <a
@@ -70,6 +78,8 @@ export default async function AdminPornstarsPage() {
 
       <AdminPornstars
         initialPornstars={initialPornstars}
+        initialTotal={total}
+        pageSize={PAGE_SIZE}
         tpdbConfigured={isTpdbConfigured()}
       />
     </div>

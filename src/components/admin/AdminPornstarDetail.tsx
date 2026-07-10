@@ -459,7 +459,7 @@ export default function AdminPornstarDetail({
           <p className="text-sm text-zinc-500">No videos linked to this pornstar.</p>
         ) : (
           <div className="space-y-4">
-            <VideoGrid videos={videos} getHref={(v) => `/admin/videos/${v.slug}`} />
+            <VideoGrid videos={videos} hrefPrefix="/admin/videos" />
             <ul className="divide-y divide-zinc-800 rounded-xl border border-zinc-800">
               {videos.map((v) => (
                 <li key={v.linkId} className="flex flex-wrap items-center justify-between gap-2 px-4 py-3 text-sm">

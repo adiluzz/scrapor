@@ -86,11 +86,11 @@ function Card({
  */
 export default function VideoGrid({
   videos,
-  getHref,
+  hrefPrefix = "/videos",
 }: {
   videos: VideoCardData[];
-  /** Override link target (default: public video page). */
-  getHref?: (v: VideoCardData) => string;
+  /** Link prefix before `/${slug}` (default: public `/videos`). Must be a string — not a function — so Server Components can pass it. */
+  hrefPrefix?: string;
 }) {
   const [playingId, setPlayingId] = useState<string | null>(null);
   const [isTouch, setIsTouch] = useState(false);
@@ -132,7 +132,7 @@ export default function VideoGrid({
         <Card
           key={v.id}
           v={v}
-          href={getHref ? getHref(v) : `/videos/${v.slug}`}
+          href={`${hrefPrefix}/${v.slug}`}
           playing={playingId === v.id}
           onEnter={() => !isTouch && setPlayingId(v.id)}
           onLeave={() => !isTouch && setPlayingId((p) => (p === v.id ? null : p))}

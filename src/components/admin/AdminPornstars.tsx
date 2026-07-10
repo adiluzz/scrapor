@@ -266,32 +266,54 @@ function PornstarImageEditor({
 
 export default function AdminPornstars({
   initialPornstars,
+  initialTotal,
+  pageSize,
   tpdbConfigured,
 }: {
   initialPornstars: PornstarRow[];
+  initialTotal: number;
+  pageSize: number;
   tpdbConfigured: boolean;
 }) {
   const [q, setQ] = useState("");
+  const [page, setPage] = useState(1);
   const [rows, setRows] = useState(initialPornstars);
+  const [total, setTotal] = useState(initialTotal);
   const [searching, setSearching] = useState(false);
+  const [ready, setReady] = useState(false);
 
-  const load = useCallback(async (query: string) => {
-    setSearching(true);
-    try {
-      const params = new URLSearchParams({ limit: "100" });
-      if (query.trim()) params.set("q", query.trim());
-      const res = await fetch(`/api/admin/pornstars?${params}`);
-      const data = await res.json();
-      if (res.ok) setRows(data.pornstars ?? []);
-    } finally {
-      setSearching(false);
-    }
-  }, []);
+  const totalPages = Math.max(1, Math.ceil(total / pageSize));
+
+  const load = useCallback(
+    async (query: string, pageNum: number) => {
+      setSearching(true);
+      try {
+        const params = new URLSearchParams({
+          limit: String(pageSize),
+          page: String(pageNum),
+        });
+        if (query.trim()) params.set("q", query.trim());
+        const res = await fetch(`/api/admin/pornstars?${params}`);
+        const data = await res.json();
+        if (res.ok) {
+          setRows(data.pornstars ?? []);
+          setTotal(typeof data.total === "number" ? data.total : 0);
+        }
+      } finally {
+        setSearching(false);
+      }
+    },
+    [pageSize]
+  );
 
   useEffect(() => {
-    const t = setTimeout(() => load(q), 300);
+    if (!ready) {
+      setReady(true);
+      return;
+    }
+    const t = setTimeout(() => void load(q, page), 300);
     return () => clearTimeout(t);
-  }, [q, load]);
+  }, [q, page, load, ready]);
 
   function handleUpdated(id: string, patch: Partial<PornstarRow>) {
     setRows((prev) =>
@@ -299,16 +321,25 @@ export default function AdminPornstars({
     );
   }
 
+  const from = total === 0 ? 0 : (page - 1) * pageSize + 1;
+  const to = Math.min(page * pageSize, total);
+
   return (
     <div className="space-y-4">
-      <input
-        value={q}
-        onChange={(e) => setQ(e.target.value)}
-        placeholder="Filter pornstars…"
-        className="w-full max-w-md rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm text-white"
-      />
-
-      {searching && <p className="text-xs text-zinc-500">Loading…</p>}
+      <div className="flex flex-wrap items-center gap-3">
+        <input
+          value={q}
+          onChange={(e) => {
+            setQ(e.target.value);
+            setPage(1);
+          }}
+          placeholder="Filter pornstars…"
+          className="w-full max-w-md rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm text-white"
+        />
+        <p className="text-xs text-zinc-500">
+          {searching ? "Loading…" : `Showing ${from}–${to} of ${total}`}
+        </p>
+      </div>
 
       {rows.length === 0 ? (
         <p className="py-12 text-center text-sm text-zinc-500">No pornstars found.</p>
@@ -322,6 +353,30 @@ export default function AdminPornstars({
               onUpdated={handleUpdated}
             />
           ))}
+        </div>
+      )}
+
+      {totalPages > 1 && (
+        <div className="flex items-center justify-center gap-3 text-sm">
+          <button
+            type="button"
+            disabled={page <= 1 || searching}
+            onClick={() => setPage((p) => Math.max(1, p - 1))}
+            className="rounded bg-zinc-800 px-3 py-1.5 text-zinc-300 disabled:opacity-40"
+          >
+            Prev
+          </button>
+          <span className="text-zinc-500">
+            Page {page} / {totalPages}
+          </span>
+          <button
+            type="button"
+            disabled={page >= totalPages || searching}
+            onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+            className="rounded bg-zinc-800 px-3 py-1.5 text-zinc-300 disabled:opacity-40"
+          >
+            Next
+          </button>
         </div>
       )}
     </div>

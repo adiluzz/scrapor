@@ -2,10 +2,9 @@ import { signOut } from "@/auth";
 
 /**
  * Sign out via a server action instead of linking to NextAuth's built-in
- * GET /api/auth/signout page. That default page builds absolute URLs from the
- * container's bind address (HOSTNAME=0.0.0.0:3000) when running standalone
- * behind a proxy, which breaks the redirect. The server action redirects
- * relatively, so it always stays on the current public host.
+ * GET /api/auth/signout page. That default page can still build absolute URLs
+ * from a bad request origin when running standalone behind a proxy; the server
+ * action redirects relatively and stays on the current public host.
  */
 export default function SignOutButton({ className }: { className?: string }) {
   return (

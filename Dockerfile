@@ -28,5 +28,8 @@ COPY --from=builder /app/.next/static ./.next/static
 COPY --from=builder /app/prisma ./prisma
 
 EXPOSE 3000
-ENV PORT=3000 HOSTNAME=0.0.0.0
+# Bind on all interfaces via Next standalone's default (0.0.0.0) when HOSTNAME
+# is unset. Do NOT set HOSTNAME=0.0.0.0 — Auth.js/Next then build absolute
+# URLs as https://0.0.0.0:3000/... and login redirects break behind the proxy.
+ENV PORT=3000
 CMD ["node", "server.js"]

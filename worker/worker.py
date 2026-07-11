@@ -19,6 +19,7 @@ import argparse
 import json
 import logging
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -28,6 +29,7 @@ import time
 import traceback
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import NamedTuple
+from urllib.parse import urlparse
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, os.path.join(ROOT, "scripts"))
@@ -127,6 +129,18 @@ DOWNLOAD_RETRY_DELAY_SEC = float(os.environ.get("SCRAPE_DOWNLOAD_RETRY_DELAY_SEC
 # yt-dlp: best available video+audio; m3u8 fast path tries highest HLS rung first.
 YTDLP_FORMAT = "bestvideo+bestaudio/best"
 M3U8_QUALITIES = ("1080p", "720p", "480p", "240p")
+# ParadiseHill CDN (vN.paradisehill.cc) returns 503 to NordVPN exits; download it
+# direct (no SCRAPE_HTTP_PROXY) when the worker uses proxy-mode VPN.
+_PH_CDN_HOST_RE = re.compile(r"(?:^|\.)paradisehill\.cc$", re.I)
+# CDN also rate-limits parallel connections (wget exit 8 → empty file). Serialize
+# PH media downloads across the worker's thread pool.
+_PH_CDN_CONCURRENCY = max(1, int(os.environ.get("SCRAPE_PH_CDN_CONCURRENCY", "1")))
+_PH_CDN_SEMAPHORE = threading.Semaphore(_PH_CDN_CONCURRENCY)
+_PH_CDN_RETRIES = max(1, int(os.environ.get("SCRAPE_PH_CDN_RETRIES", "3")))
+_DOWNLOAD_UA = (
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
+    "(KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+)
 
 
 def _download_m3u8(m3u8: str, dest: str, dl_env: dict, timeout: int | None = None):
@@ -142,6 +156,84 @@ def _download_m3u8(m3u8: str, dest: str, dl_env: dict, timeout: int | None = Non
         if os.path.exists(dest):
             os.remove(dest)
     return False, last_result, None
+
+
+def _is_paradisehill_cdn(url: str) -> bool:
+    """True for ParadiseHill video CDN hosts (not the HTML site)."""
+    host = (urlparse(url or "").hostname or "").lower()
+    if not host:
+        return False
+    # HTML is en.paradisehill.cc; media is v1/v2/...paradisehill.cc
+    if host == "en.paradisehill.cc" or host == "paradisehill.cc" or host.startswith("www."):
+        return False
+    return bool(_PH_CDN_HOST_RE.search(host))
+
+
+def _dl_env_for_url(base_env: dict, url: str) -> dict:
+    """Drop HTTP(S) proxy for ParadiseHill CDN — NordVPN exits get HTTP 503 there."""
+    env = base_env.copy()
+    if _is_paradisehill_cdn(url):
+        for key in ("HTTP_PROXY", "HTTPS_PROXY", "http_proxy", "https_proxy", "ALL_PROXY", "all_proxy"):
+            env.pop(key, None)
+        # Force direct connect even if a process-wide proxy is set.
+        existing = env.get("NO_PROXY") or env.get("no_proxy") or ""
+        bypass = "paradisehill.cc,.paradisehill.cc"
+        env["NO_PROXY"] = f"{existing},{bypass}" if existing else bypass
+        env["no_proxy"] = env["NO_PROXY"]
+    return env
+
+
+def _wget_cdn_cmd(dest: str, cdn_url: str, referer: str = "") -> list[str]:
+    """wget with browser-like headers; Referer helps some adult CDNs."""
+    cmd = ["wget", "-q", "--no-check-certificate", "--timeout=60", "--tries=1"]
+    if referer:
+        cmd += ["--referer", referer]
+    cmd += [
+        "--header", f"User-Agent: {_DOWNLOAD_UA}",
+        "--header", "Accept: */*",
+        "-O", dest, str(cdn_url),
+    ]
+    return cmd
+
+
+def _run_wget_cdn(
+    dest: str,
+    cdn_url: str,
+    dl_env: dict,
+    referer: str = "",
+    timeout: int | None = None,
+) -> subprocess.CompletedProcess | None:
+    """
+    Download one CDN URL with wget. ParadiseHill hosts are serialized and
+    retried — parallel hits return HTTP errors and 0-byte files.
+    """
+    timeout = timeout if timeout is not None else DOWNLOAD_TIMEOUT
+    env = _dl_env_for_url(dl_env, cdn_url)
+    cmd = _wget_cdn_cmd(dest, cdn_url, referer=referer)
+    is_ph = _is_paradisehill_cdn(cdn_url)
+    attempts = _PH_CDN_RETRIES if is_ph else 1
+    last: subprocess.CompletedProcess | None = None
+    lock = _PH_CDN_SEMAPHORE if is_ph else None
+
+    for attempt in range(1, attempts + 1):
+        if os.path.exists(dest):
+            try:
+                os.remove(dest)
+            except OSError:
+                pass
+        if lock:
+            lock.acquire()
+        try:
+            last = subprocess.run(cmd, capture_output=True, timeout=timeout, env=env)
+        finally:
+            if lock:
+                lock.release()
+        size = os.path.getsize(dest) if os.path.exists(dest) else 0
+        if size > 100_000:
+            return last
+        if attempt < attempts:
+            time.sleep(min(30.0, 2.0 * attempt))
+    return last
 
 
 def _disk_free_mb(path: str = "/tmp") -> int:
@@ -262,8 +354,20 @@ def _download_with_retries(video, dest_dir, source_site, run) -> tuple[bool, str
             maxAttempts=DOWNLOAD_ATTEMPTS,
             reason=str(reason)[:300],
             method=extra.get("method"),
+            exitCode=extra.get("exitCode"),
+            stderr=str(extra.get("stderr") or "")[:400] or None,
             **_video_ctx(video, run, source_site),
         )
+
+    # yt-dlp cannot extract ParadiseHill film pages; skip the useless fallback.
+    if source_site == "ParadiseHill" and (
+        video.get("_part_urls") or video.get("_cdn_url")
+    ):
+        return False, last_reason, {
+            **last_extra,
+            "attempts": DOWNLOAD_ATTEMPTS,
+            "fallback": "skipped-ytdlp",
+        }
 
     _clean_download_artifacts(dest_dir)
     _refresh_video_download_urls(video, source_site, DOWNLOAD_ATTEMPTS + 1)
@@ -308,8 +412,7 @@ def _download(video, dest_dir, force_ytdlp: bool = False) -> tuple[bool, str, di
                 if not part_url:
                     continue
                 pf = os.path.join(dest_dir, f"part_{i:03d}.mp4")
-                cmd = ["wget", "-q", "--no-check-certificate", "-O", pf, str(part_url)]
-                last_result = subprocess.run(cmd, capture_output=True, timeout=DOWNLOAD_TIMEOUT, env=dl_env)
+                last_result = _run_wget_cdn(pf, str(part_url), dl_env, referer=url)
                 if not (os.path.exists(pf) and os.path.getsize(pf) > 100_000):
                     size = os.path.getsize(pf) if os.path.exists(pf) else 0
                     return False, f"part {i + 1} missing or too small ({size} bytes)", {
@@ -347,8 +450,7 @@ def _download(video, dest_dir, force_ytdlp: bool = False) -> tuple[bool, str, di
                     }
             else:
                 method = "wget-cdn"
-                cmd = ["wget", "-q", "--no-check-certificate", "-O", dest, cdn]
-                last_result = subprocess.run(cmd, capture_output=True, timeout=DOWNLOAD_TIMEOUT, env=dl_env)
+                last_result = _run_wget_cdn(dest, cdn, dl_env, referer=url)
         else:
             method = "yt-dlp"
             tmp = os.path.join(dest_dir, "dl.%(ext)s")

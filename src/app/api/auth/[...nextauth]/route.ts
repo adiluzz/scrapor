@@ -10,22 +10,23 @@ import { handlers } from "@/auth";
  * hosts (admin / pisster / fbb / sharlila) keep working without a single AUTH_URL.
  */
 function withPublicUrl(req: NextRequest): NextRequest {
-  const host =
+  const forwardedHost =
     req.headers.get("x-forwarded-host")?.split(",")[0]?.trim() ||
     req.headers.get("host");
-  if (!host || host.startsWith("0.0.0.0")) return req;
+  if (!forwardedHost || forwardedHost.startsWith("0.0.0.0")) return req;
 
   const proto = (
     req.headers.get("x-forwarded-proto")?.split(",")[0]?.trim() ||
     req.nextUrl.protocol.replace(":", "") ||
     "https"
   );
+  // Prefer reconstructing the origin — mutating protocol on a :3000 URL keeps
+  // the listen port (https://host:3000), which breaks public redirects.
+  const publicOrigin = `${proto}://${forwardedHost}`;
   const url = new URL(req.url);
-  if (url.host === host && url.protocol === `${proto}:`) return req;
+  if (url.origin === publicOrigin) return req;
 
-  url.protocol = `${proto}:`;
-  url.host = host;
-  return new NextRequest(url, req);
+  return new NextRequest(new URL(`${url.pathname}${url.search}`, publicOrigin), req);
 }
 
 export function GET(req: NextRequest) {

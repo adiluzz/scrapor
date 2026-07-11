@@ -3,6 +3,7 @@ import type { Site } from "@prisma/client";
 import SearchBar from "@/components/site/SearchBar";
 import SignOutButton from "@/components/auth/SignOutButton";
 import Logo from "@/components/brand/Logo";
+import TubeMobileNav from "@/components/site/TubeMobileNav";
 import { getCurrentUser } from "@/lib/session";
 
 export default async function Header({
@@ -18,7 +19,16 @@ export default async function Header({
   return (
     <header className="sticky top-0 z-30 border-b border-zinc-800/90 bg-zinc-950/90 backdrop-blur supports-[backdrop-filter]:bg-zinc-950/80">
       <div className="mx-auto flex max-w-7xl flex-col gap-3 px-4 py-3 md:flex-row md:items-center">
-        <Logo site={site} />
+        <div className="flex items-center justify-between gap-3 md:contents">
+          <Logo site={site} />
+
+          {!isStudio && (
+            <TubeMobileNav
+              signedIn={!!user}
+              signOut={<SignOutButton className="text-zinc-500 hover:text-white" />}
+            />
+          )}
+        </div>
 
         {!isStudio ? (
           <div className="flex-1 md:px-6">
@@ -28,7 +38,11 @@ export default async function Header({
           <div className="flex-1" />
         )}
 
-        <nav className="flex items-center gap-4 text-sm">
+        <nav
+          className={`items-center gap-4 text-sm ${
+            isStudio ? "flex" : "hidden md:flex"
+          }`}
+        >
           {isStudio ? (
             <>
               <Link href="/" className="text-zinc-300 hover:text-white">

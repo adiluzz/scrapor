@@ -1,6 +1,5 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
-import { getSiteIdForAuth } from "@/lib/site";
 import { guardApiRoute } from "@/lib/admin-guard";
 import { readPornstarImage } from "@/lib/pornstar-image";
 
@@ -17,9 +16,10 @@ export async function GET(
     return NextResponse.json({ error: "Invalid id" }, { status: 400 });
   }
 
-  const siteId = await getSiteIdForAuth(auth);
-  const star = await prisma.pornstar.findFirst({
-    where: { id, siteId },
+  // Lookup by id only — pornstars are stored under their origin site, but
+  // admin (and cross-published public pages) must still serve the portrait.
+  const star = await prisma.pornstar.findUnique({
+    where: { id },
     select: { id: true, siteId: true, s3Image: true },
   });
   if (!star?.s3Image) {

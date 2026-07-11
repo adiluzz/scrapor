@@ -27,8 +27,8 @@ export async function POST(
     );
   }
 
-  const star = await prisma.pornstar.findFirst({
-    where: { id, siteId: auth.siteId },
+  const star = await prisma.pornstar.findUnique({
+    where: { id },
     select: { id: true, siteId: true, name: true },
   });
   if (!star) return NextResponse.json({ error: "Not found" }, { status: 404 });

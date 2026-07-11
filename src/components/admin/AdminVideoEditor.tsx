@@ -3,6 +3,7 @@
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 import TagBadge from "@/components/site/TagBadge";
+import PornstarPicker from "@/components/admin/PornstarPicker";
 import {
   PISS_SWALLOW_VERIFIED_NAME,
   PISS_SWALLOW_VERIFIED_SLUG,
@@ -42,7 +43,7 @@ export default function AdminVideoEditor({ videoId }: { videoId: string }) {
   const router = useRouter();
   const [form, setForm] = useState<VideoForm | null>(null);
   const [tagsText, setTagsText] = useState("");
-  const [pornstarsText, setPornstarsText] = useState("");
+  const [pornstars, setPornstars] = useState<string[]>([]);
   const [categoriesText, setCategoriesText] = useState("");
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -87,7 +88,7 @@ export default function AdminVideoEditor({ videoId }: { videoId: string }) {
         hasVideoSource: Boolean(v.hasVideoSource),
       });
       setTagsText((v.tags ?? []).join(", "));
-      setPornstarsText((v.pornstars ?? []).join(", "));
+      setPornstars(v.pornstars ?? []);
       setCategoriesText((v.categories ?? []).join(", "));
       setTaxonomyTags((taxData.tags ?? []).map((t: { name: string }) => t.name));
       setTaxonomyStars((taxData.pornstars ?? []).map((p: { name: string }) => p.name));
@@ -182,7 +183,7 @@ export default function AdminVideoEditor({ videoId }: { videoId: string }) {
         status: form.status,
         isDeleted: form.isDeleted,
         tags: parseList(tagsText),
-        pornstars: parseList(pornstarsText),
+        pornstars,
         categories: parseList(categoriesText),
       };
       if (form.sourceUploadDate) {
@@ -398,20 +399,14 @@ export default function AdminVideoEditor({ videoId }: { videoId: string }) {
           </datalist>
         </label>
 
-        <label className="block text-sm text-zinc-300">
-          Pornstars (comma-separated)
-          <input
-            className={inputClass}
-            value={pornstarsText}
-            onChange={(e) => setPornstarsText(e.target.value)}
-            list="admin-pornstar-suggestions"
+        <div className="block text-sm text-zinc-300 sm:col-span-2">
+          <span className="mb-1 block">Pornstars</span>
+          <PornstarPicker
+            value={pornstars}
+            onChange={setPornstars}
+            suggestions={taxonomyStars}
           />
-          <datalist id="admin-pornstar-suggestions">
-            {taxonomyStars.map((p) => (
-              <option key={p} value={p} />
-            ))}
-          </datalist>
-        </label>
+        </div>
       </div>
 
       <div className="mt-6 flex flex-wrap gap-3">

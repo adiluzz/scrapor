@@ -14,7 +14,8 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
   if (g instanceof NextResponse) return g;
   const { id } = await params;
 
-  const video = await prisma.video.findFirst({ where: { id, siteId: g.siteId } });
+  // Platform-wide: admin may preview any video regardless of storage site.
+  const video = await prisma.video.findUnique({ where: { id } });
   if (!video) return NextResponse.json({ error: "Not found" }, { status: 404 });
 
   const ip =

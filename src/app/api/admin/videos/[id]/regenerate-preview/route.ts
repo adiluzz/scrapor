@@ -10,8 +10,8 @@ export async function POST(_request: Request, { params }: { params: Promise<{ id
   if (auth instanceof NextResponse) return auth;
   const { id } = await params;
 
-  const video = await prisma.video.findFirst({
-    where: { id, siteId: auth.siteId },
+  const video = await prisma.video.findUnique({
+    where: { id },
     select: { id: true, slug: true, s3VideoKey: true, s3PreviewKey: true, previewVersion: true },
   });
   if (!video) return NextResponse.json({ error: "Not found" }, { status: 404 });

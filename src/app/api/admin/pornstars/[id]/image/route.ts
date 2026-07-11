@@ -12,8 +12,8 @@ export async function POST(
   if (auth instanceof NextResponse) return auth;
   const { id } = await params;
 
-  const star = await prisma.pornstar.findFirst({
-    where: { id, siteId: auth.siteId },
+  const star = await prisma.pornstar.findUnique({
+    where: { id },
     select: { id: true, siteId: true },
   });
   if (!star) return NextResponse.json({ error: "Not found" }, { status: 404 });
@@ -47,8 +47,8 @@ export async function DELETE(
   if (auth instanceof NextResponse) return auth;
   const { id } = await params;
 
-  const star = await prisma.pornstar.findFirst({
-    where: { id, siteId: auth.siteId },
+  const star = await prisma.pornstar.findUnique({
+    where: { id },
     select: { id: true },
   });
   if (!star) return NextResponse.json({ error: "Not found" }, { status: 404 });

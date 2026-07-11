@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { headers } from "next/headers";
 import { prisma } from "@/lib/db";
 import { getSiteByDomain, normalizeHost } from "@/lib/site";
+import { pornstarHasVideosOnSite } from "@/lib/pornstar-sites";
 import { videoPageDescription } from "@/lib/seo";
 import {
   publicVideoContentUrl,
@@ -39,7 +40,11 @@ export async function GET() {
       },
       orderBy: { createdAt: "desc" },
     }),
-    prisma.pornstar.findMany({ where: { siteId: site.id }, select: { slug: true } }),
+    prisma.pornstar.findMany({
+      where: pornstarHasVideosOnSite(site.id),
+      select: { slug: true },
+      distinct: ["slug"],
+    }),
     prisma.creatorProfile.findMany({ where: { siteId: site.id }, select: { slug: true } }),
     prisma.tag.findMany({ where: { siteId: site.id }, select: { slug: true } }),
   ]);

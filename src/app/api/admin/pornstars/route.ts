@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { guardAdmin } from "@/lib/admin-guard";
 import { pornstarImageUrl } from "@/lib/pornstar-image";
+import { pornstarSiteVideoCounts } from "@/lib/pornstar-sites";
 
 const MAX_LIMIT = 100;
 const DEFAULT_LIMIT = 50;
@@ -19,7 +20,6 @@ export async function GET(request: Request) {
   const page = Math.max(1, parseInt(url.searchParams.get("page") || "1", 10) || 1);
 
   const where = {
-    siteId: auth.siteId,
     ...(q ? { name: { contains: q, mode: "insensitive" as const } } : {}),
   };
 
@@ -27,12 +27,17 @@ export async function GET(request: Request) {
     prisma.pornstar.findMany({
       where,
       orderBy: [{ videos: { _count: "desc" } }, { name: "asc" }],
-      include: { _count: { select: { videos: true } } },
+      include: {
+        _count: { select: { videos: true } },
+        site: { select: { id: true, name: true, slug: true } },
+      },
       skip: (page - 1) * limit,
       take: limit,
     }),
     prisma.pornstar.count({ where }),
   ]);
+
+  const siteCounts = await pornstarSiteVideoCounts(stars.map((s) => s.id));
 
   return NextResponse.json({
     total,
@@ -63,6 +68,8 @@ export async function GET(request: Request) {
       urls: s.urls,
       tpdbSyncedAt: s.tpdbSyncedAt?.toISOString() ?? null,
       videoCount: s._count.videos,
+      siteCounts: siteCounts.get(s.id) ?? [],
+      storageSite: s.site,
       hasImage: Boolean(s.s3Image),
       imageUrl: pornstarImageUrl(s),
     })),

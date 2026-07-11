@@ -53,3 +53,32 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
     sites: membership.map((m) => m.site),
   });
 }
+
+/** Remove a video from a single publication site. */
+export async function DELETE(request: Request, { params }: { params: Promise<{ id: string }> }) {
+  const g = await guardAdmin(request);
+  if (g instanceof NextResponse) return g;
+  const { id } = await params;
+
+  const video = await prisma.video.findUnique({ where: { id }, select: { id: true } });
+  if (!video) return NextResponse.json({ error: "Not found" }, { status: 404 });
+
+  const url = new URL(request.url);
+  const siteId = url.searchParams.get("siteId")?.trim();
+  if (!siteId) return NextResponse.json({ error: "siteId required" }, { status: 400 });
+
+  const result = await prisma.videoSite.deleteMany({ where: { videoId: id, siteId } });
+  if (result.count === 0) {
+    return NextResponse.json({ error: "Video is not published on that site" }, { status: 404 });
+  }
+
+  const membership = await prisma.videoSite.findMany({
+    where: { videoId: id },
+    include: { site: { select: { id: true, name: true, domain: true, slug: true, primaryColor: true } } },
+  });
+
+  return NextResponse.json({
+    ok: true,
+    sites: membership.map((m) => m.site),
+  });
+}

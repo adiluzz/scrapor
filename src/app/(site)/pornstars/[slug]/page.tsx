@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import { prisma } from "@/lib/db";
 import { getCurrentSite } from "@/lib/site";
 import { listVideos, parseDiscoveryParams } from "@/lib/queries";
+import { pornstarHasVideosOnSite } from "@/lib/pornstar-sites";
 import VideoGrid from "@/components/site/VideoGrid";
 import Filters from "@/components/site/Filters";
 import Pagination from "@/components/site/Pagination";
@@ -20,8 +21,14 @@ import {
 export const dynamic = "force-dynamic";
 type SearchParams = Record<string, string | string[] | undefined>;
 
+/** Resolve a pornstar by slug who has published videos on this site (any storage row). */
 async function getStar(siteId: string, slug: string) {
-  return prisma.pornstar.findUnique({ where: { siteId_slug: { siteId, slug } } });
+  const candidates = await prisma.pornstar.findMany({
+    where: { slug, ...pornstarHasVideosOnSite(siteId) },
+    orderBy: { name: "asc" },
+  });
+  if (candidates.length === 0) return null;
+  return candidates.find((c) => c.s3Image) ?? candidates[0];
 }
 
 export async function generateMetadata({
@@ -62,8 +69,9 @@ export default async function PornstarPage({
   if (!star) notFound();
 
   const dp = parseDiscoveryParams(await searchParams);
+  // Match by slug so duplicate per-site pornstar rows still surface all site videos.
   const { videos, total, totalPages } = await listVideos(site.id, dp, {
-    pornstars: { some: { pornstarId: star.id } },
+    pornstars: { some: { pornstar: { slug } } },
   });
   const base = await getSiteBaseUrl();
 

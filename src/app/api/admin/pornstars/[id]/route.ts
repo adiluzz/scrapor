@@ -70,8 +70,8 @@ export async function GET(
   if (auth instanceof NextResponse) return auth;
   const { id } = await params;
 
-  const star = await prisma.pornstar.findFirst({
-    where: { id, siteId: auth.siteId },
+  const star = await prisma.pornstar.findUnique({
+    where: { id },
     include: { _count: { select: { videos: true } } },
   });
   if (!star) return NextResponse.json({ error: "Not found" }, { status: 404 });
@@ -110,7 +110,7 @@ export async function PATCH(
   if (auth instanceof NextResponse) return auth;
   const { id } = await params;
 
-  const star = await prisma.pornstar.findFirst({ where: { id, siteId: auth.siteId } });
+  const star = await prisma.pornstar.findUnique({ where: { id } });
   if (!star) return NextResponse.json({ error: "Not found" }, { status: 404 });
 
   const parsed = patchSchema.safeParse(await request.json());
@@ -123,7 +123,7 @@ export async function PATCH(
   if (d.name && !slug) slug = slugify(d.name);
   if (slug && slug !== star.slug) {
     const clash = await prisma.pornstar.findUnique({
-      where: { siteId_slug: { siteId: auth.siteId, slug } },
+      where: { siteId_slug: { siteId: star.siteId, slug } },
     });
     if (clash && clash.id !== id) {
       return NextResponse.json({ error: "Slug already in use" }, { status: 409 });

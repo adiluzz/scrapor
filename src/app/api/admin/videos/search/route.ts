@@ -16,7 +16,6 @@ export async function GET(request: Request) {
 
   const videos = await prisma.video.findMany({
     where: {
-      siteId: auth.siteId,
       title: { contains: q, mode: "insensitive" },
     },
     orderBy: { viewCount: "desc" },

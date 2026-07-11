@@ -9,11 +9,21 @@ import TpdbImagePicker, {
   type TpdbPickerMatch,
 } from "@/components/admin/TpdbImagePicker";
 
+type SiteCount = {
+  siteId: string;
+  name: string;
+  slug: string;
+  primaryColor: string;
+  count: number;
+};
+
 type PornstarRow = Omit<PornstarProfileData, "tpdbSyncedAt"> & {
   id: string;
   name: string;
   slug: string;
   videoCount: number;
+  siteCounts?: SiteCount[];
+  storageSite?: { id: string; name: string; slug: string };
   hasImage: boolean;
   imageUrl: string | null;
   tpdbSyncedAt: string | null;
@@ -167,7 +177,7 @@ function PornstarImageEditor({
 
         <div className="min-w-0 flex-1">
           <Link
-            href={`/admin/pornstars/${star.slug}`}
+            href={`/admin/pornstars/${star.id}`}
             className="truncate font-medium text-white hover:text-brand-300"
           >
             {star.name}
@@ -175,6 +185,26 @@ function PornstarImageEditor({
           <p className="text-xs text-zinc-500">
             {star.videoCount} video{star.videoCount === 1 ? "" : "s"} · /pornstars/{star.slug}
           </p>
+          {star.siteCounts && star.siteCounts.length > 0 ? (
+            <div className="mt-2 flex flex-wrap gap-1.5">
+              {star.siteCounts.map((sc) => (
+                <span
+                  key={sc.siteId}
+                  className="inline-flex items-center gap-1.5 rounded-md border border-zinc-700 bg-zinc-950 px-2 py-0.5 text-[11px] text-zinc-300"
+                  title={`Published videos on ${sc.name}`}
+                >
+                  <span
+                    className="inline-block h-1.5 w-1.5 rounded-full"
+                    style={{ backgroundColor: sc.primaryColor }}
+                  />
+                  {sc.name}
+                  <span className="text-zinc-500">{sc.count}</span>
+                </span>
+              ))}
+            </div>
+          ) : (
+            <p className="mt-1 text-[11px] text-zinc-600">No published videos on any site</p>
+          )}
 
           <div className="mt-3 flex flex-wrap gap-2">
             <label className="cursor-pointer rounded-lg bg-zinc-800 px-3 py-1.5 text-xs text-zinc-200 hover:bg-zinc-700">

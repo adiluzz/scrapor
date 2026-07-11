@@ -14,15 +14,15 @@ function Stat({ label, value, href }: { label: string; value: number; href: stri
 }
 
 export default async function AdminHome() {
-  const user = await requireAdmin();
-  const siteId = user.siteId;
+  await requireAdmin();
 
+  // Platform-wide counts (admin is network-scoped; do not filter by admin user's storage site).
   const [videos, pornstars, creators, pendingApps, runs] = await Promise.all([
-    prisma.video.count({ where: { siteId, isDeleted: false } }),
-    prisma.pornstar.count({ where: { siteId } }),
-    prisma.creatorProfile.count({ where: { siteId } }),
-    prisma.creatorApplication.count({ where: { siteId, status: "PENDING" } }),
-    prisma.scrapeRun.count({ where: { siteId } }),
+    prisma.video.count({ where: { isDeleted: false } }),
+    prisma.pornstar.count(),
+    prisma.creatorProfile.count(),
+    prisma.creatorApplication.count({ where: { status: "PENDING" } }),
+    prisma.scrapeRun.count(),
   ]);
 
   return (
@@ -30,7 +30,7 @@ export default async function AdminHome() {
       <h1 className="mb-6 text-xl font-bold text-white sm:text-2xl">Overview</h1>
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5">
         <Stat label="Videos" value={videos} href="/admin/videos" />
-        <Stat label="Pornstars" value={pornstars} href="/admin/videos" />
+        <Stat label="Pornstars" value={pornstars} href="/admin/pornstars" />
         <Stat label="Creators" value={creators} href="/admin/creators" />
         <Stat label="Pending applications" value={pendingApps} href="/admin/applications" />
         <Stat label="Scrape runs" value={runs} href="/admin/scrape-runs" />

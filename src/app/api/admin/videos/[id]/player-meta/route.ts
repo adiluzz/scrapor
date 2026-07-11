@@ -12,8 +12,8 @@ export async function GET(
   if (auth instanceof NextResponse) return auth;
   const { id } = await params;
 
-  const video = await prisma.video.findFirst({
-    where: { id, siteId: auth.siteId },
+  const video = await prisma.video.findUnique({
+    where: { id },
     include: { heatmap: true },
   });
   if (!video) return NextResponse.json({ error: "Not found" }, { status: 404 });

@@ -12,18 +12,35 @@ import TpdbImagePicker, {
   type TpdbPickerMatch,
 } from "@/components/admin/TpdbImagePicker";
 
+type SiteRef = {
+  id: string;
+  name: string;
+  slug: string;
+  primaryColor: string;
+};
+
+type SiteCount = {
+  siteId: string;
+  name: string;
+  slug: string;
+  primaryColor: string;
+  count: number;
+};
+
 type PornstarRow = Omit<PornstarProfileData, "tpdbSyncedAt"> & {
   id: string;
   name: string;
   slug: string;
   bio: string | null;
   videoCount: number;
+  siteCounts?: SiteCount[];
+  storageSite?: { id: string; name: string; slug: string };
   hasImage: boolean;
   imageUrl: string | null;
   tpdbSyncedAt: string | null;
 };
 
-type VideoLink = VideoCardData & { linkId: string };
+type VideoLink = VideoCardData & { linkId: string; sites: SiteRef[] };
 
 function cacheBust(url: string | null) {
   if (!url) return null;
@@ -77,7 +94,8 @@ export default function AdminPornstarDetail({
   useEffect(() => {
     setStar(initialPornstar);
     setImageUrl(initialPornstar.imageUrl);
-  }, [initialPornstar]);
+    setVideos(initialVideos);
+  }, [initialPornstar, initialVideos]);
 
   const inputClass =
     "mt-1 w-full rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm text-white focus:border-brand-500 focus:outline-none";
@@ -213,11 +231,7 @@ export default function AdminPornstarDetail({
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Save failed");
       setSuccess("Saved");
-      if (data.pornstar?.slug && data.pornstar.slug !== star.slug) {
-        router.replace(`/admin/pornstars/${data.pornstar.slug}`);
-      } else {
-        router.refresh();
-      }
+      router.refresh();
     } catch (e) {
       setError(e instanceof Error ? e.message : "Save failed");
     } finally {
@@ -226,7 +240,9 @@ export default function AdminPornstarDetail({
   }
 
   async function unlinkVideo(videoId: string, title: string) {
-    if (!confirm(`Remove ${star.name} from "${title}"?`)) return;
+    if (!confirm(`Unlink ${star.name} from "${title}"? The video itself will not be deleted.`)) {
+      return;
+    }
     setError(null);
     try {
       const res = await fetch(
@@ -237,6 +253,33 @@ export default function AdminPornstarDetail({
       if (!res.ok) throw new Error(data.error || "Remove failed");
       setVideos((prev) => prev.filter((v) => v.linkId !== videoId));
       setStar((s) => ({ ...s, videoCount: Math.max(0, s.videoCount - 1) }));
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Remove failed");
+    }
+  }
+
+  async function removeFromSite(videoId: string, videoTitle: string, site: SiteRef) {
+    if (
+      !confirm(
+        `Remove "${videoTitle}" from ${site.name}? It will no longer appear on that website.`
+      )
+    ) {
+      return;
+    }
+    setError(null);
+    try {
+      const res = await fetch(
+        `/api/admin/videos/${videoId}/sites?siteId=${encodeURIComponent(site.id)}`,
+        { method: "DELETE" }
+      );
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Remove failed");
+      const nextSites = (data.sites ?? []) as SiteRef[];
+      setVideos((prev) =>
+        prev.map((v) => (v.linkId === videoId ? { ...v, sites: nextSites } : v))
+      );
+      setSuccess(`Removed from ${site.name}`);
+      router.refresh();
     } catch (e) {
       setError(e instanceof Error ? e.message : "Remove failed");
     }
@@ -267,6 +310,24 @@ export default function AdminPornstarDetail({
               Public page
             </a>
           </p>
+
+          {star.siteCounts && star.siteCounts.length > 0 && (
+            <div className="flex flex-wrap gap-1.5">
+              {star.siteCounts.map((sc) => (
+                <span
+                  key={sc.siteId}
+                  className="inline-flex items-center gap-1.5 rounded-md border border-zinc-700 bg-zinc-950 px-2 py-0.5 text-xs text-zinc-300"
+                >
+                  <span
+                    className="inline-block h-1.5 w-1.5 rounded-full"
+                    style={{ backgroundColor: sc.primaryColor }}
+                  />
+                  {sc.name}
+                  <span className="text-zinc-500">{sc.count}</span>
+                </span>
+              ))}
+            </div>
+          )}
 
           <div className="flex flex-wrap gap-2">
             <label className="cursor-pointer rounded-lg bg-zinc-800 px-3 py-1.5 text-xs text-zinc-200 hover:bg-zinc-700">
@@ -462,17 +523,48 @@ export default function AdminPornstarDetail({
             <VideoGrid videos={videos} hrefPrefix="/admin/videos" />
             <ul className="divide-y divide-zinc-800 rounded-xl border border-zinc-800">
               {videos.map((v) => (
-                <li key={v.linkId} className="flex flex-wrap items-center justify-between gap-2 px-4 py-3 text-sm">
-                  <Link href={`/admin/videos/${v.slug}`} className="text-zinc-200 hover:text-white">
-                    {v.title}
-                  </Link>
-                  <button
-                    type="button"
-                    onClick={() => unlinkVideo(v.linkId, v.title)}
-                    className="rounded px-2 py-1 text-xs text-red-400 hover:bg-red-950/40"
-                  >
-                    Remove from video
-                  </button>
+                <li key={v.linkId} className="space-y-2 px-4 py-3 text-sm">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <Link href={`/admin/videos/${v.slug}`} className="text-zinc-200 hover:text-white">
+                      {v.title}
+                    </Link>
+                    <button
+                      type="button"
+                      onClick={() => unlinkVideo(v.linkId, v.title)}
+                      className="rounded px-2 py-1 text-xs text-red-400 hover:bg-red-950/40"
+                    >
+                      Unlink pornstar
+                    </button>
+                  </div>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="text-[11px] uppercase tracking-wide text-zinc-600">
+                      Published on
+                    </span>
+                    {v.sites.length === 0 ? (
+                      <span className="text-xs text-zinc-600">No websites</span>
+                    ) : (
+                      v.sites.map((site) => (
+                        <span
+                          key={site.id}
+                          className="inline-flex items-center gap-1.5 rounded-md border border-zinc-700 bg-zinc-950 pl-2 text-xs text-zinc-300"
+                        >
+                          <span
+                            className="inline-block h-1.5 w-1.5 rounded-full"
+                            style={{ backgroundColor: site.primaryColor }}
+                          />
+                          {site.name}
+                          <button
+                            type="button"
+                            title={`Remove from ${site.name}`}
+                            onClick={() => removeFromSite(v.linkId, v.title, site)}
+                            className="rounded-r-md px-1.5 py-1 text-zinc-500 hover:bg-red-950/40 hover:text-red-400"
+                          >
+                            ×
+                          </button>
+                        </span>
+                      ))
+                    )}
+                  </div>
                 </li>
               ))}
             </ul>

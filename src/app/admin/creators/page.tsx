@@ -5,9 +5,8 @@ import AdminCreators from "@/components/admin/AdminCreators";
 export const dynamic = "force-dynamic";
 
 export default async function AdminCreatorsPage() {
-  const user = await requireAdmin();
+  await requireAdmin();
   const creators = await prisma.creatorProfile.findMany({
-    where: { siteId: user.siteId },
     orderBy: { createdAt: "desc" },
     include: { user: { select: { email: true } }, _count: { select: { videos: true } } },
   });

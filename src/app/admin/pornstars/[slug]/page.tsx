@@ -5,6 +5,7 @@ import { requireAdmin } from "@/lib/session";
 import { pornstarImageUrl } from "@/lib/pornstar-image";
 import { isTpdbConfigured } from "@/lib/theporndb";
 import { toCard } from "@/lib/queries";
+import { pornstarSiteVideoCounts } from "@/lib/pornstar-sites";
 import AdminPornstarDetail from "@/components/admin/AdminPornstarDetail";
 
 export const dynamic = "force-dynamic";
@@ -14,25 +15,51 @@ export default async function AdminPornstarPage({
 }: {
   params: Promise<{ slug: string }>;
 }) {
-  const user = await requireAdmin();
-  const { slug } = await params;
+  await requireAdmin();
+  const { slug: idOrSlug } = await params;
 
-  const star = await prisma.pornstar.findUnique({
-    where: { siteId_slug: { siteId: user.siteId, slug } },
-    include: { _count: { select: { videos: true } } },
-  });
+  // Prefer id (stable across sites); fall back to slug for old bookmarks.
+  const star =
+    (await prisma.pornstar.findUnique({
+      where: { id: idOrSlug },
+      include: {
+        _count: { select: { videos: true } },
+        site: { select: { id: true, name: true, slug: true } },
+      },
+    })) ??
+    (await prisma.pornstar.findFirst({
+      where: { slug: idOrSlug },
+      include: {
+        _count: { select: { videos: true } },
+        site: { select: { id: true, name: true, slug: true } },
+      },
+      orderBy: { name: "asc" },
+    }));
   if (!star) notFound();
 
   const videoRows = await prisma.video.findMany({
-    where: { siteId: user.siteId, pornstars: { some: { pornstarId: star.id } } },
+    where: { pornstars: { some: { pornstarId: star.id } } },
     orderBy: { createdAt: "desc" },
     take: 60,
-    include: { pornstars: { include: { pornstar: true }, take: 3 } },
+    include: {
+      pornstars: { include: { pornstar: true }, take: 3 },
+      sites: {
+        include: {
+          site: { select: { id: true, name: true, slug: true, primaryColor: true } },
+        },
+      },
+    },
   });
 
-  const cards = await Promise.all(
-    videoRows.map(async (v) => ({ ...(await toCard(v)), linkId: v.id }))
-  );
+  const [cards, siteCountsMap] = await Promise.all([
+    Promise.all(videoRows.map(async (v) => ({ ...(await toCard(v)), linkId: v.id }))),
+    pornstarSiteVideoCounts([star.id]),
+  ]);
+
+  const videosWithSites = videoRows.map((v, i) => ({
+    ...cards[i],
+    sites: v.sites.map((m) => m.site),
+  }));
 
   const initialPornstar = {
     id: star.id,
@@ -40,6 +67,8 @@ export default async function AdminPornstarPage({
     slug: star.slug,
     bio: star.bio,
     videoCount: star._count.videos,
+    siteCounts: siteCountsMap.get(star.id) ?? [],
+    storageSite: star.site,
     hasImage: Boolean(star.s3Image),
     imageUrl: pornstarImageUrl(star),
     tpdbId: star.tpdbId,
@@ -74,7 +103,7 @@ export default async function AdminPornstarPage({
 
       <AdminPornstarDetail
         initialPornstar={initialPornstar}
-        initialVideos={cards}
+        initialVideos={videosWithSites}
         tpdbConfigured={isTpdbConfigured()}
       />
     </div>

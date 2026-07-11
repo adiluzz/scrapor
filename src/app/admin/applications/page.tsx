@@ -11,9 +11,8 @@ const statusColor: Record<string, string> = {
 };
 
 export default async function ApplicationsPage() {
-  const user = await requireAdmin();
+  await requireAdmin();
   const apps = await prisma.creatorApplication.findMany({
-    where: { siteId: user.siteId },
     orderBy: [{ status: "asc" }, { createdAt: "desc" }],
     include: { user: { select: { email: true } } },
     take: 100,

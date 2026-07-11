@@ -12,8 +12,8 @@ export async function DELETE(
   if (auth instanceof NextResponse) return auth;
   const { id: pornstarId } = await params;
 
-  const star = await prisma.pornstar.findFirst({
-    where: { id: pornstarId, siteId: auth.siteId },
+  const star = await prisma.pornstar.findUnique({
+    where: { id: pornstarId },
     select: { id: true },
   });
   if (!star) return NextResponse.json({ error: "Not found" }, { status: 404 });
@@ -22,8 +22,8 @@ export async function DELETE(
   const videoId = url.searchParams.get("videoId")?.trim();
   if (!videoId) return NextResponse.json({ error: "videoId required" }, { status: 400 });
 
-  const video = await prisma.video.findFirst({
-    where: { id: videoId, siteId: auth.siteId },
+  const video = await prisma.video.findUnique({
+    where: { id: videoId },
     select: { id: true },
   });
   if (!video) return NextResponse.json({ error: "Video not found" }, { status: 404 });

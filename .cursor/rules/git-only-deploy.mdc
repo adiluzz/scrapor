@@ -1,25 +1,64 @@
 ---
-description: Deploy and sync only through git — never scp/rsync hotfixes to the server
+description: Git-only deploys, safe compose rebuilds, and admin DNS NXDOMAIN notes
 alwaysApply: true
 ---
 
-# Git-only workflow
+# Git-only deployment
 
-**Never** deploy by copying files onto the server (`scp`, `rsync`, `tar | ssh`, editing `/opt/pisster` directly, or rebuilding from an unclean tree).
+**Never** deploy by copying files onto the server (`scp`, `rsync`, `tar | ssh`, editing `/opt/pisster` outside git, or rebuilding from an unclean tree).
 
-## Required flow
+## Standard deploy (app / web code)
 
-1. Edit in the local git repo only.
-2. Commit on a branch (when the user asks, or when they ask to update/deploy the repo).
-3. `git push` to origin.
-4. On the server: `git pull` (or fetch + reset to the pushed ref), then `docker compose up -d --build …` as needed.
+From the **local** repo:
+
+1. Commit and `git push origin HEAD` (only when the user asks to commit/deploy).
+2. On the server (`/opt/pisster`):
+
+```bash
+git fetch origin
+git reset --hard origin/main   # clean tree; must match pushed commit
+docker compose run --rm migrate   # only if there are new Prisma migrations
+docker compose up -d --build --force-recreate --no-deps web
+```
+
+Rebuild **only `web`** for Next.js / app changes. Do **not** recreate `nginx`, `postgres`, `redis`, `caddy`, or workers unless their config/image actually changed.
+
+## When nginx config changed
+
+Only if `nginx/` or nginx-related `.env` keys (`SITE_SERVER_NAMES`, `NETWORK_REFERERS`, …) changed:
+
+```bash
+docker compose up -d --force-recreate --no-deps nginx
+```
+
+Prefer this **after** `web` is healthy. Recreating nginx too often caused intermittent `web could not be resolved` 502s historically.
+
+## Verify after deploy
+
+```bash
+# App (bypass client DNS): should be 200
+curl -sS -o /dev/null -w '%{http_code}\n' --resolve admin.sharlila.com:443:3.224.159.145 https://admin.sharlila.com/login
+curl -sS -o /dev/null -w '%{http_code}\n' https://pisster.com/
+
+# DNS (authoritative / public): should show the server A record
+dig +short @8.8.8.8 admin.sharlila.com A
+```
+
+Server git must be clean and at the same commit as `origin/main`.
+
+## `DNS_PROBE_FINISHED_NXDOMAIN` on admin.sharlila.com
+
+This is **not** caused by `docker compose` / git deploy. Deploy does not change Route 53.
+
+- Authoritative DNS **does** have `admin.sharlila.com` → server IP (TTL 300).
+- Some resolvers (ISP, AWS VPC `172.31.0.2`, browsers) may still answer **NXDOMAIN** from a **negative cache** if the name was queried before the A record existed. SOA minimum controls how long that cache lasts.
+- App can still be healthy: `curl --resolve admin.sharlila.com:443:<server-ip> https://admin.sharlila.com/login` → 200 while the browser shows NXDOMAIN.
+
+**What to do:** confirm with `dig @8.8.8.8 admin.sharlila.com A` and `--resolve` curl. Flush local DNS / try another network or wait for negative cache to expire. Do **not** “fix” it by scp’ing or recreating the whole stack.
 
 ## Forbidden
 
-- Patching production with ad-hoc file copies so the server has uncommitted diffs
-- Leaving the server git worktree dirty as the source of truth
-- Rebuilding Docker from files that are not committed and pushed
-
-## If local and server diverge
-
-Reconcile **through git**: bring changes into the repo, commit, push, then make the server match `origin` — do not “fix prod” outside git again.
+- Hotfixing production outside git
+- Leaving the server worktree dirty as source of truth
+- Recreating nginx/caddy/postgres on every web deploy
+- Assuming browser NXDOMAIN means the deploy broke the app

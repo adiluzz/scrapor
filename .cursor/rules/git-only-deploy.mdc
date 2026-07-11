@@ -48,13 +48,23 @@ Server git must be clean and at the same commit as `origin/main`.
 
 ## `DNS_PROBE_FINISHED_NXDOMAIN` on admin.sharlila.com
 
-This is **not** caused by `docker compose` / git deploy. Deploy does not change Route 53.
+Deploy does **not** change Route 53 and does **not** delete the A record. The app can be healthy while the browser shows NXDOMAIN.
 
-- Authoritative DNS **does** have `admin.sharlila.com` → server IP (TTL 300).
-- Some resolvers (ISP, AWS VPC `172.31.0.2`, browsers) may still answer **NXDOMAIN** from a **negative cache** if the name was queried before the A record existed. SOA minimum controls how long that cache lasts.
-- App can still be healthy: `curl --resolve admin.sharlila.com:443:<server-ip> https://admin.sharlila.com/login` → 200 while the browser shows NXDOMAIN.
+**Why it feels like “deploy broke DNS”:** the A record TTL is **300s**. A deploy (build + recreate) often takes longer than that. While you wait, the browser/OS positive cache expires; the next lookup goes to the LAN/ISP resolver (e.g. router `192.168.1.1`), which may still have a **stale NXDOMAIN** from before `admin.sharlila.com` existed. So: worked (cached A) → deploy wait → NXDOMAIN (bad recursive cache). Public resolvers stay fine the whole time.
 
-**What to do:** confirm with `dig @8.8.8.8 admin.sharlila.com A` and `--resolve` curl. Flush local DNS / try another network or wait for negative cache to expire. Do **not** “fix” it by scp’ing or recreating the whole stack.
+**Proof checklist (run when Chrome shows NXDOMAIN):**
+
+```bash
+dig +short @8.8.8.8 admin.sharlila.com A          # expect 3.224.159.145
+dig +short @192.168.1.1 admin.sharlila.com A      # often empty/NXDOMAIN on home router
+curl -sS -o /dev/null -w '%{http_code}\n' \
+  --resolve admin.sharlila.com:443:3.224.159.145 \
+  https://admin.sharlila.com/login                 # expect 200 → app/deploy OK
+```
+
+**What to do:** use `8.8.8.8` / `1.1.1.1` on the client or router, reboot/flush the router DNS cache, or wait for negative cache to expire. Do **not** “fix” it with scp or a full stack recreate.
+
+SOA negative-cache minimum for `sharlila.com` was lowered to **300s** so new NXDOMAIN answers expire faster; resolvers that already cached the old 24h NXDOMAIN must still age that out or be flushed.
 
 ## Forbidden
 

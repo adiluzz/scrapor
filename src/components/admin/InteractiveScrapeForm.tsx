@@ -2,17 +2,26 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import ExternalVideoSelectGrid from "@/components/admin/ExternalVideoSelectGrid";
 import { SOURCE_SITES } from "@/lib/source-sites";
 import type { ScrapeCandidate } from "@/types/scrape-candidate";
 
 const PREVIEW_BATCH = 50;
 
+type TubeSite = {
+  id: string;
+  name: string;
+  kind: string;
+  primaryColor: string;
+};
+
 export default function InteractiveScrapeForm() {
   const router = useRouter();
   const [query, setQuery] = useState("");
   const [sources, setSources] = useState<string[]>([...SOURCE_SITES]);
+  const [tubeSites, setTubeSites] = useState<TubeSite[]>([]);
+  const [targetSiteIds, setTargetSiteIds] = useState<string[]>([]);
   const [minMinutes, setMinMinutes] = useState(10);
   const [skip, setSkip] = useState(0);
   const [error, setError] = useState<string | null>(null);
@@ -27,6 +36,17 @@ export default function InteractiveScrapeForm() {
   const [urlInput, setUrlInput] = useState("");
   const [resolvingUrls, setResolvingUrls] = useState(false);
   const [urlErrors, setUrlErrors] = useState<Array<{ url: string; error: string }>>([]);
+
+  useEffect(() => {
+    (async () => {
+      const res = await fetch("/api/admin/sites");
+      const data = await res.json();
+      if (!res.ok) return;
+      const tubes = (data.sites as TubeSite[]).filter((s) => s.kind === "TUBE");
+      setTubeSites(tubes);
+      setTargetSiteIds(tubes.map((s) => s.id));
+    })();
+  }, []);
 
   function parseUrlLines(text: string): string[] {
     return text
@@ -48,6 +68,10 @@ export default function InteractiveScrapeForm() {
 
   function toggleSource(s: string) {
     setSources((prev) => (prev.includes(s) ? prev.filter((x) => x !== s) : [...prev, s]));
+  }
+
+  function toggleTarget(id: string) {
+    setTargetSiteIds((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]));
   }
 
   function toggleUrl(url: string) {
@@ -182,6 +206,10 @@ export default function InteractiveScrapeForm() {
 
   async function downloadSelected() {
     if (selectedUrls.size === 0) return;
+    if (targetSiteIds.length === 0) {
+      setError("Select at least one publish target website");
+      return;
+    }
     setDownloading(true);
     setError(null);
     try {
@@ -194,6 +222,7 @@ export default function InteractiveScrapeForm() {
           sources: [...new Set(selected.map((v) => v.sourceSite))],
           minDurationSec: minMinutes * 60,
           candidates: selected.map(({ durationLabel: _d, inCatalog: _i, ...rest }) => rest),
+          targetSiteIds,
         }),
       });
       const data = await res.json();
@@ -261,6 +290,41 @@ export default function InteractiveScrapeForm() {
                 {s}
               </label>
             ))}
+          </div>
+        </div>
+
+        <div>
+          <p className="mb-2 text-sm text-zinc-400">Publish to websites</p>
+          <div className="flex flex-wrap gap-2">
+            {tubeSites.length === 0 ? (
+              <span className="text-xs text-zinc-600">Loading tube sites…</span>
+            ) : (
+              tubeSites.map((s) => (
+                <label
+                  key={s.id}
+                  className={`cursor-pointer rounded-full border px-3 py-1.5 text-sm ${
+                    targetSiteIds.includes(s.id)
+                      ? "border-brand-500 bg-brand-600/20 text-brand-200"
+                      : "border-zinc-700 bg-zinc-950 text-zinc-400"
+                  }`}
+                >
+                  <input
+                    type="checkbox"
+                    className="hidden"
+                    checked={targetSiteIds.includes(s.id)}
+                    onChange={() => toggleTarget(s.id)}
+                    disabled={searching || downloading}
+                  />
+                  <span className="inline-flex items-center gap-2">
+                    <span
+                      className="inline-block h-2.5 w-2.5 rounded-full"
+                      style={{ backgroundColor: s.primaryColor }}
+                    />
+                    {s.name}
+                  </span>
+                </label>
+              ))
+            )}
           </div>
         </div>
 
@@ -385,7 +449,7 @@ export default function InteractiveScrapeForm() {
               <button
                 type="button"
                 onClick={downloadSelected}
-                disabled={downloading || selectedUrls.size === 0}
+                disabled={downloading || selectedUrls.size === 0 || targetSiteIds.length === 0}
                 className="rounded-lg bg-brand-600 px-5 py-2.5 text-sm font-medium text-white hover:bg-brand-500 disabled:opacity-50"
               >
                 {downloading

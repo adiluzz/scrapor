@@ -1,0 +1,11 @@
+# ============================================================================
+# Network site block for the dockerized Caddy edge.
+#
+# Append to Caddy's Caddyfile (e.g. /opt/chiro/Caddyfile) and reload.
+# Shared CDN stays on cdn.pisster.com. Admin is admin.sharlila.com only
+# (admin.pisster.com is intentionally omitted).
+# ============================================================================
+
+pisster.com, www.pisster.com, cdn.pisster.com, fbbtube.com, www.fbbtube.com, sharlila.com, www.sharlila.com, admin.sharlila.com {
+	reverse_proxy pisster-edge:80
+}

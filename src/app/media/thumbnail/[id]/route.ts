@@ -28,7 +28,12 @@ export async function GET(
 
   const siteId = await getSiteIdForAuth(auth);
   const video = await prisma.video.findFirst({
-    where: { id, siteId, isDeleted: false, status: "READY" },
+    where: {
+      id,
+      isDeleted: false,
+      status: "READY",
+      OR: [{ siteId }, { sites: { some: { siteId } } }],
+    },
     select: { id: true, siteId: true, s3ThumbKey: true },
   });
   if (!video) {

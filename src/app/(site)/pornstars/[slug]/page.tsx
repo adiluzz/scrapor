@@ -33,14 +33,19 @@ export async function generateMetadata({
   const site = await getCurrentSite();
   const star = await getStar(site.id, slug);
   if (!star) return { title: "Not found" };
-  const title = `${star.name} Piss Drinking Porn Videos`;
-  const description = pornstarPageDescription(star.name, site.name, star.bio);
+  const title = `${star.name} Videos`;
+  const description = pornstarPageDescription(star.name, site, star.bio);
   return {
     title,
     description,
-    keywords: keywordsMeta([star.name, `${star.name} piss drinking`, `${star.name} watersports`]),
+    keywords: keywordsMeta(site, [star.name, `${star.name} videos`]),
     alternates: { canonical: `/pornstars/${star.slug}` },
-    openGraph: buildOpenGraph({ title, description, url: `/pornstars/${star.slug}` }),
+    openGraph: buildOpenGraph({
+      title,
+      description,
+      url: `/pornstars/${star.slug}`,
+      siteName: site.name,
+    }),
   };
 }
 
@@ -69,7 +74,7 @@ export default async function PornstarPage({
           "@context": "https://schema.org",
           "@type": "Person",
           name: star.name,
-          description: pornstarPageDescription(star.name, site.name, star.bio),
+          description: pornstarPageDescription(star.name, site, star.bio),
           url: `${base}/pornstars/${star.slug}`,
         }}
       />

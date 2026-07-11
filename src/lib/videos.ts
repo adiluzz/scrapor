@@ -139,6 +139,8 @@ export async function linkCategories(siteId: string, videoId: string, names: str
  */
 export async function upsertVideoWithMedia(input: {
   siteId: string;
+  /** Sites to publish on (VideoSite). Defaults to [siteId]. */
+  publishSiteIds?: string[];
   sourceUrl: string;
   title: string;
   description?: string | null;
@@ -186,6 +188,12 @@ export async function upsertVideoWithMedia(input: {
     const slug = await uniqueVideoSlug(input.siteId, input.title, video.id);
     video = await prisma.video.update({ where: { id: video.id }, data: { slug } });
   }
+
+  const publishIds = [...new Set(input.publishSiteIds?.length ? input.publishSiteIds : [input.siteId])];
+  await prisma.videoSite.createMany({
+    data: publishIds.map((siteId) => ({ videoId: video.id, siteId })),
+    skipDuplicates: true,
+  });
 
   if (input.pornstars?.length) await linkPornstars(input.siteId, video.id, input.pornstars);
   if (input.tags?.length) await linkTags(input.siteId, video.id, input.tags);

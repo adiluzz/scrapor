@@ -29,6 +29,9 @@ export async function sendMail(opts: {
   subject: string;
   html: string;
   text?: string;
+  /** Override From display, e.g. `FBB Tube <office@…>`. */
+  from?: string;
+  brandName?: string;
 }): Promise<boolean> {
   const tx = getTransport();
   if (!tx) {
@@ -36,7 +39,13 @@ export async function sendMail(opts: {
     return false;
   }
   try {
-    await tx.sendMail({ from: FROM, to: opts.to, subject: opts.subject, html: opts.html, text: opts.text });
+    await tx.sendMail({
+      from: opts.from || FROM,
+      to: opts.to,
+      subject: opts.subject,
+      html: opts.html,
+      text: opts.text,
+    });
     logger.info({ to: opts.to, subject: opts.subject }, "email sent");
     return true;
   } catch (err) {
@@ -45,25 +54,32 @@ export async function sendMail(opts: {
   }
 }
 
-const wrap = (title: string, body: string) => `
+const wrap = (title: string, body: string, brandName = "Pisster") => `
   <div style="font-family:system-ui,sans-serif;max-width:520px;margin:auto;background:#18181b;color:#e4e4e7;padding:28px;border-radius:12px">
     <h1 style="color:#f472b6;font-size:20px;margin:0 0 16px">${title}</h1>
     ${body}
-    <p style="color:#71717a;font-size:12px;margin-top:24px">Pisster</p>
+    <p style="color:#71717a;font-size:12px;margin-top:24px">${brandName}</p>
   </div>`;
 
-export async function sendVerificationCode(to: string, code: string, purpose: "SIGNUP" | "LOGIN") {
+export async function sendVerificationCode(
+  to: string,
+  code: string,
+  purpose: "SIGNUP" | "LOGIN",
+  brandName = "Pisster"
+) {
   const label = purpose === "SIGNUP" ? "confirm your account" : "sign in";
   return sendMail({
     to,
-    subject: `Your Pisster ${purpose === "SIGNUP" ? "sign-up" : "login"} code: ${code}`,
+    subject: `Your ${brandName} ${purpose === "SIGNUP" ? "sign-up" : "login"} code: ${code}`,
     html: wrap(
       "Your verification code",
       `<p>Use this code to ${label}. It expires in 10 minutes.</p>
        <p style="font-size:32px;letter-spacing:8px;font-weight:700;color:#fff">${code}</p>
-       <p style="color:#a1a1aa">If you didn't request this, ignore this email.</p>`
+       <p style="color:#a1a1aa">If you didn't request this, ignore this email.</p>`,
+      brandName
     ),
-    text: `Your Pisster code is ${code}. It expires in 10 minutes.`,
+    text: `Your ${brandName} code is ${code}. It expires in 10 minutes.`,
+    brandName,
   });
 }
 

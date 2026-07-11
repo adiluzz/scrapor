@@ -5,17 +5,18 @@ import { authConfig } from "@/auth.config";
 const { auth } = NextAuth(authConfig);
 
 const ADMIN_SUBDOMAIN = process.env.ADMIN_SUBDOMAIN || "admin";
+const ADMIN_BASE_DOMAIN = process.env.ADMIN_BASE_DOMAIN || "sharlila.com";
 
 /**
  * Resolves the request host and:
  *  - forwards it as `x-forwarded-host` so server components/routes can scope
  *    every query to the right Site;
- *  - gates the `admin.*` subdomain to authenticated ADMIN users, routing them
+ *  - gates admin.${ADMIN_BASE_DOMAIN} to authenticated ADMIN users, routing them
  *    into the `/admin` section and redirecting everyone else to login.
  */
 export default auth((req) => {
-  const host = (req.headers.get("host") || "").toLowerCase();
-  const isAdminHost = host.startsWith(`${ADMIN_SUBDOMAIN}.`);
+  const host = (req.headers.get("host") || "").toLowerCase().split(":")[0];
+  const isAdminHost = host === `${ADMIN_SUBDOMAIN}.${ADMIN_BASE_DOMAIN}`;
   const { pathname } = req.nextUrl;
 
   const requestHeaders = new Headers(req.headers);

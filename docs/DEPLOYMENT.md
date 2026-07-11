@@ -104,11 +104,13 @@ Edit `.env` and set at minimum:
 - `CDN_BASE_URL=https://cdn.pisster.com`
 - `AWS_REGION`, `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `S3_BUCKET`
 - `SMTP_USER=office@pisster.com`, `SMTP_PASS=<app password>`, `MAIL_FROM`, `ADMIN_NOTIFY_EMAIL`
-- `PRIMARY_DOMAIN=pisster.com`, `ADMIN_SUBDOMAIN=admin`
+- `PRIMARY_DOMAIN=pisster.com`, `ADMIN_SUBDOMAIN=admin`, `ADMIN_BASE_DOMAIN=sharlila.com`
+- `SITE_SERVER_NAMES=...` and `NETWORK_REFERERS=...` (see `.env.example`) for multi-site nginx
 - `EDGE_HTTP_PORT=8080` — localhost-only port the internal nginx publishes for
   debugging (`curl` from the host). Caddy reaches the edge over the shared Docker
   network (`pisster-edge:80`), not this port. Change it only if 8080 is taken.
-- (optional) `VAST_TAG_URL=<your ad network preroll tag>` — leave blank to disable ads.
+- Ad network settings (VAST / Exo zones) live **per site in the database**
+  (Admin → Websites → Ad settings). Env `VAST_*` / `EXO_*` are legacy only.
 
 `.env` is gitignored and must never be committed.
 
@@ -116,14 +118,28 @@ Edit `.env` and set at minimum:
 
 ## 3. DNS
 
-Point these **A records** at the server's public IP (all four are required):
+Point **A records** at the server's public IP:
 
+**Sites**
 - `pisster.com`, `www.pisster.com`
-- `admin.pisster.com`
-- `cdn.pisster.com`
+- `fbbtube.com`, `www.fbbtube.com`
+- `sharlila.com`, `www.sharlila.com`
 
-Confirm before requesting certs: `dig +short pisster.com` etc. should return the
-server IP.
+**Platform**
+- `admin.sharlila.com` (admin console — **not** `admin.pisster.com`)
+- `cdn.pisster.com` (shared CDN for the whole network)
+
+Confirm: `dig +short <host>` returns the server IP.
+
+### Domains, Route 53, and email (manual)
+
+Public sites are **not** hosted on AWS. A records go to this server. AWS is for **S3** (and optionally **Route 53** DNS).
+
+1. Register each domain at a registrar (or Route 53 Domains).
+2. If using Route 53 hosted zones, set the registrar **NS** to the four Route 53 nameservers (skip NS changes if DNS stays at the registrar).
+3. Create A records as above. Do **not** create per-site CDN hostnames.
+4. For Gmail/Workspace mail: add **MX / SPF / DKIM / DMARC** in the same DNS zone (manual). Only `contact@sharlila.com` is the public studio contact in the app.
+5. New site checklist: register domain → A records → DB Site row (Admin or `scripts/create-site.mjs`) → `./scripts/provision-site.sh <domain>` → Caddy reload.
 
 ---
 
@@ -204,16 +220,19 @@ docker inspect pisster-nginx-1 \
 # expect: <project>_default chiro_default
 ```
 
-### 6b. Add the Pisster site block to Caddy
+### 6b. Add the network site block to Caddy
 
-Append the block from `docs/host-caddy/pisster.Caddyfile` to Caddy's Caddyfile
-(bind-mounted on the host, e.g. `/opt/chiro/Caddyfile`):
+Append the block from `docs/host-caddy/network.Caddyfile` (same as
+`docs/host-caddy/pisster.Caddyfile`) to Caddy's Caddyfile (bind-mounted on the
+host, e.g. `/opt/chiro/Caddyfile`):
 
 ```caddyfile
-pisster.com, www.pisster.com, admin.pisster.com, cdn.pisster.com {
+pisster.com, www.pisster.com, cdn.pisster.com, fbbtube.com, www.fbbtube.com, sharlila.com, www.sharlila.com, admin.sharlila.com {
 	reverse_proxy pisster-edge:80
 }
 ```
+
+Do **not** include `admin.pisster.com`. CDN is shared at `cdn.pisster.com`.
 
 Caddy preserves the original `Host` header and sets `X-Forwarded-For` /
 `X-Forwarded-Proto` by default. **These are required:** the internal nginx uses
@@ -245,14 +264,14 @@ automatic — nothing else to configure.
 
 ## 7. Verify
 
-1. `https://pisster.com` — public site loads (empty until a scrape runs).
-2. `https://admin.pisster.com` — log in as the admin (email 2FA code).
-3. Admin → **Scrape runs** → create a run (query + source sites + min duration).
-   The `worker` picks it up from Redis, downloads, uploads to S3, and fills the
-   per-source breakdown + totals.
-4. Open a video — the player runs the optional ad preroll, then streams via the
-   signed, IP-bound, ad-gated CDN URL.
-5. Kibana (bound to `127.0.0.1:5601`, no auth) — reach it via SSH tunnel:
+1. `https://pisster.com` — public tube loads (videos published to Pisster).
+2. `https://fbbtube.com` — FBB tube (empty until scrape targets it).
+3. `https://sharlila.com` — studio home + Contact + Our Network.
+4. `https://admin.sharlila.com` — log in as the admin (email 2FA code).
+5. Admin → **Websites** / **SEO** / **Ad settings**; **Videos** site association;
+   **Scrape runs** with target websites.
+6. Open a video — shared `VideoPlayer` + shared `cdn.pisster.com`.
+7. Kibana (bound to `127.0.0.1:5601`, no auth) — reach it via SSH tunnel:
    `ssh -L 5601:127.0.0.1:5601 user@server`, then open `http://localhost:5601`.
 
 ---
@@ -268,11 +287,10 @@ automatic — nothing else to configure.
   ```
 - **Logs:** `docker compose logs -f web worker nginx`
 - **Restart one service:** `docker compose restart web`
-- **New domain / site:** add the DNS records, add the new hostnames to the Caddy
-  site block (or a new block) and `caddy reload` — Caddy auto-issues the cert —
-  then add a `Site` row (`seed.mjs` with a different `SITE_DOMAIN`) and create an
-  admin for it. The same `web` process serves all domains; middleware scopes
-  every query by the request host's Site.
+- **New domain / site:** create Site in Admin (or `node scripts/create-site.mjs`),
+  DNS A records, then `./scripts/provision-site.sh example.com` and reload Caddy.
+  Shared CDN host does not change. The same `web` process serves all domains;
+  middleware scopes by Host.
 - **Soft-deleting a video** instantly revokes CDN access (the authorize check
   rejects `isDeleted` rows).
 - **Rotate the deploy key:** delete it under repo → Settings → Deploy keys,

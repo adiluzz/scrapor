@@ -27,11 +27,12 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
   const { id } = await params;
 
   const video = await prisma.video.findFirst({
-    where: { id, siteId: g.siteId },
+    where: { id },
     include: {
       pornstars: { include: { pornstar: true } },
       tags: { include: { tag: true } },
       categories: { include: { category: true } },
+      sites: { include: { site: { select: { id: true, name: true, domain: true, slug: true, primaryColor: true } } } },
     },
   });
   if (!video) return NextResponse.json({ error: "Not found" }, { status: 404 });
@@ -62,6 +63,7 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
       })),
       pornstars: video.pornstars.map((p) => p.pornstar.name),
       categories: video.categories.map((c) => c.category.name),
+      sites: video.sites.map((vs) => vs.site),
     },
   });
 }
@@ -71,7 +73,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
   if (g instanceof NextResponse) return g;
   const { id } = await params;
 
-  const video = await prisma.video.findFirst({ where: { id, siteId: g.siteId } });
+  const video = await prisma.video.findFirst({ where: { id } });
   if (!video) return NextResponse.json({ error: "Not found" }, { status: 404 });
 
   const parsed = patchSchema.safeParse(await request.json());
@@ -84,7 +86,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
   if (d.slug !== undefined || d.title !== undefined) {
     try {
       slug = await resolveAdminVideoSlug(
-        g.siteId,
+        video.siteId,
         id,
         d.slug,
         d.title ?? video.title
@@ -126,15 +128,15 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
 
   if (d.tags) {
     await prisma.videoTag.deleteMany({ where: { videoId: id } });
-    await linkTags(g.siteId, id, d.tags);
+    await linkTags(video.siteId, id, d.tags);
   }
   if (d.pornstars) {
     await prisma.videoPornstar.deleteMany({ where: { videoId: id } });
-    await linkPornstars(g.siteId, id, d.pornstars);
+    await linkPornstars(video.siteId, id, d.pornstars);
   }
   if (d.categories) {
     await prisma.videoCategory.deleteMany({ where: { videoId: id } });
-    await linkCategories(g.siteId, id, d.categories);
+    await linkCategories(video.siteId, id, d.categories);
   }
 
   logger.info({ videoId: id, fields: Object.keys(d) }, "admin updated video");
@@ -147,7 +149,7 @@ export async function DELETE(_request: Request, { params }: { params: Promise<{ 
   if (g instanceof NextResponse) return g;
   const { id } = await params;
 
-  const video = await prisma.video.findFirst({ where: { id, siteId: g.siteId } });
+  const video = await prisma.video.findFirst({ where: { id } });
   if (!video) return NextResponse.json({ error: "Not found" }, { status: 404 });
 
   await prisma.video.update({ where: { id }, data: { isDeleted: true, deletedAt: new Date() } });

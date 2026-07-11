@@ -6,6 +6,7 @@ import { adminThumbUrl, loadStoryboardData } from "@/lib/media";
 import { formatDuration } from "@/lib/videos";
 import VideoPlayer from "@/components/player/VideoPlayer";
 import AdminVideoEditor from "@/components/admin/AdminVideoEditor";
+import SiteAssociationEditor from "@/components/admin/SiteAssociationEditor";
 import TagBadge from "@/components/site/TagBadge";
 
 export const dynamic = "force-dynamic";
@@ -19,17 +20,24 @@ export default async function AdminVideoDetail({
 }: {
   params: Promise<{ slug: string }>;
 }) {
-  const user = await requireAdmin();
+  await requireAdmin();
   const { slug } = await params;
 
-  const video = await prisma.video.findFirst({
-    where: { siteId: user.siteId, slug },
-    include: {
-      pornstars: { include: { pornstar: true } },
-      tags: { include: { tag: true } },
-      heatmap: true,
-    },
-  });
+  const [video, allSites] = await Promise.all([
+    prisma.video.findFirst({
+      where: { slug },
+      include: {
+        pornstars: { include: { pornstar: true } },
+        tags: { include: { tag: true } },
+        heatmap: true,
+        sites: { include: { site: { select: { id: true, name: true, domain: true, slug: true, primaryColor: true } } } },
+      },
+    }),
+    prisma.site.findMany({
+      orderBy: [{ networkOrder: "asc" }, { name: "asc" }],
+      select: { id: true, name: true, domain: true, slug: true, primaryColor: true },
+    }),
+  ]);
   if (!video) notFound();
 
   const [poster, storyboard] = await Promise.all([
@@ -66,6 +74,23 @@ export default async function AdminVideoDetail({
         {video.durationSec ? ` · ${formatDuration(video.durationSec)}` : ""}
         {video.sourceSite ? ` · ${video.sourceSite}` : ""}
       </p>
+
+      {video.sites.length > 0 && (
+        <div className="mt-2 flex flex-wrap gap-1.5">
+          {video.sites.map((vs) => (
+            <span
+              key={vs.siteId}
+              className="inline-flex items-center gap-1.5 rounded-full bg-zinc-800 px-2.5 py-0.5 text-xs text-zinc-300"
+            >
+              <span
+                className="inline-block h-1.5 w-1.5 rounded-full"
+                style={{ backgroundColor: vs.site.primaryColor }}
+              />
+              {vs.site.name}
+            </span>
+          ))}
+        </div>
+      )}
 
       <div className="mt-4">
       <VideoPlayer
@@ -107,6 +132,12 @@ export default async function AdminVideoDetail({
           ))}
         </div>
       )}
+
+      <SiteAssociationEditor
+        videoId={video.id}
+        allSites={allSites}
+        initialSiteIds={video.sites.map((vs) => vs.siteId)}
+      />
 
       <AdminVideoEditor videoId={video.id} />
     </div>

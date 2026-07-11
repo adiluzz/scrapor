@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import os
+from pathlib import Path
 from typing import Any
 from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 
@@ -36,9 +37,10 @@ def load_iteration(conn, iteration_id: str) -> dict[str, Any] | None:
         SELECT i.id, i."promoAdId", i."iterationNumber", i."userPrompt", i."modelParams",
                i.status, i."s3Key", i."providerJobId", i."parentIterationId",
                a."siteId", a."generationMode", a."generativeModelId", a.prompt, a."modelParams",
-               a.status AS ad_status
+               a.status AS ad_status, s."logoPath"
         FROM "PromoAdIteration" i
         JOIN "PromoAd" a ON a.id = i."promoAdId"
+        LEFT JOIN "Site" s ON s.id = a."siteId"
         WHERE i.id = %s
         ''',
         (iteration_id,),
@@ -49,9 +51,24 @@ def load_iteration(conn, iteration_id: str) -> dict[str, Any] | None:
         "id", "promoAdId", "iterationNumber", "userPrompt", "modelParams",
         "status", "s3Key", "providerJobId", "parentIterationId",
         "siteId", "generationMode", "generativeModelId", "adPrompt", "adModelParams",
-        "adStatus",
+        "adStatus", "logoPath",
     ]
     return dict(zip(cols, row))
+
+
+def resolve_brand_lockup_path(logo_path: str | None) -> Path:
+    """Map Site.logoPath (/brand/foo.png) to container filesystem path."""
+    from config import CONFIG
+
+    if logo_path:
+        rel = logo_path.lstrip("/")
+        candidate = Path("/app/public") / rel
+        if candidate.exists():
+            return candidate
+        alt = Path("/app") / rel if not rel.startswith("public/") else Path("/app") / rel
+        if alt.exists():
+            return alt
+    return Path(CONFIG.brand_lockup_path)
 
 
 def load_clips(conn, promo_ad_id: str) -> list[dict[str, Any]]:

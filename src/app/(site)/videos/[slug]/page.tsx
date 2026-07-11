@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { prisma } from "@/lib/db";
-import { getCurrentSite } from "@/lib/site";
+import { getCurrentSite, parseSeoKeywords } from "@/lib/site";
 import { thumbUrl, loadStoryboardData } from "@/lib/media";
 import { formatDuration } from "@/lib/videos";
 import { getCurrentUser } from "@/lib/session";
@@ -30,7 +30,11 @@ async function getVideo(siteId: string, slug: string, includeHidden = false) {
   return prisma.video.findFirst({
     // Public visitors only see live, READY videos. Admins can preview any
     // video (soft-deleted or still processing) via the admin panel link.
-    where: { siteId, slug, ...(includeHidden ? {} : { isDeleted: false, status: "READY" }) },
+    where: {
+      slug,
+      sites: { some: { siteId } },
+      ...(includeHidden ? {} : { isDeleted: false, status: "READY" }),
+    },
     include: {
       pornstars: { include: { pornstar: true } },
       tags: { include: { tag: true } },
@@ -57,16 +61,16 @@ export async function generateMetadata({
   const site = await getCurrentSite();
   const video = await getVideo(site.id, slug);
   if (!video) return { title: "Not found" };
-  const description = videoPageDescription(video.title, site.name, video.description);
+  const description = videoPageDescription(video.title, site, video.description);
   const tagNames = video.tags.map((t) => t.tag.name);
   const categoryNames = video.categories.map((c) => c.category.name);
-  const title = `${video.title} — Piss Drinking Porn`;
+  const title = video.title;
   const base = await getSiteBaseUrl();
   const poster = publicVideoThumbnailUrl(base, video.id);
   return {
     title,
     description,
-    keywords: keywordsMeta([...categoryNames, ...tagNames, video.title]),
+    keywords: keywordsMeta(site, [...categoryNames, ...tagNames, video.title]),
     alternates: { canonical: `/videos/${video.slug}` },
     openGraph: buildOpenGraph({
       title: video.title,
@@ -74,6 +78,7 @@ export async function generateMetadata({
       url: `/videos/${video.slug}`,
       image: poster,
       type: "video.other",
+      siteName: site.name,
     }),
     twitter: { card: "summary_large_image", title: video.title, description, images: poster ? [poster] : undefined },
   };
@@ -128,7 +133,10 @@ export default async function VideoPage({
   return (
     <div className="relative space-y-6">
       {!adminPreview && (
-        <ExoFullscreenOverlay zoneId={process.env.EXO_ZONE_VIDEO_FULLSCREEN} />
+        <ExoFullscreenOverlay
+          zoneId={site.exoZoneVideoFullscreen}
+          insClass={site.exoInsClass}
+        />
       )}
       <JsonLd
         data={videoObjectJsonLd({
@@ -141,6 +149,8 @@ export default async function VideoPage({
           pageUrl,
           viewCount: video.viewCount,
           tags: tagNames,
+          siteName: site.name,
+          siteKeywords: parseSeoKeywords(site.seoKeywords),
         })}
       />
       <JsonLd
@@ -221,7 +231,11 @@ export default async function VideoPage({
             </p>
           )}
 
-          <AdZone zoneId={process.env.EXO_ZONE_UNDER_PLAYER} className="mt-6" />
+          <AdZone
+            zoneId={site.exoZoneUnderPlayer}
+            insClass={site.exoInsClass}
+            className="mt-6"
+          />
         </div>
       </div>
 

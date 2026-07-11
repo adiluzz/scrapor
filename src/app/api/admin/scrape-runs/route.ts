@@ -30,6 +30,8 @@ const schema = z
     maxPerSite: z.number().int().min(1).max(10000).nullable().optional(),
     // Interactive mode: download only these pre-selected candidates.
     candidates: z.array(candidateSchema).min(1).optional(),
+    // Managed tube sites new videos should be published to.
+    targetSiteIds: z.array(z.string().min(1)).min(1),
   })
   .refine((d) => Boolean(d.query?.trim()) || (d.candidates?.length ?? 0) > 0, {
     message: "Provide a search query or selected video candidates",
@@ -40,10 +42,12 @@ export async function GET(request: Request) {
   if (g instanceof NextResponse) return g;
 
   const runs = await prisma.scrapeRun.findMany({
-    where: { siteId: g.siteId },
     orderBy: { createdAt: "desc" },
     take: 50,
-    include: { _count: { select: { videos: true } } },
+    include: {
+      _count: { select: { videos: true } },
+      targetSites: { include: { site: { select: { id: true, name: true, domain: true } } } },
+    },
   });
   return NextResponse.json({ runs });
 }
@@ -68,6 +72,15 @@ export async function POST(request: Request) {
     if (invalid) return NextResponse.json({ error: "Invalid candidate source site" }, { status: 400 });
   }
 
+  const targetSiteIds = [...new Set(parsed.data.targetSiteIds)];
+  const targetSites = await prisma.site.findMany({
+    where: { id: { in: targetSiteIds }, kind: "TUBE" },
+    select: { id: true },
+  });
+  if (targetSites.length !== targetSiteIds.length) {
+    return NextResponse.json({ error: "One or more target sites are invalid" }, { status: 400 });
+  }
+
   const runQuery =
     parsed.data.query?.trim() ||
     (candidates?.length ? `URL import (${candidates.length} videos)` : "");
@@ -87,6 +100,9 @@ export async function POST(request: Request) {
           ? [...new Set(candidates.map((c) => c.sourceSite))]
           : sources
         ).map((sourceSite) => ({ sourceSite, status: "QUEUED" })),
+      },
+      targetSites: {
+        create: targetSiteIds.map((siteId) => ({ siteId })),
       },
     },
   });

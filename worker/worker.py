@@ -451,6 +451,7 @@ def _process_one(run, source_site, video) -> ProcessOutcome:
                 return ProcessOutcome("skip", "Already in catalog", "catalog")
 
             keys = dict(v=None, t=None, p=None, sb=None, vtt=None)
+            # site_id = run storage/origin (S3 paths); VideoSite covers all publish targets.
             vid, slug = db.create_video(
                 conn, site_id=site_id, source_url=url, title=video["title"],
                 description=video.get("description"), duration_sec=duration,
@@ -459,6 +460,7 @@ def _process_one(run, source_site, video) -> ProcessOutcome:
                 s3_storyboard_key=None, s3_storyboard_vtt_key=None,
                 tags=video.get("tags"), pornstars=video.get("pornstars"),
                 categories=video.get("categories"),
+                target_site_ids=run.get("targetSiteIds") or [site_id],
             )
 
             if storage.configured():

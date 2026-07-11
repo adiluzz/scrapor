@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { openAdSession } from "@/lib/ad-session";
 import { guardApiRoute } from "@/lib/admin-guard";
+import { getCurrentSite } from "@/lib/site";
 
 /**
  * Open a server-side ad session before playback. Returns the VAST tag URL (if
@@ -16,16 +17,17 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
   const video = await prisma.video.findFirst({ where: { id, isDeleted: false } });
   if (!video) return NextResponse.json({ error: "Not found" }, { status: 404 });
 
-  const vastTagUrl = process.env.VAST_TAG_URL || "";
+  const site = await getCurrentSite();
+  const vastTagUrl = site.vastTagUrl || "";
   const adRequired = Boolean(vastTagUrl);
-  const session = await openAdSession(video.id, video.siteId, adRequired);
+  const session = await openAdSession(video.id, site.id, adRequired);
 
   return NextResponse.json({
     adSessionId: session.id,
     adRequired,
     vastTagUrl: vastTagUrl || null,
-    skipSeconds: parseInt(process.env.AD_SKIP_SECONDS || "5", 10),
-    minViewSeconds: parseInt(process.env.AD_MIN_VIEW_SECONDS || "5", 10),
-    timeoutMs: parseInt(process.env.AD_TIMEOUT_MS || "8000", 10),
+    skipSeconds: site.adSkipSeconds,
+    minViewSeconds: site.adMinViewSeconds,
+    timeoutMs: site.adTimeoutMs,
   });
 }

@@ -1,25 +1,53 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { SOURCE_SITES } from "@/lib/source-sites";
+
+type TubeSite = {
+  id: string;
+  name: string;
+  kind: string;
+  primaryColor: string;
+};
 
 export default function NewRunForm() {
   const router = useRouter();
   const [query, setQuery] = useState("");
   const [sources, setSources] = useState<string[]>([...SOURCE_SITES]);
+  const [tubeSites, setTubeSites] = useState<TubeSite[]>([]);
+  const [targetSiteIds, setTargetSiteIds] = useState<string[]>([]);
   const [minMinutes, setMinMinutes] = useState(10);
   const [maxPerSite, setMaxPerSite] = useState("5");
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
+  useEffect(() => {
+    (async () => {
+      const res = await fetch("/api/admin/sites");
+      const data = await res.json();
+      if (!res.ok) return;
+      const tubes = (data.sites as TubeSite[]).filter((s) => s.kind === "TUBE");
+      setTubeSites(tubes);
+      setTargetSiteIds(tubes.map((s) => s.id));
+    })();
+  }, []);
+
   function toggle(s: string) {
     setSources((prev) => (prev.includes(s) ? prev.filter((x) => x !== s) : [...prev, s]));
+  }
+
+  function toggleTarget(id: string) {
+    setTargetSiteIds((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]));
   }
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
     setError(null);
+    if (targetSiteIds.length === 0) {
+      setError("Select at least one publish target website");
+      return;
+    }
     setLoading(true);
     try {
       const trimmed = maxPerSite.trim();
@@ -32,6 +60,7 @@ export default function NewRunForm() {
           sources,
           minDurationSec: minMinutes * 60,
           maxPerSite: parsedMax,
+          targetSiteIds,
         }),
       });
       const data = await res.json();
@@ -68,6 +97,40 @@ export default function NewRunForm() {
         </div>
       </div>
 
+      <div>
+        <p className="mb-2 text-sm text-zinc-400">Publish to websites</p>
+        <div className="flex flex-wrap gap-2">
+          {tubeSites.length === 0 ? (
+            <span className="text-xs text-zinc-600">Loading tube sites…</span>
+          ) : (
+            tubeSites.map((s) => (
+              <label
+                key={s.id}
+                className={`cursor-pointer rounded-full border px-3 py-1.5 text-sm ${
+                  targetSiteIds.includes(s.id)
+                    ? "border-brand-500 bg-brand-600/20 text-brand-200"
+                    : "border-zinc-700 bg-zinc-950 text-zinc-400"
+                }`}
+              >
+                <input
+                  type="checkbox"
+                  className="hidden"
+                  checked={targetSiteIds.includes(s.id)}
+                  onChange={() => toggleTarget(s.id)}
+                />
+                <span className="inline-flex items-center gap-2">
+                  <span
+                    className="inline-block h-2.5 w-2.5 rounded-full"
+                    style={{ backgroundColor: s.primaryColor }}
+                  />
+                  {s.name}
+                </span>
+              </label>
+            ))
+          )}
+        </div>
+      </div>
+
       <label className="flex items-center gap-2 text-sm text-zinc-400">
         Minimum duration
         <input type="number" min={0} max={600} value={minMinutes}
@@ -88,7 +151,7 @@ export default function NewRunForm() {
         </p>
       </div>
 
-      <button disabled={loading || sources.length === 0} type="submit"
+      <button disabled={loading || sources.length === 0 || targetSiteIds.length === 0} type="submit"
         className="rounded-lg bg-brand-600 px-5 py-2.5 font-medium text-white hover:bg-brand-500 disabled:opacity-50">
         {loading ? "Queuing…" : "Queue run"}
       </button>

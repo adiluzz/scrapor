@@ -17,13 +17,14 @@ const statusColor: Record<string, string> = {
 };
 
 export default async function RunDetailPage({ params }: { params: Promise<{ id: string }> }) {
-  const user = await requireAdmin();
+  await requireAdmin();
   const { id } = await params;
   const run = await prisma.scrapeRun.findFirst({
-    where: { id, siteId: user.siteId },
+    where: { id },
     include: {
       siteResults: { orderBy: { sourceSite: "asc" } },
       videos: { orderBy: { createdAt: "desc" }, take: 100 },
+      targetSites: { include: { site: { select: { id: true, name: true, primaryColor: true } } } },
     },
   });
   if (!run) notFound();
@@ -54,6 +55,23 @@ export default async function RunDetailPage({ params }: { params: Promise<{ id: 
                 : "all/site"}
           </span>
         </div>
+        {run.targetSites.length > 0 && (
+          <div className="mt-3 flex flex-wrap items-center gap-2 text-sm">
+            <span className="text-zinc-500">Publish to:</span>
+            {run.targetSites.map((t) => (
+              <span
+                key={t.siteId}
+                className="inline-flex items-center gap-1.5 rounded-full bg-zinc-800 px-2.5 py-0.5 text-xs text-zinc-300"
+              >
+                <span
+                  className="inline-block h-1.5 w-1.5 rounded-full"
+                  style={{ backgroundColor: t.site.primaryColor }}
+                />
+                {t.site.name}
+              </span>
+            ))}
+          </div>
+        )}
         <div className="mt-4">
           <RunActions
             runId={run.id}

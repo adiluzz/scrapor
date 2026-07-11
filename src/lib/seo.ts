@@ -1,40 +1,7 @@
 import type { Metadata } from "next";
 import { headers } from "next/headers";
-import { normalizeHost } from "@/lib/site";
-
-/** Core niche terms users search for on Google (piss drinking / watersports tube). */
-export const NICHE_KEYWORDS = [
-  "piss drinking porn",
-  "piss drinking videos",
-  "pee drinking porn",
-  "golden shower videos",
-  "watersports porn",
-  "urine fetish",
-  "piss swallowing",
-  "piss in mouth",
-  "piss drinking tube",
-  "free piss drinking porn",
-  "HD piss drinking",
-  "lesbian piss drinking",
-  "piss drinking compilation",
-  "omorashi",
-  "pee fetish",
-] as const;
-
-export const SITE_TAGLINE =
-  "Free HD piss drinking, golden shower & watersports porn tube";
-
-export function siteHomeTitle(siteName: string): string {
-  return `${siteName} — Piss Drinking Porn & Golden Shower Videos`;
-}
-
-export function siteHomeDescription(siteName: string): string {
-  return (
-    `Watch free HD piss drinking porn on ${siteName}. ` +
-    "Golden shower, pee drinking, piss swallowing & watersports videos updated daily. " +
-    "Stream full-length urine fetish scenes in 720p and 1080p."
-  );
-}
+import type { Site } from "@prisma/client";
+import { normalizeHost, parseSeoKeywords } from "@/lib/site";
 
 export function truncateMeta(text: string, max = 160): string {
   const t = text.replace(/\s+/g, " ").trim();
@@ -42,8 +9,23 @@ export function truncateMeta(text: string, max = 160): string {
   return `${t.slice(0, max - 1).trim()}…`;
 }
 
-export function keywordsMeta(extra: string[] = []): string[] {
-  return [...new Set([...NICHE_KEYWORDS, ...extra.map((k) => k.trim()).filter(Boolean)])];
+export function siteHomeTitle(site: Pick<Site, "name" | "seoTitle">): string {
+  return site.seoTitle?.trim() || `${site.name}`;
+}
+
+export function siteHomeDescription(
+  site: Pick<Site, "name" | "seoDescription" | "tagline">
+): string {
+  return (
+    site.seoDescription?.trim() ||
+    site.tagline?.trim() ||
+    `Watch videos on ${site.name}.`
+  );
+}
+
+export function keywordsMeta(site: Pick<Site, "seoKeywords">, extra: string[] = []): string[] {
+  const base = parseSeoKeywords(site.seoKeywords);
+  return [...new Set([...base, ...extra.map((k) => k.trim()).filter(Boolean)])];
 }
 
 /** Resolve absolute site origin for canonical URLs and Open Graph. */
@@ -67,62 +49,76 @@ export function buildOpenGraph(input: {
   url?: string;
   image?: string | null;
   type?: "website" | "video.other";
+  siteName: string;
 }): Metadata["openGraph"] {
   return {
     title: input.title,
     description: truncateMeta(input.description, 200),
     type: input.type ?? "website",
     url: input.url,
-    siteName: "Pisster",
+    siteName: input.siteName,
     ...(input.image ? { images: [{ url: input.image, alt: input.title }] } : {}),
   };
 }
 
-export function tagPageTitle(tagName: string): string {
-  return `${tagName} Piss Drinking Porn Videos`;
+export function tagPageTitle(tagName: string, site: Pick<Site, "name" | "homeH1">): string {
+  const niche = site.homeH1?.replace(/\s+Videos$/i, "") || site.name;
+  return `${tagName} ${niche} Videos`;
 }
 
-export function tagPageDescription(tagName: string, siteName: string): string {
+export function tagPageDescription(
+  tagName: string,
+  site: Pick<Site, "name" | "tagline">
+): string {
   return truncateMeta(
-    `Watch ${tagName} piss drinking & watersports porn videos on ${siteName}. ` +
-      "Free HD golden shower and pee drinking scenes.",
+    `Watch ${tagName} videos on ${site.name}. ${site.tagline || ""}`.trim(),
   );
 }
 
-export function searchPageTitle(query: string): string {
-  return `${query} Piss Drinking Porn Videos`;
+export function searchPageTitle(query: string, site: Pick<Site, "name" | "homeH1">): string {
+  const niche = site.homeH1?.replace(/\s+Videos$/i, "") || site.name;
+  return `${query} ${niche} Videos`;
 }
 
-export function searchPageDescription(query: string, siteName: string): string {
+export function searchPageDescription(
+  query: string,
+  site: Pick<Site, "name" | "tagline">
+): string {
   return truncateMeta(
-    `Search results for “${query}” — piss drinking, golden shower & pee fetish videos on ${siteName}.`,
+    `Search results for “${query}” on ${site.name}. ${site.tagline || ""}`.trim(),
   );
 }
 
-export function videoPageDescription(title: string, siteName: string, body?: string | null): string {
+export function videoPageDescription(
+  title: string,
+  site: Pick<Site, "name" | "tagline">,
+  body?: string | null
+): string {
   if (body?.trim()) return truncateMeta(body);
   return truncateMeta(
-    `Watch ${title} — free HD piss drinking porn on ${siteName}. ` +
-      "Golden shower, pee drinking & watersports.",
+    `Watch ${title} on ${site.name}. ${site.tagline || ""}`.trim(),
   );
 }
 
-export function pornstarPageDescription(name: string, siteName: string, bio?: string | null): string {
+export function pornstarPageDescription(
+  name: string,
+  site: Pick<Site, "name" | "tagline">,
+  bio?: string | null
+): string {
   if (bio?.trim()) return truncateMeta(bio);
   return truncateMeta(
-    `${name} piss drinking & watersports porn videos on ${siteName}. ` +
-      "Watch golden shower and pee drinking scenes.",
+    `${name} videos on ${site.name}. ${site.tagline || ""}`.trim(),
   );
 }
 
 /** WebSite + SearchAction for homepage rich results. */
-export function websiteJsonLd(baseUrl: string, siteName: string) {
+export function websiteJsonLd(baseUrl: string, site: Pick<Site, "name" | "seoDescription" | "tagline">) {
   return {
     "@context": "https://schema.org",
     "@type": "WebSite",
-    name: siteName,
+    name: site.name,
     url: baseUrl,
-    description: siteHomeDescription(siteName),
+    description: siteHomeDescription(site),
     inLanguage: "en",
     isFamilyFriendly: false,
     potentialAction: {
@@ -136,12 +132,15 @@ export function websiteJsonLd(baseUrl: string, siteName: string) {
   };
 }
 
-export function organizationJsonLd(baseUrl: string, siteName: string) {
-  const logoUrl = `${baseUrl}/apple-icon`;
+export function organizationJsonLd(
+  baseUrl: string,
+  site: Pick<Site, "name" | "tagline" | "seoDescription" | "ogImagePath">
+) {
+  const logoUrl = `${baseUrl}${site.ogImagePath || "/apple-icon"}`;
   return {
     "@context": "https://schema.org",
     "@type": "Organization",
-    name: siteName,
+    name: site.name,
     url: baseUrl,
     logo: {
       "@type": "ImageObject",
@@ -149,7 +148,7 @@ export function organizationJsonLd(baseUrl: string, siteName: string) {
       width: 180,
       height: 180,
     },
-    description: SITE_TAGLINE,
+    description: site.tagline || site.seoDescription || site.name,
   };
 }
 
@@ -164,13 +163,19 @@ export function videoObjectJsonLd(input: {
   viewCount?: number;
   tags?: string[];
   embedUrl?: string;
+  siteName: string;
+  siteKeywords?: string[];
 }) {
-  const keywords = keywordsMeta(input.tags ?? []).slice(0, 12).join(", ");
+  const keywords = [...new Set([...(input.siteKeywords ?? []), ...(input.tags ?? [])])]
+    .slice(0, 12)
+    .join(", ");
   return {
     "@context": "https://schema.org",
     "@type": "VideoObject",
     name: input.title,
-    description: input.description || videoPageDescription(input.title, "Pisster"),
+    description:
+      input.description ||
+      `Watch ${input.title} on ${input.siteName}.`,
     thumbnailUrl: input.thumbnailUrl || undefined,
     contentUrl: input.contentUrl || undefined,
     uploadDate: input.uploadDate,

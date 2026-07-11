@@ -11,20 +11,81 @@ datasource db {
 // Multi-tenant core
 // ─────────────────────────────────────────────────────────────
 
+enum SiteKind {
+  TUBE
+  STUDIO
+}
+
 model Site {
   id           String               @id @default(cuid())
   domain       String               @unique // pisster.com
   name         String
+  kind         SiteKind             @default(TUBE)
+  slug         String               @unique // pisster, fbbtube, sharlila
+  tagline      String?
+  logoPath     String? // e.g. /brand/pisster-lockup.png
+  logoKey      String? // "golden-drop" | "fbb-mark" | "sharlila-mark"
+  primaryColor String               @default("#D4AF37")
+  isNetworkMember Boolean           @default(true)
+  mailFromName String?
+  networkOrder Int                  @default(0)
+
+  // SEO
+  seoTitle       String?
+  seoDescription String?
+  seoKeywords    String? // JSON string[]
+  ogImagePath    String?
+  exoSiteVerification String?
+  homeH1         String?
+  homeIntroHtml  String?
+
+  // Ads (per-site network config)
+  vastTagUrl              String?
+  adSkipSeconds           Int      @default(5)
+  adMinViewSeconds        Int      @default(5)
+  adTimeoutMs             Int      @default(12000)
+  exoInsClass             String?
+  exoZoneHome             String?
+  exoZoneUnderPlayer      String?
+  exoZoneVideoFullscreen  String?
+
   createdAt    DateTime             @default(now())
-  videos       Video[]
-  users        User[]
-  scrapeRuns   ScrapeRun[]
-  pornstars    Pornstar[]
-  categories   Category[]
-  creators     CreatorProfile[]
-  searches     SearchQuery[]
-  applications CreatorApplication[]
-  apiKeys      ApiKey[]
+  updatedAt    DateTime             @updatedAt
+
+  videos           Video[]              @relation("VideoStorageSite")
+  videoSites       VideoSite[]
+  users            User[]
+  scrapeRuns       ScrapeRun[]
+  scrapeRunTargets ScrapeRunTargetSite[]
+  pornstars        Pornstar[]
+  categories       Category[]
+  creators         CreatorProfile[]
+  searches         SearchQuery[]
+  applications     CreatorApplication[]
+  apiKeys          ApiKey[]
+}
+
+// Published membership: a video can appear on multiple sites.
+model VideoSite {
+  videoId   String
+  siteId    String
+  createdAt DateTime @default(now())
+  video     Video    @relation(fields: [videoId], references: [id], onDelete: Cascade)
+  site      Site     @relation(fields: [siteId], references: [id], onDelete: Cascade)
+
+  @@id([videoId, siteId])
+  @@index([siteId])
+}
+
+// Which managed websites a scrape run publishes new videos to.
+model ScrapeRunTargetSite {
+  runId  String
+  siteId String
+  run    ScrapeRun @relation(fields: [runId], references: [id], onDelete: Cascade)
+  site   Site      @relation(fields: [siteId], references: [id], onDelete: Cascade)
+
+  @@id([runId, siteId])
+  @@index([siteId])
 }
 
 enum Role {
@@ -95,8 +156,9 @@ enum VideoStatus {
 model Video {
   id                 String          @id @default(cuid())
   slug               String
+  /// Storage/origin site for S3 key paths (`sites/{siteId}/...`). Publication uses VideoSite.
   siteId             String
-  site               Site            @relation(fields: [siteId], references: [id])
+  site               Site            @relation("VideoStorageSite", fields: [siteId], references: [id])
   title              String
   sourceUrl          String          @unique // GLOBAL dedup key (incl. soft-deleted)
   dedupeKey          String? // canonical per-video identity (site video-id or normalized url); dedup incl. soft-deleted
@@ -118,6 +180,7 @@ model Video {
   creator            CreatorProfile? @relation(fields: [creatorId], references: [id])
   scrapeRunId        String?
   scrapeRun          ScrapeRun?      @relation(fields: [scrapeRunId], references: [id])
+  sites              VideoSite[]
   pornstars          VideoPornstar[]
   tags               VideoTag[]
   categories         VideoCategory[]
@@ -127,8 +190,11 @@ model Video {
 
   @@unique([siteId, slug])
   @@index([dedupeKey])
+  @@index([slug])
   @@index([siteId, isDeleted, createdAt])
   @@index([siteId, isDeleted, viewCount])
+  @@index([isDeleted, createdAt])
+  @@index([isDeleted, viewCount])
 }
 
 model Pornstar {
@@ -297,6 +363,7 @@ model ScrapeRun {
   videos         Video[]
   siteResults    ScrapeRunSite[]
   outcomes       ScrapeRunOutcome[]
+  targetSites    ScrapeRunTargetSite[]
 
   @@index([siteId, createdAt])
 }

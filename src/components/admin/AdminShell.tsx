@@ -7,6 +7,7 @@ import Logo from "@/components/brand/Logo";
 
 const nav = [
   { href: "/admin", label: "Overview" },
+  { href: "/admin/websites", label: "Websites" },
   { href: "/admin/scrape-runs", label: "Scrape runs" },
   { href: "/admin/videos", label: "Videos" },
   { href: "/admin/pornstars", label: "Pornstars" },
@@ -56,12 +57,20 @@ function NavLinks({
   );
 }
 
+type LogoSite = {
+  name: string;
+  logoKey: string | null;
+  primaryColor: string;
+};
+
 export default function AdminShell({
   children,
   signOut,
+  site,
 }: {
   children: React.ReactNode;
   signOut: React.ReactNode;
+  site?: LogoSite | null;
 }) {
   const pathname = usePathname();
   const [menuOpen, setMenuOpen] = useState(false);
@@ -77,11 +86,13 @@ export default function AdminShell({
     };
   }, [menuOpen]);
 
+  const logo = <Logo site={site} admin href="/admin" />;
+
   return (
     <div className="min-h-screen bg-zinc-950 text-zinc-100">
       {/* Mobile header */}
       <header className="sticky top-0 z-40 flex items-center justify-between border-b border-zinc-800 bg-zinc-900 px-4 py-3 lg:hidden">
-        <Logo admin href="/admin" />
+        {logo}
         <button
           type="button"
           aria-label={menuOpen ? "Close menu" : "Open menu"}
@@ -115,18 +126,14 @@ export default function AdminShell({
           menuOpen ? "translate-x-0" : "-translate-x-full"
         }`}
       >
-        <div className="mb-6">
-          <Logo admin href="/admin" />
-        </div>
+        <div className="mb-6">{logo}</div>
         <NavLinks onNavigate={() => setMenuOpen(false)} signOut={signOut} />
       </aside>
 
       <div className="flex">
         {/* Desktop sidebar */}
         <aside className="sticky top-0 hidden h-screen w-56 shrink-0 border-r border-zinc-800 bg-zinc-900 p-4 lg:block">
-          <div className="mb-6">
-            <Logo admin href="/admin" />
-          </div>
+          <div className="mb-6">{logo}</div>
           <NavLinks signOut={signOut} />
         </aside>
 

@@ -15,6 +15,7 @@ from db import (
     load_clips,
     load_iteration,
     parse_json,
+    resolve_brand_lockup_path,
     set_iteration_status,
 )
 from media import extract_frame, overlay_logo, promo_ad_s3_key, upload_file
@@ -45,7 +46,12 @@ def process_iteration(conn, iteration_id: str) -> None:
         if generation_mode == "CLIP_COMPOSE":
             clips = load_clips(conn, promo_ad_id)
             s3_key, _ = compose_promo_ad(
-                site_id, promo_ad_id, iteration_number, clips, model_params
+                site_id,
+                promo_ad_id,
+                iteration_number,
+                clips,
+                model_params,
+                logo_path=job.get("logoPath"),
             )
             complete_iteration(conn, iteration_id, promo_ad_id, s3_key, actual_cost_usd=0.0)
             return
@@ -88,7 +94,7 @@ def process_iteration(conn, iteration_id: str) -> None:
             work_dir=work_dir,
         )
 
-        lockup_png = Path(CONFIG.brand_lockup_path)
+        lockup_png = resolve_brand_lockup_path(job.get("logoPath"))
         final_path = work_dir / "final.mp4"
         logo_position = model_params.get("logoPosition") or "bottom-right"
         logo_opacity = float(model_params.get("logoOpacity") or 0.85)

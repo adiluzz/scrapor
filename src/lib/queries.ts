@@ -47,7 +47,7 @@ export function buildWhere(
   extra?: Prisma.VideoWhereInput
 ): Prisma.VideoWhereInput {
   const where: Prisma.VideoWhereInput = {
-    siteId,
+    sites: { some: { siteId } },
     isDeleted: false,
     status: "READY", // hide creator uploads still being processed (or failed)
     ...extra,

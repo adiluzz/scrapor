@@ -17,9 +17,11 @@ def ensure_brand_assets() -> None:
     assets_dir = Path(CONFIG.intro_path).parent
     assets_dir.mkdir(parents=True, exist_ok=True)
     lockup = Path(CONFIG.brand_lockup_path)
-    svg_fallback = lockup.parent / "pisster-lockup.svg"
+    svg_fallback = lockup.with_suffix(".svg")
+    if not svg_fallback.exists():
+        svg_fallback = lockup.parent / "pisster-lockup.svg"
 
-    png_path = lockup if lockup.suffix.lower() == ".png" else assets_dir / "pisster-lockup.png"
+    png_path = lockup if lockup.suffix.lower() == ".png" else assets_dir / lockup.with_suffix(".png").name
     if not png_path.exists():
         if lockup.suffix.lower() == ".svg" and lockup.exists():
             _svg_to_png(lockup, png_path)

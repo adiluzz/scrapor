@@ -14,11 +14,13 @@ const statusColor: Record<string, string> = {
 };
 
 export default async function ScrapeRunsPage() {
-  const user = await requireAdmin();
+  await requireAdmin();
   const runs = await prisma.scrapeRun.findMany({
-    where: { siteId: user.siteId },
     orderBy: { createdAt: "desc" },
     take: 50,
+    include: {
+      targetSites: { include: { site: { select: { name: true, domain: true } } } },
+    },
   });
 
   return (
@@ -39,6 +41,7 @@ export default async function ScrapeRunsPage() {
           <thead className="bg-zinc-900 text-zinc-400">
             <tr>
               <th className="px-4 py-3">Query</th>
+              <th className="px-4 py-3">Targets</th>
               <th className="px-4 py-3">Status</th>
               <th className="px-4 py-3">New</th>
               <th className="px-4 py-3">Skipped</th>
@@ -48,12 +51,15 @@ export default async function ScrapeRunsPage() {
           </thead>
           <tbody className="divide-y divide-zinc-800">
             {runs.length === 0 ? (
-              <tr><td colSpan={6} className="px-4 py-8 text-center text-zinc-500">No runs yet.</td></tr>
+              <tr><td colSpan={7} className="px-4 py-8 text-center text-zinc-500">No runs yet.</td></tr>
             ) : (
               runs.map((r) => (
                 <tr key={r.id} className="hover:bg-zinc-900/50">
                   <td className="px-4 py-3">
                     <Link href={`/admin/scrape-runs/${r.id}`} className="text-brand-400 hover:underline">{r.query}</Link>
+                  </td>
+                  <td className="px-4 py-3 text-xs text-zinc-400">
+                    {r.targetSites.map((t) => t.site.name).join(", ") || "—"}
                   </td>
                   <td className={`px-4 py-3 ${statusColor[r.status]}`}>{r.status}</td>
                   <td className="px-4 py-3 text-emerald-400">{r.newVideos}</td>

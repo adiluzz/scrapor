@@ -3,10 +3,25 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 
+type SiteChip = {
+  id: string;
+  name: string;
+  primaryColor: string;
+};
+
 export default function AdminVideoRow({
   video,
+  sites = [],
 }: {
-  video: { id: string; title: string; slug: string; isDeleted: boolean; viewCount: number; sourceSite: string | null };
+  video: {
+    id: string;
+    title: string;
+    slug: string;
+    isDeleted: boolean;
+    viewCount: number;
+    sourceSite: string | null;
+  };
+  sites?: SiteChip[];
 }) {
   const router = useRouter();
   const [editing, setEditing] = useState(false);
@@ -49,6 +64,26 @@ export default function AdminVideoRow({
           <a href={`/admin/videos/${video.slug}`} className="text-zinc-200 hover:text-white">
             {video.title}
           </a>
+        )}
+      </td>
+      <td className="px-4 py-3">
+        {sites.length === 0 ? (
+          <span className="text-xs text-amber-500">orphan</span>
+        ) : (
+          <div className="flex flex-wrap gap-1">
+            {sites.map((s) => (
+              <span
+                key={s.id}
+                className="inline-flex items-center gap-1 rounded-full bg-zinc-800 px-2 py-0.5 text-xs text-zinc-300"
+              >
+                <span
+                  className="inline-block h-1.5 w-1.5 rounded-full"
+                  style={{ backgroundColor: s.primaryColor }}
+                />
+                {s.name}
+              </span>
+            ))}
+          </div>
         )}
       </td>
       <td className="px-4 py-3 text-zinc-500">{video.sourceSite || "—"}</td>

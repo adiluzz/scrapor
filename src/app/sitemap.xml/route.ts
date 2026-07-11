@@ -24,7 +24,7 @@ export async function GET() {
 
   const [videos, pornstars, creators, tags] = await Promise.all([
     prisma.video.findMany({
-      where: { siteId: site.id, isDeleted: false, status: "READY" },
+      where: { sites: { some: { siteId: site.id } }, isDeleted: false, status: "READY" },
       select: {
         id: true,
         slug: true,
@@ -58,7 +58,7 @@ export async function GET() {
     ...staticUrls.map((url) => renderUrlOnlySitemapEntry(url)),
     ...videos.map((video) => {
       const pageUrl = `${base}/videos/${video.slug}`;
-      const fallbackDescription = videoPageDescription(video.title, site.name, video.description);
+      const fallbackDescription = videoPageDescription(video.title, site, video.description);
       return renderVideoSitemapUrl({
         pageUrl,
         thumbnailUrl: publicVideoThumbnailUrl(base, video.id),

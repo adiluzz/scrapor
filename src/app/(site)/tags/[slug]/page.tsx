@@ -31,14 +31,19 @@ export async function generateMetadata({
   const site = await getCurrentSite();
   const tag = await getTag(site.id, slug);
   if (!tag) return { title: "Not found" };
-  const title = tagPageTitle(tag.name);
-  const description = tagPageDescription(tag.name, site.name);
+  const title = tagPageTitle(tag.name, site);
+  const description = tagPageDescription(tag.name, site);
   return {
     title,
     description,
-    keywords: keywordsMeta([tag.name, `${tag.name} porn`, `${tag.name} videos`]),
+    keywords: keywordsMeta(site, [tag.name, `${tag.name} porn`, `${tag.name} videos`]),
     alternates: { canonical: `/tags/${tag.slug}` },
-    openGraph: buildOpenGraph({ title, description, url: `/tags/${tag.slug}` }),
+    openGraph: buildOpenGraph({
+      title,
+      description,
+      url: `/tags/${tag.slug}`,
+      siteName: site.name,
+    }),
   };
 }
 
@@ -66,8 +71,8 @@ export default async function TagPage({
         data={{
           "@context": "https://schema.org",
           "@type": "CollectionPage",
-          name: tagPageTitle(tag.name),
-          description: tagPageDescription(tag.name, site.name),
+          name: tagPageTitle(tag.name, site),
+          description: tagPageDescription(tag.name, site),
           url: `${base}/tags/${tag.slug}`,
           numberOfItems: total,
         }}

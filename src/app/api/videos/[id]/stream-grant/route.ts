@@ -5,6 +5,7 @@ import { mintStreamUrl } from "@/lib/cdn";
 import { isS3Configured } from "@/lib/storage";
 import { logger } from "@/lib/logger";
 import { guardApiRoute } from "@/lib/admin-guard";
+import { getCurrentSite } from "@/lib/site";
 
 /**
  * Grant a short-lived signed CDN stream URL — only after the ad session is
@@ -27,7 +28,8 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     return NextResponse.json({ error: "Invalid ad session" }, { status: 403 });
   }
 
-  const minView = parseInt(process.env.AD_MIN_VIEW_SECONDS || "5", 10);
+  const site = await getCurrentSite();
+  const minView = site.adMinViewSeconds;
   const elapsed = (Date.now() - session.openedAt) / 1000;
   const adWatched = outcome === "complete" || outcome === "skip";
   const adUnavailable = outcome === "noad" || outcome === "error";

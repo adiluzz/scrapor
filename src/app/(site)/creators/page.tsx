@@ -9,9 +9,9 @@ export const dynamic = "force-dynamic";
 export async function generateMetadata(): Promise<Metadata> {
   const site = await getCurrentSite();
   return {
-    title: "Watersports & Piss Drinking Creators",
-    description: `Independent creators publishing piss drinking, golden shower & pee fetish videos on ${site.name}.`,
-    keywords: keywordsMeta(["piss drinking creators", "watersports creators"]),
+    title: "Creators",
+    description: `Independent creators publishing videos on ${site.name}.`,
+    keywords: keywordsMeta(site, ["creators"]),
     alternates: { canonical: "/creators" },
   };
 }

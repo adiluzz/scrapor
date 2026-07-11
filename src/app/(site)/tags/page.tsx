@@ -10,11 +10,11 @@ export const dynamic = "force-dynamic";
 export async function generateMetadata(): Promise<Metadata> {
   const site = await getCurrentSite();
   return {
-    title: "Piss Drinking & Watersports Tags",
+    title: "Tags",
     description:
-      `Browse piss drinking, golden shower & pee fetish tags on ${site.name}. ` +
-      siteHomeDescription(site.name).split(".")[0] + ".",
-    keywords: keywordsMeta(["piss drinking tags", "watersports categories"]),
+      `Browse tags on ${site.name}. ` +
+      siteHomeDescription(site).split(".")[0] + ".",
+    keywords: keywordsMeta(site, ["tags", "categories"]),
     alternates: { canonical: "/tags" },
   };
 }

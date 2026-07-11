@@ -27,22 +27,27 @@ export async function generateMetadata({
 
   if (!q) {
     return {
-      title: "Search piss drinking porn",
-      description: `Search piss drinking, golden shower & watersports videos on ${site.name}.`,
+      title: "Search",
+      description: `Search videos on ${site.name}.`,
       robots: { index: false, follow: true },
       alternates: { canonical: "/search" },
     };
   }
 
-  const title = searchPageTitle(q);
-  const description = searchPageDescription(q, site.name);
+  const title = searchPageTitle(q, site);
+  const description = searchPageDescription(q, site);
   return {
     title,
     description,
-    keywords: keywordsMeta([q]),
+    keywords: keywordsMeta(site, [q]),
     robots: { index: false, follow: true },
     alternates: { canonical: `/search?q=${encodeURIComponent(q)}` },
-    openGraph: buildOpenGraph({ title, description, url: `/search?q=${encodeURIComponent(q)}` }),
+    openGraph: buildOpenGraph({
+      title,
+      description,
+      url: `/search?q=${encodeURIComponent(q)}`,
+      siteName: site.name,
+    }),
   };
 }
 

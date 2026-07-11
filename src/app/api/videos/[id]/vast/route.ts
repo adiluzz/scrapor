@@ -27,13 +27,14 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     return NextResponse.json({ error: "Invalid ad session" }, { status: 403 });
   }
 
-  const tagUrl = process.env.VAST_TAG_URL || "";
+  const site = await getCurrentSite();
+  const tagUrl = site.vastTagUrl || "";
   if (!tagUrl) return NextResponse.json({ ad: null });
 
-  const [site, clientIp, h] = await Promise.all([getCurrentSite(), getClientIp(), headers()]);
+  const [clientIp, h] = await Promise.all([getClientIp(), headers()]);
   const referer = `https://${site.domain}/videos/`;
   const userAgent = h.get("user-agent") || undefined;
-  const timeoutMs = parseInt(process.env.AD_TIMEOUT_MS || "8000", 10);
+  const timeoutMs = site.adTimeoutMs;
 
   const ad = await resolveVastAd(tagUrl, { clientIp, referer, userAgent, timeoutMs });
   return NextResponse.json({ ad });

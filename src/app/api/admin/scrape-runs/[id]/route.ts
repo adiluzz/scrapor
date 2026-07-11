@@ -12,11 +12,12 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
   const { id } = await params;
 
   const run = await prisma.scrapeRun.findFirst({
-    where: { id, siteId: g.siteId },
+    where: { id },
     include: {
       siteResults: { orderBy: { sourceSite: "asc" } },
       videos: { orderBy: { createdAt: "desc" }, take: 100 },
       outcomes: { orderBy: { createdAt: "asc" } },
+      targetSites: { include: { site: { select: { id: true, name: true, domain: true } } } },
     },
   });
   if (!run) return NextResponse.json({ error: "Not found" }, { status: 404 });
@@ -33,7 +34,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
   const parsed = actionSchema.safeParse(await request.json().catch(() => null));
   if (!parsed.success) return NextResponse.json({ error: "Invalid action" }, { status: 400 });
 
-  const run = await prisma.scrapeRun.findFirst({ where: { id, siteId: g.siteId } });
+  const run = await prisma.scrapeRun.findFirst({ where: { id } });
   if (!run) return NextResponse.json({ error: "Not found" }, { status: 404 });
 
   if (parsed.data.action === "stop") {

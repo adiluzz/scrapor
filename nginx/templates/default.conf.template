@@ -1,15 +1,17 @@
 # Rendered by the nginx image's envsubst at container start.
-# Variables: ${PRIMARY_DOMAIN}, ${ADMIN_SUBDOMAIN}, ${CDN_SIGNING_SECRET}
+# Variables: PRIMARY_DOMAIN, ADMIN_SUBDOMAIN, ADMIN_BASE_DOMAIN, SITE_SERVER_NAMES,
+#            CDN_SIGNING_SECRET, NETWORK_REFERERS
 #
-# This runs BEHIND the host nginx (which terminates TLS). It receives plain
-# HTTP on :80 (published to 127.0.0.1:${EDGE_HTTP_PORT}) and routes by Host.
+# SITE_SERVER_NAMES — space-separated public + admin hosts (no CDN).
+# NETWORK_REFERERS — space-separated domains for CDN valid_referers.
+# CDN remains cdn.${PRIMARY_DOMAIN} (shared network CDN).
 
 upstream web_upstream { server web:3000; keepalive 32; }
 
-# ── App + admin (public site and admin.<domain>) ──────────────────────
+# ── App + admin (all public sites and admin.${ADMIN_BASE_DOMAIN}) ──────
 server {
     listen 80;
-    server_name ${PRIMARY_DOMAIN} ${ADMIN_SUBDOMAIN}.${PRIMARY_DOMAIN} www.${PRIMARY_DOMAIN};
+    server_name ${SITE_SERVER_NAMES};
 
     location / {
         proxy_pass http://web_upstream;
@@ -22,8 +24,6 @@ server {
         proxy_set_header Upgrade $http_upgrade;
         proxy_set_header Connection "upgrade";
 
-        # Creator video uploads POST straight to the app. Stream them through
-        # (no buffering, no size cap here) and give them a long timeout.
         client_max_body_size 0;
         proxy_request_buffering off;
         proxy_read_timeout 3600s;
@@ -31,34 +31,25 @@ server {
     }
 }
 
-# ── Protecting CDN edge (cdn.<domain>) ────────────────────────────────
-# All objects live in a PRIVATE S3 bucket. nginx validates a short-lived,
-# IP-bound signed link (secure_link), asks the app to authorize + presign,
-# then proxies the fresh presigned S3 URL. No public S3 URL ever exists.
+# ── Shared CDN edge (cdn.${PRIMARY_DOMAIN}) ───────────────────────────
 server {
     listen 80;
     server_name cdn.${PRIMARY_DOMAIN};
 
-    # Ad-gated video stream: /v/{videoId}/video.mp4?e=<exp>&s=<sig>&t=<adToken>
     location ~ "^/v/(?<vid>[^/]+)/video\.mp4$" {
         secure_link      $arg_s,$arg_e;
         secure_link_md5  "$secure_link_expires$uri$remote_addr ${CDN_SIGNING_SECRET}";
-        if ($secure_link = "")  { return 403; }   # bad signature
-        if ($secure_link = "0") { return 410; }   # expired
+        if ($secure_link = "")  { return 403; }
+        if ($secure_link = "0") { return 410; }
 
-        # Hotlink protection.
-        valid_referers none blocked server_names ${PRIMARY_DOMAIN} *.${PRIMARY_DOMAIN};
+        valid_referers none blocked server_names ${NETWORK_REFERERS};
 
-        # Capture the ad-claim token in the MAIN request context. $arg_t is empty
-        # inside the auth subrequest (it has no query string), so it must be
-        # snapshotted here and passed via this variable to /_authorize_stream.
         set               $stream_token $arg_t;
 
         auth_request      /_authorize_stream;
         auth_request_set  $s3url $upstream_http_x_s3_url;
         auth_request_set  $s3host $upstream_http_x_s3_host;
 
-        # Send S3 the exact host the presigned URL was signed for (SigV4 signs Host).
         proxy_set_header  Host $s3host;
         proxy_set_header  Authorization "";
         proxy_hide_header x-amz-id-2;
@@ -66,7 +57,6 @@ server {
         proxy_pass        $s3url;
     }
 
-    # Non ad-gated assets: /a/{videoId}/{thumbnail.jpg|preview.mp4|storyboard.jpg|storyboard.vtt}
     location ~ "^/a/(?<vid>[^/]+)/(?<file>thumbnail\.jpg|preview\.mp4|storyboard\.jpg|storyboard\.vtt)$" {
         secure_link      $arg_s,$arg_e;
         secure_link_md5  "$secure_link_expires$uri$remote_addr ${CDN_SIGNING_SECRET}";
@@ -82,17 +72,13 @@ server {
         proxy_cache_key   "$uri";
         add_header        X-Cache-Status $upstream_cache_status;
 
-        # storyboard.vtt is read via fetch() from the main site origin, so the
-        # cross-origin read needs CORS. Harmless for the image/video assets.
         add_header        Access-Control-Allow-Origin "*" always;
 
-        # Send S3 the exact host the presigned URL was signed for (SigV4 signs Host).
         proxy_set_header  Host $s3host;
         proxy_set_header  Authorization "";
         proxy_pass        $s3url;
     }
 
-    # Internal authorize subrequests → app mints a presigned S3 GET URL.
     location = /_authorize_stream {
         internal;
         proxy_pass              http://web_upstream/api/cdn/authorize?videoId=$vid&t=$stream_token;

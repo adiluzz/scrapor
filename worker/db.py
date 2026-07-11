@@ -202,10 +202,18 @@ def upsert_category(conn, site_id: str, name: str) -> str:
 def create_video(conn, *, site_id, source_url, title, description, duration_sec,
                  source_site, scrape_run_id, s3_video_key, s3_thumb_key,
                  s3_preview_key, s3_storyboard_key, s3_storyboard_vtt_key,
-                 tags, pornstars, categories=None):
+                 tags, pornstars, categories=None, target_site_ids=None):
+    """
+    Insert a Video under site_id (storage/origin for S3 paths), then publish it
+    to each target site via VideoSite. Taxonomy (tags/pornstars/categories) is
+    linked on the storage site only (v1).
+    """
     vid = _cuid()
     slug = _unique_slug(conn, site_id, title)
     dedupe_key = canonical_key(source_url) or None
+    publish_ids = list(dict.fromkeys(
+        sid for sid in (target_site_ids or [site_id]) if sid
+    )) or [site_id]
     with conn.cursor() as cur:
         cur.execute(
             'INSERT INTO "Video" '
@@ -217,6 +225,12 @@ def create_video(conn, *, site_id, source_url, title, description, duration_sec,
              duration_sec, s3_video_key, s3_thumb_key, s3_preview_key,
              s3_storyboard_key, s3_storyboard_vtt_key, scrape_run_id),
         )
+        for publish_site_id in publish_ids:
+            cur.execute(
+                'INSERT INTO "VideoSite" ("videoId","siteId","createdAt") '
+                'VALUES (%s,%s,now()) ON CONFLICT DO NOTHING',
+                (vid, publish_site_id),
+            )
     for name in pornstars or []:
         if not name.strip():
             continue
@@ -365,12 +379,21 @@ def load_run(conn, run_id: str):
             (run_id,),
         )
         row = cur.fetchone()
-    if not row:
-        return None
+        if not row:
+            return None
+        cur.execute(
+            'SELECT "siteId" FROM "ScrapeRunTargetSite" WHERE "runId"=%s ORDER BY "siteId"',
+            (run_id,),
+        )
+        target_site_ids = [r[0] for r in cur.fetchall()]
+    # Fallback: publish to the run's storage/owner site when no targets are set.
+    if not target_site_ids:
+        target_site_ids = [row[1]]
     return {
         "id": row[0], "siteId": row[1], "query": row[2],
         "selectedSites": row[3], "minDurationSec": row[4],
         "maxPerSite": row[5], "selectedCandidates": row[6], "status": row[7],
+        "targetSiteIds": target_site_ids,
     }
 
 

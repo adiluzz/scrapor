@@ -6,12 +6,21 @@ export default function AdminVideoViewToggle({
   q,
   page,
   view,
+  siteId = "",
+  orphans = false,
 }: {
   q: string;
   page: number;
   view: "table" | "grid";
+  siteId?: string;
+  orphans?: boolean;
 }) {
-  const base = `/admin/videos?q=${encodeURIComponent(q)}&page=${page}`;
+  const qs = new URLSearchParams();
+  if (q) qs.set("q", q);
+  if (siteId) qs.set("siteId", siteId);
+  if (orphans) qs.set("orphans", "1");
+  qs.set("page", String(page));
+  const base = `/admin/videos?${qs.toString()}`;
 
   return (
     <div className="mb-4 flex flex-wrap items-center gap-2">

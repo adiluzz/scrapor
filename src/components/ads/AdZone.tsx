@@ -7,10 +7,8 @@ import { EXO_INS_CLASS, serveExoAds } from "@/lib/exo-click";
  * ExoClick display ad slot (banner / native).
  *
  * ExoClick serves ads into an <ins> element identified by a per-account CSS
- * class plus the zone id. The account class below is derived from this
- * publisher's hash (6a97888e — same as the site-verification meta tag).
- * If ExoClick's zone snippet shows a different `<ins class="...">`, update
- * EXO_INS_CLASS in src/lib/exo-click.ts.
+ * class plus the zone id. Pass `insClass` from `site.exoInsClass` when available;
+ * it defaults to the legacy publisher class.
  *
  * The provider script (a.magsrv.com/ad-provider.js) is loaded once in the site
  * layout. `AdProvider.push({ serve: {} })` renders every not-yet-served <ins>
@@ -22,12 +20,17 @@ export default function AdZone({
   className = "",
   minHeight,
   label = true,
+  insClass = EXO_INS_CLASS,
 }: {
-  zoneId?: string;
+  zoneId?: string | null;
   className?: string;
   minHeight?: number;
   label?: boolean;
+  /** ExoClick `<ins>` class; defaults to `eas6a97888e2`. */
+  insClass?: string | null;
 }) {
+  const resolvedClass = insClass || EXO_INS_CLASS;
+
   useEffect(() => {
     if (!zoneId) return;
     serveExoAds();
@@ -40,7 +43,7 @@ export default function AdZone({
     <div className={`flex flex-col items-center ${className}`}>
       {label && <span className="mb-1 text-[10px] uppercase tracking-wide text-zinc-600">Advertisement</span>}
       <ins
-        className={EXO_INS_CLASS}
+        className={resolvedClass}
         data-zoneid={zoneId}
         style={minHeight ? { display: "block", minHeight } : { display: "block" }}
       />

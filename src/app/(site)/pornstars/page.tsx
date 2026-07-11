@@ -12,11 +12,11 @@ type SearchParams = Record<string, string | string[] | undefined>;
 export async function generateMetadata(): Promise<Metadata> {
   const site = await getCurrentSite();
   return {
-    title: "Piss Drinking Pornstars",
+    title: "Pornstars",
     description:
-      `Browse pornstars in piss drinking, golden shower & watersports videos on ${site.name}. ` +
-      siteHomeDescription(site.name).split(".")[0] + ".",
-    keywords: keywordsMeta(["piss drinking pornstars", "watersports models"]),
+      `Browse pornstars on ${site.name}. ` +
+      siteHomeDescription(site).split(".")[0] + ".",
+    keywords: keywordsMeta(site, ["pornstars", "models"]),
     alternates: { canonical: "/pornstars" },
   };
 }

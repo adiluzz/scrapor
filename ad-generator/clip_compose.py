@@ -27,6 +27,7 @@ def compose_promo_ad(
     iteration_number: int,
     clips: list[dict],
     model_params: dict,
+    logo_path: str | None = None,
 ) -> tuple[str, Path]:
     work = Path(CONFIG.work_dir) / promo_ad_id / f"iter-{iteration_number}"
     work.mkdir(parents=True, exist_ok=True)
@@ -98,8 +99,13 @@ def compose_promo_ad(
     concat_simple(parts, raw_path)
 
     lockup_png = Path(CONFIG.brand_lockup_path)
+    if logo_path:
+        from db import resolve_brand_lockup_path
+        lockup_png = resolve_brand_lockup_path(logo_path)
     if not lockup_png.exists():
-        svg_fallback = lockup_png.parent / "pisster-lockup.svg"
+        svg_fallback = lockup_png.with_suffix(".svg")
+        if not svg_fallback.exists():
+            svg_fallback = lockup_png.parent / "pisster-lockup.svg"
         if svg_fallback.exists():
             from brand_intro_outro import _svg_to_png
             _svg_to_png(svg_fallback, lockup_png)

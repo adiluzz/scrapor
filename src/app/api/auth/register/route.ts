@@ -48,7 +48,10 @@ export async function POST(request: Request) {
     }
 
     const code = await issueCode(email, site.id, "SIGNUP");
-    await sendVerificationCode(email, code, "SIGNUP");
+    const brand = site.mailFromName || site.name;
+    const smtpUser = process.env.SMTP_USER || "";
+    const from = smtpUser ? `${brand} <${smtpUser}>` : undefined;
+    await sendVerificationCode(email, code, "SIGNUP", brand, from);
     logger.info({ email, siteId: site.id }, "auth: signup code issued");
 
     return NextResponse.json({ ok: true, next: "verify-signup" });

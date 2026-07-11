@@ -37,7 +37,7 @@ def load_iteration(conn, iteration_id: str) -> dict[str, Any] | None:
         SELECT i.id, i."promoAdId", i."iterationNumber", i."userPrompt", i."modelParams",
                i.status, i."s3Key", i."providerJobId", i."parentIterationId",
                a."siteId", a."generationMode", a."generativeModelId", a.prompt, a."modelParams",
-               a.status AS ad_status, s."logoPath"
+               a.status AS ad_status, s."logoPath", s.domain AS "siteDomain"
         FROM "PromoAdIteration" i
         JOIN "PromoAd" a ON a.id = i."promoAdId"
         LEFT JOIN "Site" s ON s.id = a."siteId"
@@ -51,7 +51,7 @@ def load_iteration(conn, iteration_id: str) -> dict[str, Any] | None:
         "id", "promoAdId", "iterationNumber", "userPrompt", "modelParams",
         "status", "s3Key", "providerJobId", "parentIterationId",
         "siteId", "generationMode", "generativeModelId", "adPrompt", "adModelParams",
-        "adStatus", "logoPath",
+        "adStatus", "logoPath", "siteDomain",
     ]
     return dict(zip(cols, row))
 

@@ -1,9 +1,19 @@
+import type { Metadata } from "next";
 import { Suspense } from "react";
 import { getCurrentSite } from "@/lib/site";
+import { siteHomeDescription } from "@/lib/seo";
 import LoginForm from "@/components/auth/LoginForm";
 import BrandStyle from "@/components/brand/BrandStyle";
 
 export const dynamic = "force-dynamic";
+
+export async function generateMetadata(): Promise<Metadata> {
+  const site = await getCurrentSite();
+  return {
+    title: `Sign in · ${site.name}`,
+    description: siteHomeDescription(site),
+  };
+}
 
 export default async function LoginPage() {
   const site = await getCurrentSite();

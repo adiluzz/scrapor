@@ -5,7 +5,7 @@ const host = process.env.SMTP_HOST || "smtp.gmail.com";
 const port = parseInt(process.env.SMTP_PORT || "465", 10);
 const user = process.env.SMTP_USER || "";
 const pass = process.env.SMTP_PASS || "";
-const FROM = process.env.MAIL_FROM || `Pisster <${user}>`;
+const FROM = process.env.MAIL_FROM || (user ? `Site <${user}>` : "");
 const ADMIN_NOTIFY = process.env.ADMIN_NOTIFY_EMAIL || "";
 
 let transporter: nodemailer.Transporter | null = null;
@@ -54,7 +54,7 @@ export async function sendMail(opts: {
   }
 }
 
-const wrap = (title: string, body: string, brandName = "Pisster") => `
+const wrap = (title: string, body: string, brandName: string) => `
   <div style="font-family:system-ui,sans-serif;max-width:520px;margin:auto;background:#18181b;color:#e4e4e7;padding:28px;border-radius:12px">
     <h1 style="color:#f472b6;font-size:20px;margin:0 0 16px">${title}</h1>
     ${body}
@@ -65,7 +65,8 @@ export async function sendVerificationCode(
   to: string,
   code: string,
   purpose: "SIGNUP" | "LOGIN",
-  brandName = "Pisster"
+  brandName: string,
+  from?: string
 ) {
   const label = purpose === "SIGNUP" ? "confirm your account" : "sign in";
   return sendMail({
@@ -79,21 +80,29 @@ export async function sendVerificationCode(
       brandName
     ),
     text: `Your ${brandName} code is ${code}. It expires in 10 minutes.`,
+    from,
     brandName,
   });
 }
 
-export async function sendCreatorApplicationReceived(toUser: string, displayName: string) {
+export async function sendCreatorApplicationReceived(
+  toUser: string,
+  displayName: string,
+  brandName: string,
+  from?: string
+) {
   return sendMail({
     to: toUser,
     subject: "Your creator request was received",
     html: wrap(
       "Creator application received",
       `<p>Hi ${displayName},</p>
-       <p>Thanks for applying to become a creator on Pisster. Our team is reviewing your
-       application and you'll hear back soon.</p>`
+       <p>Thanks for applying to become a creator on ${brandName}. Our team is reviewing your
+       application and you'll hear back soon.</p>`,
+      brandName
     ),
-    text: `Hi ${displayName}, your Pisster creator application was received and is under review.`,
+    text: `Hi ${displayName}, your ${brandName} creator application was received and is under review.`,
+    from,
   });
 }
 
@@ -102,11 +111,13 @@ export async function sendAdminNewApplication(opts: {
   displayName: string;
   siteDomain: string;
   reviewUrl: string;
+  brandName?: string;
 }) {
   if (!ADMIN_NOTIFY) {
     logger.warn("ADMIN_NOTIFY_EMAIL not set; skipping admin application notice");
     return false;
   }
+  const brand = opts.brandName || opts.siteDomain;
   return sendMail({
     to: ADMIN_NOTIFY,
     subject: `New creator application from ${opts.displayName} on ${opts.siteDomain}`,
@@ -114,7 +125,8 @@ export async function sendAdminNewApplication(opts: {
       "New creator application",
       `<p><strong>${opts.displayName}</strong> (${opts.applicantEmail}) applied to become a
        creator on <strong>${opts.siteDomain}</strong>.</p>
-       <p><a href="${opts.reviewUrl}" style="color:#f472b6">Review the application →</a></p>`
+       <p><a href="${opts.reviewUrl}" style="color:#f472b6">Review the application →</a></p>`,
+      brand
     ),
     text: `New creator application from ${opts.displayName} (${opts.applicantEmail}) on ${opts.siteDomain}. Review: ${opts.reviewUrl}`,
   });

@@ -7,6 +7,8 @@ export type PromoAdModelParams = {
   logoPosition?: "top-left" | "top-right" | "bottom-left" | "bottom-right";
   logoOpacity?: number;
   showTagline?: boolean;
+  /** Domain shown on outro tagline (e.g. fbbtube.com). */
+  taglineDomain?: string;
   audioEnabled?: boolean;
   maxBodySeconds?: number;
   crossfadeSec?: number;

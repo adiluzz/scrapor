@@ -35,11 +35,13 @@ def process_iteration(conn, iteration_id: str) -> None:
     iteration_number = job["iterationNumber"]
     generation_mode = job["generationMode"]
     model_params = parse_json(job.get("modelParams") or job.get("adModelParams"))
+    if not model_params.get("taglineDomain") and job.get("siteDomain"):
+        model_params["taglineDomain"] = job["siteDomain"]
 
     set_iteration_status(conn, iteration_id, "GENERATING")
 
     try:
-        ensure_brand_assets()
+        ensure_brand_assets(tagline_domain=model_params.get("taglineDomain"))
         work_dir = Path(CONFIG.work_dir) / promo_ad_id / f"iter-{iteration_number}"
         work_dir.mkdir(parents=True, exist_ok=True)
 

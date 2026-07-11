@@ -1,16 +1,20 @@
 import type { Metadata } from "next";
 import "./globals.css";
 
-const primaryDomain = process.env.PRIMARY_DOMAIN || "pisster.com";
+/**
+ * Root layout stays brand-neutral. Per-site titles/descriptions come from
+ * `(site)/layout` and auth pages via `generateMetadata` + `getCurrentSite()`.
+ * `metadataBase` is only a fallback for absolute URLs when a page does not
+ * set its own; site pages use `getSiteBaseUrl()`.
+ */
+const primaryDomain = process.env.PRIMARY_DOMAIN || "localhost";
 
 export const metadata: Metadata = {
   metadataBase: new URL(`https://${primaryDomain}`),
   title: {
-    default: "Pisster — Piss Drinking Porn Tube",
-    template: "%s · Pisster",
+    default: "Video site",
+    template: "%s",
   },
-  description:
-    "Free HD piss drinking porn, golden shower & watersports videos. Pee drinking, piss swallowing & urine fetish tube updated daily.",
   robots: { index: true, follow: true },
   icons: {
     icon: [

@@ -2,10 +2,10 @@ import Link from "next/link";
 import CookieSettings from "@/components/site/CookieSettings";
 
 export default function Footer({
-  siteName = "Pisster",
+  siteName,
   isStudio = false,
 }: {
-  siteName?: string;
+  siteName: string;
   isStudio?: boolean;
 }) {
   return (

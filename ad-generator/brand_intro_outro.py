@@ -1,8 +1,10 @@
-"""Animated Pisster logo intro/outro segments."""
+"""Animated brand logo intro/outro segments."""
 
 from __future__ import annotations
 
 import logging
+import os
+import re
 import subprocess
 from pathlib import Path
 
@@ -12,7 +14,22 @@ from media import run_ffmpeg
 log = logging.getLogger("ad-generator.brand")
 
 
-def ensure_brand_assets() -> None:
+def _ffmpeg_drawtext_escape(text: str) -> str:
+    """Escape text for ffmpeg drawtext filter."""
+    return (
+        text.replace("\\", "\\\\")
+        .replace(":", "\\:")
+        .replace("'", "\\'")
+        .replace("%", "%%")
+    )
+
+
+def _tagline_slug(tagline: str) -> str:
+    slug = re.sub(r"[^a-z0-9]+", "-", tagline.lower()).strip("-")
+    return slug[:48] or "site"
+
+
+def ensure_brand_assets(tagline_domain: str | None = None) -> None:
     """Build intro/outro MP4 templates if missing."""
     assets_dir = Path(CONFIG.intro_path).parent
     assets_dir.mkdir(parents=True, exist_ok=True)
@@ -36,15 +53,24 @@ def ensure_brand_assets() -> None:
     if not Path(CONFIG.intro_path).exists():
         _render_intro(png_path, Path(CONFIG.intro_path))
     if not Path(CONFIG.outro_path).exists():
-        _render_outro(png_path, Path(CONFIG.outro_path))
+        _render_outro(png_path, Path(CONFIG.outro_path), show_tagline=False)
+
+    tagline = (
+        (tagline_domain or "").strip()
+        or os.environ.get("PROMO_AD_TAGLINE_DOMAIN")
+        or os.environ.get("PRIMARY_DOMAIN")
+        or ""
+    ).strip()
 
     outro_base = Path(CONFIG.outro_path).parent
-    tagline_path = outro_base / "outro_tagline_1080p.mp4"
     notag_path = outro_base / "outro_notagline_1080p.mp4"
     if not notag_path.exists():
         _render_outro(png_path, notag_path, show_tagline=False)
-    if not tagline_path.exists():
-        _render_outro(png_path, tagline_path, show_tagline=True)
+
+    if tagline:
+        tagline_path = outro_base / f"outro_tagline_{_tagline_slug(tagline)}_1080p.mp4"
+        if not tagline_path.exists():
+            _render_outro(png_path, tagline_path, show_tagline=True, tagline_text=tagline)
 
 
 def _svg_to_png(svg_path: Path, png_path: Path) -> None:
@@ -78,14 +104,21 @@ def _render_intro(png_path: Path, out_path: Path) -> None:
     ])
 
 
-def _render_outro(png_path: Path, out_path: Path, show_tagline: bool = True) -> None:
-    """2.5s: logo hold + fade to black + optional tagline area."""
-    tagline = (
-        "drawtext=text='pisster.com':fontsize=36:fontcolor=0xD4AF37:"
-        "x=(w-text_w)/2:y=h-180:alpha='if(lt(t,1.5),0,if(lt(t,2.2),(t-1.5)/0.7,1))',"
-        if show_tagline
-        else ""
-    )
+def _render_outro(
+    png_path: Path,
+    out_path: Path,
+    show_tagline: bool = True,
+    tagline_text: str = "",
+) -> None:
+    """2.5s: logo hold + fade to black + optional site-domain tagline."""
+    text = (tagline_text or "").strip()
+    tagline = ""
+    if show_tagline and text:
+        esc = _ffmpeg_drawtext_escape(text)
+        tagline = (
+            f"drawtext=text='{esc}':fontsize=36:fontcolor=0xD4AF37:"
+            "x=(w-text_w)/2:y=h-180:alpha='if(lt(t,1.5),0,if(lt(t,2.2),(t-1.5)/0.7,1))',"
+        )
     run_ffmpeg([
         "-f", "lavfi", "-i", "color=c=black:s=1920x1080:d=2.5:r=24",
         "-i", str(png_path),
@@ -102,11 +135,24 @@ def _render_outro(png_path: Path, out_path: Path, show_tagline: bool = True) -> 
     ])
 
 
-def intro_outro_paths(show_tagline: bool = True) -> tuple[Path, Path]:
-    ensure_brand_assets()
+def intro_outro_paths(
+    show_tagline: bool = True,
+    tagline_domain: str | None = None,
+) -> tuple[Path, Path]:
+    ensure_brand_assets(tagline_domain=tagline_domain)
     intro = Path(CONFIG.intro_path)
     outro_base = Path(CONFIG.outro_path).parent
-    outro = outro_base / ("outro_tagline_1080p.mp4" if show_tagline else "outro_notagline_1080p.mp4")
-    if not outro.exists():
-        outro = Path(CONFIG.outro_path)
+    if show_tagline:
+        tagline = (
+            (tagline_domain or "").strip()
+            or os.environ.get("PROMO_AD_TAGLINE_DOMAIN")
+            or os.environ.get("PRIMARY_DOMAIN")
+            or ""
+        ).strip()
+        if tagline:
+            outro = outro_base / f"outro_tagline_{_tagline_slug(tagline)}_1080p.mp4"
+        else:
+            outro = outro_base / "outro_notagline_1080p.mp4"
+    else:
+        outro = outro_base / "outro_notagline_1080p.mp4"
     return intro, outro

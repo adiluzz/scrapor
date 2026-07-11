@@ -411,7 +411,7 @@ export default function CreateAdPage() {
                 savePatch({ modelParams });
               }}
             />
-            Show pisster.com tagline on outro
+            Show site domain on outro
           </label>
         </div>
       )}

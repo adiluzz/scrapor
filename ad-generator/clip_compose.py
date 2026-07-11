@@ -34,6 +34,10 @@ def compose_promo_ad(
 
     max_body = float(model_params.get("maxBodySeconds") or 60)
     show_tagline = model_params.get("showTagline", True) is not False
+    tagline_domain = (
+        (model_params.get("taglineDomain") or "").strip()
+        or None
+    )
     logo_position = model_params.get("logoPosition") or "bottom-right"
     logo_opacity = float(model_params.get("logoOpacity") or 0.85)
     crossfade_sec = float(model_params.get("crossfadeSec") or 0.5)
@@ -87,7 +91,7 @@ def compose_promo_ad(
     body_path = work / "body.mp4"
     apply_body_bookends(body_raw, body_path)
 
-    intro, outro = intro_outro_paths(show_tagline)
+    intro, outro = intro_outro_paths(show_tagline, tagline_domain=tagline_domain)
     parts = []
     if intro.exists():
         parts.append(intro)

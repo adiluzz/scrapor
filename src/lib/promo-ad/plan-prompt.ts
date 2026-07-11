@@ -22,6 +22,8 @@ export type PlanPromptInput = {
   userNotes?: string;
   priorPrompt?: string;
   userFeedback?: string;
+  brandName?: string;
+  brandDomain?: string;
 };
 
 function buildPlanPrompt(input: PlanPromptInput): string {
@@ -39,9 +41,12 @@ User feedback: """${input.userFeedback}"""
 `;
   }
 
-  return `You are a promo ad creative director for Pisster (adult video site). Draft a generative video ad concept.
+  const brand = input.brandName || "the site";
+  const domain = input.brandDomain || "the site";
 
-Brand: Pisster — golden teardrop logo, premium adult content. Logo appears in intro/outro via post-production (do not describe exact logo pixels).
+  return `You are a promo ad creative director for ${brand} (adult video site). Draft a generative video ad concept.
+
+Brand: ${brand} — premium adult content. Logo appears in intro/outro via post-production (do not describe exact logo pixels).
 
 Approved source clips (for thematic reference):
 ${clips}
@@ -51,9 +56,9 @@ ${input.userNotes ? `Notes: ${input.userNotes}` : ""}
 ${revision}
 
 Return JSON with:
-- prompt: English cinematic ad prompt for AI video generation (≤4000 chars). Mention mood, pacing, golden/warm accents, premium feel.
+- prompt: English cinematic ad prompt for AI video generation (≤4000 chars). Mention mood, pacing, premium feel.
 - shotSummary: 2-4 sentence shot breakdown
-- ctaText: short CTA (e.g. "Stream now at pisster.com")
+- ctaText: short CTA (e.g. "Stream now at ${domain}")
 - durationSeconds: 6–120 (use 6s increments for Nova Reel; prefer 12–30s for social ads)`;
 }
 

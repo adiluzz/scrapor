@@ -39,7 +39,10 @@ export async function POST(request: Request) {
         return NextResponse.json({ error: "Please verify your email first", next: "verify-signup" }, { status: 403 });
       }
       const code = await issueCode(email, site.id, "LOGIN");
-      await sendVerificationCode(email, code, "LOGIN");
+      const brand = site.mailFromName || site.name;
+      const smtpUser = process.env.SMTP_USER || "";
+      const from = smtpUser ? `${brand} <${smtpUser}>` : undefined;
+      await sendVerificationCode(email, code, "LOGIN", brand, from);
       logger.info({ email, siteId: site.id }, "auth: login code issued");
       return NextResponse.json({ ok: true, next: "verify-2fa" });
     }

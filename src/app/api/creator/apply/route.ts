@@ -49,15 +49,19 @@ export async function POST(request: Request) {
   const reviewUrl = `${proto}://${process.env.ADMIN_SUBDOMAIN || "admin"}.${site.domain}/admin/applications`;
   const dbUser = await prisma.user.findUnique({ where: { id: user.userId } });
   try {
+    const brand = site.mailFromName || site.name;
+    const smtpUser = process.env.SMTP_USER || "";
+    const from = smtpUser ? `${brand} <${smtpUser}>` : undefined;
     await Promise.all([
       dbUser?.email
-        ? sendCreatorApplicationReceived(dbUser.email, parsed.data.displayName)
+        ? sendCreatorApplicationReceived(dbUser.email, parsed.data.displayName, brand, from)
         : Promise.resolve(),
       sendAdminNewApplication({
         applicantEmail: dbUser?.email || "unknown",
         displayName: parsed.data.displayName,
         siteDomain: site.domain,
         reviewUrl,
+        brandName: brand,
       }),
     ]);
   } catch (err) {

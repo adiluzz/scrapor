@@ -52,7 +52,7 @@ export default function Logo({
   href = "/",
   className = "",
 }: LogoProps) {
-  const name = site?.name || "Pisster";
+  const name = site?.name || "Site";
   const { left, right } = splitName(name);
   const accent = site?.primaryColor || "#D4AF37";
 

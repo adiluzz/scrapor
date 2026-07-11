@@ -45,6 +45,11 @@ export async function POST(request: Request, { params }: RouteCtx) {
     return NextResponse.json({ error: "Already generating" }, { status: 409 });
   }
 
+  const site = await prisma.site.findUnique({
+    where: { id: ad.siteId },
+    select: { name: true, domain: true, mailFromName: true },
+  });
+
   const parent = ad.iterations[0];
   const params_ = parseModelParams(ad.modelParams);
   const durationSeconds = params_.durationSeconds ?? 12;
@@ -77,12 +82,15 @@ export async function POST(request: Request, { params }: RouteCtx) {
       clipLabels: ad.clips.map((c) => `${c.detection.label} (${c.detection.videoTitle})`),
       priorPrompt: ad.prompt ?? parent?.userPrompt ?? undefined,
       userFeedback: feedback,
+      brandName: site?.mailFromName || site?.name,
+      brandDomain: site?.domain,
     });
 
     const nextNumber = (parent?.iterationNumber ?? 0) + 1;
     const modelParams = stringifyModelParams({
       ...params_,
       durationSeconds: plan.durationSeconds,
+      taglineDomain: params_.taglineDomain || site?.domain,
     });
 
     await prisma.promoAd.update({

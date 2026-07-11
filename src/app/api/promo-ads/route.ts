@@ -103,16 +103,25 @@ export async function POST(request: Request) {
       }));
 
     let prompt: string | null = null;
-    let modelParams = defaultModelParams(generationMode);
+    const site = await prisma.site.findUnique({
+      where: { id: auth.siteId },
+      select: { name: true, domain: true, mailFromName: true },
+    });
+    let modelParams = defaultModelParams(generationMode, {
+      taglineDomain: site?.domain,
+    });
 
     if (generationMode === "GENERATIVE") {
       const plan = await planPromoAdPrompt({
         clipLabels: detections.map((d) => `${d.label} (${d.videoTitle})`),
         showcaseVideoTitle: showcase?.title,
+        brandName: site?.mailFromName || site?.name,
+        brandDomain: site?.domain,
       });
       prompt = plan.prompt;
       modelParams = defaultModelParams(generationMode, {
         durationSeconds: plan.durationSeconds,
+        taglineDomain: site?.domain,
       });
     }
 

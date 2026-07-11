@@ -5,8 +5,10 @@
 # SITE_SERVER_NAMES — space-separated public + admin hosts (no CDN).
 # NETWORK_REFERERS — space-separated domains for CDN valid_referers.
 # CDN remains cdn.${PRIMARY_DOMAIN} (shared network CDN).
-
-upstream web_upstream { server web:3000; keepalive 32; }
+#
+# Do NOT pin `web` in a static upstream block — that caches the container IP at
+# nginx start/reload and returns 502 after `web` is recreated. Resolve via the
+# Docker embedded DNS (127.0.0.11) on each request (see http-level resolver).
 
 # ── App + admin (all public sites and admin.${ADMIN_BASE_DOMAIN}) ──────
 server {
@@ -14,7 +16,8 @@ server {
     server_name ${SITE_SERVER_NAMES};
 
     location / {
-        proxy_pass http://web_upstream;
+        set $web_upstream http://web:3000;
+        proxy_pass $web_upstream;
         proxy_http_version 1.1;
         proxy_set_header Host $host;
         proxy_set_header X-Forwarded-Host $host;
@@ -81,7 +84,8 @@ server {
 
     location = /_authorize_stream {
         internal;
-        proxy_pass              http://web_upstream/api/cdn/authorize?videoId=$vid&t=$stream_token;
+        set $web_upstream http://web:3000;
+        proxy_pass              $web_upstream/api/cdn/authorize?videoId=$vid&t=$stream_token;
         proxy_pass_request_body off;
         proxy_set_header        Content-Length "";
         proxy_set_header        X-Original-Host $http_host;
@@ -89,7 +93,8 @@ server {
     }
     location = /_authorize_asset {
         internal;
-        proxy_pass              http://web_upstream/api/cdn/authorize?videoId=$vid&file=$file;
+        set $web_upstream http://web:3000;
+        proxy_pass              $web_upstream/api/cdn/authorize?videoId=$vid&file=$file;
         proxy_pass_request_body off;
         proxy_set_header        Content-Length "";
         proxy_set_header        X-Original-Host $http_host;

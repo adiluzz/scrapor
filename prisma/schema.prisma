@@ -38,6 +38,8 @@ model Site {
   exoSiteVerification String?
   homeH1         String?
   homeIntroHtml  String?
+  /// GA4 measurement id for this host (e.g. G-XXXXXXXX).
+  gaMeasurementId String?
 
   // Ads (per-site network config)
   vastTagUrl              String?

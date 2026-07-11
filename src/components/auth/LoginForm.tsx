@@ -1,10 +1,10 @@
 "use client";
 
 import { useState } from "react";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useSearchParams } from "next/navigation";
 import Link from "next/link";
 import Logo from "@/components/brand/Logo";
-import { signIn } from "next-auth/react";
+import { credentialsSignIn } from "@/lib/credentials-signin";
 
 type LogoSite = {
   name: string;
@@ -12,8 +12,17 @@ type LogoSite = {
   primaryColor: string;
 };
 
+function postLoginPath(callbackUrl: string): string {
+  // Soft client navigations can race the new session cookie and bounce back
+  // to /login. Full-page assign always sends the cookie. On the admin host,
+  // "/" is rewritten to /admin — prefer an explicit /admin target.
+  if (typeof window !== "undefined" && window.location.hostname.startsWith("admin.")) {
+    if (!callbackUrl || callbackUrl === "/") return "/admin";
+  }
+  return callbackUrl || "/";
+}
+
 export default function LoginForm({ site }: { site?: LogoSite | null }) {
-  const router = useRouter();
   const search = useSearchParams();
   const callbackUrl = search.get("callbackUrl") || "/";
   const [step, setStep] = useState<"credentials" | "code">("credentials");
@@ -49,19 +58,25 @@ export default function LoginForm({ site }: { site?: LogoSite | null }) {
     setError(null);
     setLoading(true);
     try {
-      const res = await signIn("credentials", {
+      const dest = postLoginPath(callbackUrl);
+      const res = await credentialsSignIn({
         email,
         password,
         code,
         mode: "login",
-        redirect: false,
+        callbackUrl: dest,
       });
-      if (res?.error) {
-        setError("Invalid or expired code");
+      if (!res.ok) {
+        setError(
+          res.error === "NetworkError"
+            ? "Temporary connection issue — try again"
+            : "Invalid or expired code"
+        );
         return;
       }
-      router.push(callbackUrl);
-    } finally {
+      // Full reload so middleware/RSC see the new session cookie.
+      window.location.assign(dest);
+    } catch {
       setLoading(false);
     }
   }

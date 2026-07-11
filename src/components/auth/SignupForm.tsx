@@ -1,10 +1,9 @@
 "use client";
 
 import { useState } from "react";
-import { useRouter } from "next/navigation";
 import Link from "next/link";
 import Logo from "@/components/brand/Logo";
-import { signIn } from "next-auth/react";
+import { credentialsSignIn } from "@/lib/credentials-signin";
 
 type LogoSite = {
   name: string;
@@ -13,7 +12,6 @@ type LogoSite = {
 };
 
 export default function SignupForm({ site }: { site?: LogoSite | null }) {
-  const router = useRouter();
   const [step, setStep] = useState<"credentials" | "code">("credentials");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -47,19 +45,23 @@ export default function SignupForm({ site }: { site?: LogoSite | null }) {
     setError(null);
     setLoading(true);
     try {
-      const res = await signIn("credentials", {
+      const res = await credentialsSignIn({
         email,
         password,
         code,
         mode: "signup",
-        redirect: false,
+        callbackUrl: "/dashboard",
       });
-      if (res?.error) {
-        setError("Invalid or expired code");
+      if (!res.ok) {
+        setError(
+          res.error === "NetworkError"
+            ? "Temporary connection issue — try again"
+            : "Invalid or expired code"
+        );
         return;
       }
-      router.push("/dashboard");
-    } finally {
+      window.location.assign("/dashboard");
+    } catch {
       setLoading(false);
     }
   }

@@ -1,0 +1,25 @@
+---
+description: Deploy and sync only through git — never scp/rsync hotfixes to the server
+alwaysApply: true
+---
+
+# Git-only workflow
+
+**Never** deploy by copying files onto the server (`scp`, `rsync`, `tar | ssh`, editing `/opt/pisster` directly, or rebuilding from an unclean tree).
+
+## Required flow
+
+1. Edit in the local git repo only.
+2. Commit on a branch (when the user asks, or when they ask to update/deploy the repo).
+3. `git push` to origin.
+4. On the server: `git pull` (or fetch + reset to the pushed ref), then `docker compose up -d --build …` as needed.
+
+## Forbidden
+
+- Patching production with ad-hoc file copies so the server has uncommitted diffs
+- Leaving the server git worktree dirty as the source of truth
+- Rebuilding Docker from files that are not committed and pushed
+
+## If local and server diverge
+
+Reconcile **through git**: bring changes into the repo, commit, push, then make the server match `origin` — do not “fix prod” outside git again.

@@ -14,6 +14,7 @@ type SeoFields = {
   exoSiteVerification: string | null;
   homeH1: string | null;
   homeIntroHtml: string | null;
+  gaMeasurementId: string | null;
 };
 
 export default function WebsiteSeoForm({
@@ -32,6 +33,7 @@ export default function WebsiteSeoForm({
     exoSiteVerification: initial.exoSiteVerification || "",
     homeH1: initial.homeH1 || "",
     homeIntroHtml: initial.homeIntroHtml || "",
+    gaMeasurementId: initial.gaMeasurementId || "",
   });
   const [error, setError] = useState<string | null>(null);
   const [status, setStatus] = useState("");
@@ -62,6 +64,7 @@ export default function WebsiteSeoForm({
           exoSiteVerification: form.exoSiteVerification || null,
           homeH1: form.homeH1 || null,
           homeIntroHtml: form.homeIntroHtml || null,
+          gaMeasurementId: form.gaMeasurementId.trim() || null,
         }),
       });
       const data = await res.json();
@@ -87,6 +90,19 @@ export default function WebsiteSeoForm({
           {error || status}
         </p>
       )}
+
+      <label className="block space-y-1.5">
+        <span className="text-sm text-zinc-400">Google Analytics 4 measurement ID</span>
+        <input
+          value={form.gaMeasurementId}
+          onChange={(e) => set("gaMeasurementId", e.target.value)}
+          placeholder="G-XXXXXXXX"
+          className={inputClass}
+        />
+        <span className="block text-xs text-zinc-500">
+          Per-site GA4 property. Leave blank to disable analytics on this site.
+        </span>
+      </label>
 
       <label className="block space-y-1.5">
         <span className="text-sm text-zinc-400">SEO title</span>

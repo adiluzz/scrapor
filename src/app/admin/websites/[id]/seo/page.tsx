@@ -31,6 +31,7 @@ export default async function WebsiteSeoPage({ params }: { params: Promise<{ id:
           exoSiteVerification: site.exoSiteVerification,
           homeH1: site.homeH1,
           homeIntroHtml: site.homeIntroHtml,
+          gaMeasurementId: site.gaMeasurementId,
         }}
       />
     </div>

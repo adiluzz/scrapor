@@ -46,7 +46,11 @@ export async function generateMetadata(): Promise<Metadata> {
 export default async function SiteLayout({ children }: { children: React.ReactNode }) {
   const [jar, site] = await Promise.all([cookies(), getCurrentSite()]);
   const ageVerified = jar.get("age_verified")?.value === "1";
-  const gaId = process.env.NEXT_PUBLIC_GA_MEASUREMENT_ID;
+  // Prefer per-site GA4 id; env is a legacy single-property fallback only.
+  const gaId =
+    site.gaMeasurementId?.trim() ||
+    process.env.NEXT_PUBLIC_GA_MEASUREMENT_ID?.trim() ||
+    "";
   const isStudio = site.kind === "STUDIO";
 
   return (

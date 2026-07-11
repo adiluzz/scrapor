@@ -38,6 +38,15 @@ const patchSchema = z.object({
   exoSiteVerification: z.string().max(200).nullable().optional(),
   homeH1: z.string().max(300).nullable().optional(),
   homeIntroHtml: z.string().max(20000).nullable().optional(),
+  gaMeasurementId: z
+    .string()
+    .max(40)
+    .nullable()
+    .optional()
+    .refine(
+      (v) => v == null || v.trim() === "" || /^G-[A-Z0-9]+$/i.test(v.trim()),
+      "Must be a GA4 id like G-XXXXXXXX"
+    ),
   vastTagUrl: z.string().max(2000).nullable().optional(),
   adSkipSeconds: z.number().int().min(0).max(120).optional(),
   adMinViewSeconds: z.number().int().min(0).max(120).optional(),
@@ -118,6 +127,12 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
       exoSiteVerification: d.exoSiteVerification === undefined ? undefined : d.exoSiteVerification,
       homeH1: d.homeH1 === undefined ? undefined : d.homeH1,
       homeIntroHtml: d.homeIntroHtml === undefined ? undefined : d.homeIntroHtml,
+      gaMeasurementId:
+        d.gaMeasurementId === undefined
+          ? undefined
+          : d.gaMeasurementId && d.gaMeasurementId.trim()
+            ? d.gaMeasurementId.trim()
+            : null,
       vastTagUrl: d.vastTagUrl === undefined ? undefined : d.vastTagUrl,
       adSkipSeconds: d.adSkipSeconds,
       adMinViewSeconds: d.adMinViewSeconds,

@@ -113,7 +113,7 @@ VALUES (
   'Free HD female bodybuilder & muscle worship porn',
   '/brand/fbbtube-lockup.png',
   'fbb-mark',
-  '#3B82A0',
+  '#FF2D7A',
   true,
   'FBB Tube',
   1,

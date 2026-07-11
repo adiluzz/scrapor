@@ -21,5 +21,5 @@ export_one() {
 }
 
 export_one "$ROOT/public/brand/pisster-lockup.svg" "$ROOT/public/brand/pisster-lockup.png"
-export_one "$ROOT/public/brand/fbbtube-lockup.svg" "$ROOT/public/brand/fbbtube-lockup.png"
+# fbbtube-lockup.png is the silhouette lockup (not generated from SVG)
 export_one "$ROOT/public/brand/sharlila-lockup.svg" "$ROOT/public/brand/sharlila-lockup.png"

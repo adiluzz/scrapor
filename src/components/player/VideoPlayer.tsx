@@ -1013,7 +1013,7 @@ export default forwardRef(function VideoPlayer(
         />
       )}
 
-      <div data-vjs-player className="w-full overflow-hidden rounded-xl border border-zinc-800/80 bg-black shadow-[0_0_0_1px_rgba(212,175,55,0.08)]">
+      <div data-vjs-player className="w-full overflow-hidden rounded-xl border border-zinc-800/80 bg-black shadow-[0_0_0_1px_rgb(var(--brand-rgb)/0.08)]">
         <div ref={videoRef} className="video-player-vjs-mount w-full h-full" />
       </div>
 
@@ -1067,7 +1067,7 @@ export default forwardRef(function VideoPlayer(
           ) : status === "error" ? (
             <span className="rounded bg-red-600/90 px-4 py-2 text-sm text-white">Playback error — tap to retry</span>
           ) : (
-            <span className="flex h-16 w-16 items-center justify-center rounded-full bg-brand-600/95 shadow-[0_0_40px_rgba(212,175,55,0.35)] ring-2 ring-brand-400/40 sm:h-24 sm:w-24">
+            <span className="flex h-16 w-16 items-center justify-center rounded-full bg-brand-600/95 shadow-[0_0_40px_rgb(var(--brand-rgb)/0.35)] ring-2 ring-brand-400/40 sm:h-24 sm:w-24">
               <svg className="ml-1 h-8 w-8 text-zinc-950 sm:ml-1.5 sm:h-10 sm:w-10" fill="currentColor" viewBox="0 0 20 20">
                 <path d="M6.3 2.8A1.5 1.5 0 004 4.1v11.8a1.5 1.5 0 002.3 1.3l9.3-5.9a1.5 1.5 0 000-2.6L6.3 2.8z" />
               </svg>

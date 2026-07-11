@@ -20,7 +20,10 @@ export async function POST(request: Request) {
     const parsed = schema.safeParse(await request.json());
     if (!parsed.success) return NextResponse.json({ error: "Invalid input" }, { status: 400 });
     const email = parsed.data.email.toLowerCase().trim();
-    const host = request.headers.get("host") || undefined;
+    const host =
+      request.headers.get("x-forwarded-host") ||
+      request.headers.get("host") ||
+      undefined;
     const site = await getSiteByDomain(host || "");
 
     if (!(await rateLimit(`login:${email}`, 10, 900))) {

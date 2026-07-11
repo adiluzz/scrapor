@@ -1,5 +1,7 @@
 import { ImageResponse } from "next/og";
 import { headers } from "next/headers";
+import { readFile } from "fs/promises";
+import { join } from "path";
 import { getSiteByDomain, isAdminHost, PRIMARY_DOMAIN, ADMIN_BASE_DOMAIN } from "@/lib/site";
 
 export const size = { width: 48, height: 48 };
@@ -26,6 +28,8 @@ export default async function Icon() {
   const { logoKey, color } = await resolveLogoKey();
 
   if (logoKey === "fbb-mark") {
+    const buf = await readFile(join(process.cwd(), "public/brand/fbbtube-mark.png"));
+    const src = `data:image/png;base64,${buf.toString("base64")}`;
     return new ImageResponse(
       (
         <div
@@ -39,18 +43,8 @@ export default async function Icon() {
             borderRadius: 6,
           }}
         >
-          <svg width="34" height="40" viewBox="0 0 40 48" fill="none">
-            <ellipse cx="12" cy="14" rx="7.5" ry="6.5" fill={color} />
-            <ellipse cx="28" cy="14" rx="7.5" ry="6.5" fill={color} />
-            <path
-              d="M8 16 C8 16 10 44 20 46 C30 44 32 16 32 16 C28 22 12 22 8 16Z"
-              fill={color}
-            />
-            <rect x="14" y="22" width="5" height="4.5" rx="1" fill="#0F172A" fillOpacity="0.35" />
-            <rect x="21" y="22" width="5" height="4.5" rx="1" fill="#0F172A" fillOpacity="0.35" />
-            <rect x="14" y="28" width="5" height="4.5" rx="1" fill="#0F172A" fillOpacity="0.35" />
-            <rect x="21" y="28" width="5" height="4.5" rx="1" fill="#0F172A" fillOpacity="0.35" />
-          </svg>
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src={src} width={40} height={40} alt="" style={{ objectFit: "contain" }} />
         </div>
       ),
       { ...size },

@@ -55,12 +55,16 @@ export function adminHost(): string {
 
 /**
  * Resolve Site for a public domain. Unknown hosts throw (no silent Pisster fallthrough).
- * Admin host is not a public Site — use getAdminPlatformSite() for platform admin context.
+ * Admin host (admin.${ADMIN_BASE_DOMAIN}) resolves to the platform site (Sharlila).
  */
 export async function getSiteByDomain(domain: string): Promise<Site> {
+  // Check raw host before normalizeHost — admin. is not stripped like www.
+  if (isAdminHost(domain)) {
+    return getAdminPlatformSite();
+  }
   const key = normalizeHost(domain);
-  if (isAdminHost(key) || key === `${ADMIN_SUBDOMAIN}.${key}`) {
-    // admin.sharlila.com → not a public catalog host
+  if (isAdminHost(key)) {
+    return getAdminPlatformSite();
   }
   const hit = cache.get(key);
   if (hit && Date.now() - hit.at < TTL_MS) return hit.site;

@@ -21,7 +21,7 @@ export default function TagBadge({ name, slug, icon, href, className = "" }: Tag
 
   const inner = verified ? (
     <span
-      className={`inline-flex items-center gap-2 rounded-full border border-brand-500/45 bg-gradient-to-r from-brand-950/90 via-zinc-900/90 to-brand-950/70 px-3 py-1.5 text-xs font-semibold tracking-wide text-brand-100 shadow-[0_0_14px_rgba(212,175,55,0.12)] ${className}`}
+      className={`inline-flex items-center gap-2 rounded-full border border-brand-500/45 bg-gradient-to-r from-brand-950/90 via-zinc-900/90 to-brand-950/70 px-3 py-1.5 text-xs font-semibold tracking-wide text-brand-100 shadow-[0_0_14px_rgb(var(--brand-rgb)/0.12)] ${className}`}
       title="Verified: contains piss swallow"
     >
       {showDrop && <GoldenDrop className="h-4 w-4 shrink-0" id={`tag-${slug}`} />}
@@ -40,7 +40,7 @@ export default function TagBadge({ name, slug, icon, href, className = "" }: Tag
     return (
       <Link
         href={href}
-        className={`rounded-full transition-opacity hover:opacity-90 ${verified ? "hover:shadow-[0_0_18px_rgba(212,175,55,0.2)]" : ""}`}
+        className={`rounded-full transition-opacity hover:opacity-90 ${verified ? "hover:shadow-[0_0_18px_rgb(var(--brand-rgb)/0.2)]" : ""}`}
       >
         {inner}
       </Link>

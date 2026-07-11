@@ -1,5 +1,7 @@
 import { ImageResponse } from "next/og";
 import { headers } from "next/headers";
+import { readFile } from "fs/promises";
+import { join } from "path";
 import { getSiteByDomain, isAdminHost, PRIMARY_DOMAIN, ADMIN_BASE_DOMAIN } from "@/lib/site";
 
 export const size = { width: 180, height: 180 };
@@ -24,22 +26,23 @@ async function resolveBrand(): Promise<{ logoKey: string; color: string }> {
 export default async function AppleIcon() {
   const { logoKey, color } = await resolveBrand();
 
-  const inner =
-    logoKey === "fbb-mark" ? (
-      <svg width="100" height="120" viewBox="0 0 40 48" fill="none">
-        <ellipse cx="12" cy="14" rx="7.5" ry="6.5" fill={color} />
-        <ellipse cx="28" cy="14" rx="7.5" ry="6.5" fill={color} />
-        <path
-          d="M8 16 C8 16 10 44 20 46 C30 44 32 16 32 16 C28 22 12 22 8 16Z"
-          fill={color}
-        />
-      </svg>
-    ) : logoKey === "sharlila-mark" ? (
+  let inner: React.ReactNode;
+  if (logoKey === "fbb-mark") {
+    const buf = await readFile(join(process.cwd(), "public/brand/fbbtube-mark.png"));
+    const src = `data:image/png;base64,${buf.toString("base64")}`;
+    inner = (
+      // eslint-disable-next-line @next/next/no-img-element
+      <img src={src} width={140} height={140} alt="" style={{ objectFit: "contain" }} />
+    );
+  } else if (logoKey === "sharlila-mark") {
+    inner = (
       <svg width="100" height="100" viewBox="0 0 32 32" fill="none">
         <circle cx="16" cy="16" r="12" stroke={color} strokeWidth="2" />
         <circle cx="16" cy="12" r="2.5" fill={color} />
       </svg>
-    ) : (
+    );
+  } else {
+    inner = (
       <svg width="100" height="120" viewBox="0 0 32 40" fill="none">
         <defs>
           <linearGradient id="g" x1="16" y1="2" x2="16" y2="38" gradientUnits="userSpaceOnUse">
@@ -54,6 +57,7 @@ export default async function AppleIcon() {
         />
       </svg>
     );
+  }
 
   return new ImageResponse(
     (

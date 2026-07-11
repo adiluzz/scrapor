@@ -1,26 +1,6 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="640" height="200" viewBox="0 0 640 200">
-  <defs>
-    <linearGradient id="fbb" x1="80" y1="20" x2="80" y2="160" gradientUnits="userSpaceOnUse">
-      <stop offset="0%" stop-color="#7EB8CC"/>
-      <stop offset="45%" stop-color="#3B82A0"/>
-      <stop offset="100%" stop-color="#1E4A5C"/>
-    </linearGradient>
-  </defs>
-  <rect width="640" height="200" fill="none"/>
-  <g transform="translate(36,28) scale(2.6)">
-    <ellipse cx="12" cy="14" rx="7.5" ry="6.5" fill="url(#fbb)"/>
-    <ellipse cx="28" cy="14" rx="7.5" ry="6.5" fill="url(#fbb)"/>
-    <path d="M8 16 C8 16 10 44 20 46 C30 44 32 16 32 16 C28 22 12 22 8 16Z" fill="url(#fbb)"/>
-    <path d="M20 10 L20 18" stroke="#0F172A" stroke-opacity="0.25" stroke-width="1.2"/>
-    <rect x="14" y="22" width="5" height="4.5" rx="1" fill="#0F172A" fill-opacity="0.28"/>
-    <rect x="21" y="22" width="5" height="4.5" rx="1" fill="#0F172A" fill-opacity="0.28"/>
-    <rect x="14" y="28" width="5" height="4.5" rx="1" fill="#0F172A" fill-opacity="0.28"/>
-    <rect x="21" y="28" width="5" height="4.5" rx="1" fill="#0F172A" fill-opacity="0.28"/>
-    <rect x="14" y="34" width="5" height="4.5" rx="1" fill="#0F172A" fill-opacity="0.28"/>
-    <rect x="21" y="34" width="5" height="4.5" rx="1" fill="#0F172A" fill-opacity="0.28"/>
-    <ellipse cx="15" cy="12" rx="2" ry="2.5" fill="white" fill-opacity="0.3"/>
-  </g>
-  <text x="200" y="118" font-family="system-ui, -apple-system, Segoe UI, sans-serif" font-size="64" font-weight="900" letter-spacing="-1">
-    <tspan fill="#ffffff">FBB</tspan><tspan fill="#3B82A0"> Tube</tspan>
-  </text>
+<svg xmlns="http://www.w3.org/2000/svg" width="720" height="400" viewBox="0 0 720 400" role="img" aria-label="FBB Tube">
+  <!-- Reference stub: production lockup is public/brand/fbbtube-lockup.png (pink athlete silhouette). -->
+  <rect width="720" height="400" fill="#09090b"/>
+  <text x="360" y="200" text-anchor="middle" font-family="Arial Black, sans-serif" font-size="48" font-weight="900" fill="#FF2D7A">FBB Tube</text>
+  <text x="360" y="250" text-anchor="middle" font-family="Arial, sans-serif" font-size="16" fill="#71717a">See fbbtube-lockup.png</text>
 </svg>

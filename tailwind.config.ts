@@ -1,5 +1,14 @@
 import type { Config } from "tailwindcss";
 
+/**
+ * Brand scale reads CSS variables set by BrandStyle (per-site primaryColor).
+ * Defaults in globals.css keep Pisster gold until BrandStyle hydrates.
+ */
+const brandStop = (stop: string | "DEFAULT") =>
+  stop === "DEFAULT"
+    ? "rgb(var(--brand-rgb) / <alpha-value>)"
+    : `rgb(var(--brand-${stop}-rgb) / <alpha-value>)`;
+
 const config: Config = {
   content: [
     "./src/pages/**/*.{js,ts,jsx,tsx,mdx}",
@@ -10,17 +19,18 @@ const config: Config = {
     extend: {
       colors: {
         brand: {
-          DEFAULT: "#D4AF37",
-          50: "#FFFBEB",
-          100: "#FEF3C7",
-          200: "#FDE68A",
-          300: "#FCD34D",
-          400: "#E8C547",
-          500: "#D4AF37",
-          600: "#B8860B",
-          700: "#92680A",
-          800: "#78590A",
-          900: "#633D0D",
+          DEFAULT: brandStop("DEFAULT"),
+          50: brandStop("50"),
+          100: brandStop("100"),
+          200: brandStop("200"),
+          300: brandStop("300"),
+          400: brandStop("400"),
+          500: brandStop("500"),
+          600: brandStop("600"),
+          700: brandStop("700"),
+          800: brandStop("800"),
+          900: brandStop("900"),
+          950: brandStop("950"),
         },
       },
     },

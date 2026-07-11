@@ -21,7 +21,10 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Invalid email or password (min 8 chars)" }, { status: 400 });
     }
     const email = parsed.data.email.toLowerCase().trim();
-    const host = request.headers.get("host") || undefined;
+    const host =
+      request.headers.get("x-forwarded-host") ||
+      request.headers.get("host") ||
+      undefined;
     const site = await getSiteByDomain(host || "");
 
     if (!(await rateLimit(`register:${email}`, 5, 3600))) {

@@ -37,7 +37,7 @@ function SiteMark({
 function splitName(name: string): { left: string; right: string } {
   const n = name.trim();
   if (n.toLowerCase() === "pisster") return { left: "piss", right: "ter" };
-  if (n.toLowerCase() === "fbb tube") return { left: "FBB", right: " Tube" };
+  if (n.toLowerCase() === "fbb tube") return { left: "FBB", right: " TUBE" };
   const parts = n.split(/\s+/);
   if (parts.length >= 2) {
     return { left: parts[0], right: " " + parts.slice(1).join(" ") };
@@ -56,16 +56,22 @@ export default function Logo({
   const { left, right } = splitName(name);
   const accent = site?.primaryColor || "#D4AF37";
 
+  const isFbb = site?.logoKey === "fbb-mark";
   const inner = (
     <span className={`inline-flex items-center gap-2.5 ${className}`}>
       <SiteMark
         logoKey={site?.logoKey}
         primaryColor={site?.primaryColor}
         id={admin ? "admin" : "header"}
+        className={isFbb ? "h-10 w-10 shrink-0" : undefined}
       />
-      <span className="text-2xl font-black tracking-tight leading-none">
+      <span
+        className={`text-2xl font-black tracking-tight leading-none ${isFbb ? "italic" : ""}`}
+      >
         <span className="text-white">{left}</span>
-        <span style={{ color: accent }}>{right}</span>
+        <span style={{ color: accent }} className={isFbb ? "tracking-[0.12em] text-[0.72em] font-bold not-italic" : undefined}>
+          {right}
+        </span>
       </span>
       {admin && (
         <span className="ml-0.5 self-end pb-0.5 text-xs font-normal text-zinc-500">admin</span>

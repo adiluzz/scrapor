@@ -17,7 +17,7 @@ const domain = arg("domain");
 const name = arg("name");
 const slug = arg("slug", domain?.split(".")[0]);
 const kind = (arg("kind", "TUBE") || "TUBE").toUpperCase();
-const primaryColor = arg("color", kind === "STUDIO" ? "#C4A574" : "#3B82A0");
+const primaryColor = arg("color", kind === "STUDIO" ? "#C4A574" : "#FF2D7A");
 
 if (!domain || !name || !slug) {
   console.error("Required: --domain= --name= --slug=");

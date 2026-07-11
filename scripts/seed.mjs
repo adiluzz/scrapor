@@ -88,7 +88,7 @@ async function main() {
     tagline: "Free HD female bodybuilder & muscle worship porn",
     logoPath: "/brand/fbbtube-lockup.png",
     logoKey: "fbb-mark",
-    primaryColor: "#3B82A0",
+    primaryColor: "#FF2D7A",
     isNetworkMember: true,
     mailFromName: "FBB Tube",
     networkOrder: 1,

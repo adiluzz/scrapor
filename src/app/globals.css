@@ -351,6 +351,11 @@
   z-index: 2147483645;
 }
 
+/* Scrub preview must sit above the fixed .video-js layer (z-index: 99999). */
+.video-player-root.video-player-immersive .video-player-scrub-preview {
+  z-index: 2147483647;
+}
+
 /* Desktop browser fullscreen — keep overlays inside the element. */
 .video-player-root:fullscreen,
 .video-player-root:-webkit-full-screen {

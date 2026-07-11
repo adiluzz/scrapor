@@ -1079,7 +1079,7 @@ export default forwardRef(function VideoPlayer(
       {preview && storyboard && (
         <>
           <div
-            className="pointer-events-none absolute z-40"
+            className="video-player-scrub-preview pointer-events-none absolute z-40"
             style={{
               left: preview.left,
               bottom: preview.thumbBottom,
@@ -1100,7 +1100,7 @@ export default forwardRef(function VideoPlayer(
             />
           </div>
           <div
-            className="pointer-events-none absolute z-40"
+            className="video-player-scrub-preview pointer-events-none absolute z-40"
             style={{
               left: preview.left,
               bottom: preview.labelBottom,

@@ -878,6 +878,106 @@ def search_paradisehill(query, count, cursor=0, min_duration=600):
 
 
 # ── XNXX ──────────────────────────────────────────────────────────────
+def _xnxx_is_redundant_desc(description: str, title: str) -> bool:
+    """True when description is empty or just a copy/truncation of the title.
+
+    XNXX JSON-LD / meta description usually repeats the title (sometimes with
+    ', free sex video' appended). The real blurb lives in the page body.
+    """
+    d = re.sub(r"\s+", " ", (description or "").strip().lower())
+    t = re.sub(r"\s+", " ", (title or "").strip().lower())
+    if not d:
+        return True
+    if not t:
+        return False
+    if d == t:
+        return True
+    # "{title}, free sex video" / "{title}."
+    if d.startswith(t) and re.fullmatch(
+        re.escape(t) + r"(?:,?\s*free sex video)?\.?", d
+    ):
+        return True
+    # Truncated title used as description
+    if len(d) >= 24 and t.startswith(d):
+        return True
+    return False
+
+
+def _xnxx_parse_detail(html, url=""):
+    """Parse an XNXX video page for title, real description, tags, pornstars.
+
+    Prefer `.metadata-row.video-description` over JSON-LD `description`, which
+    almost always duplicates the title.
+    """
+    import html as html_lib
+    from bs4 import BeautifulSoup
+
+    raw = html or ""
+    soup = BeautifulSoup(raw, "html.parser")
+
+    title = ""
+    m = re.search(r"html5player\.setVideoTitle\('([^']*)'\);", raw)
+    if m:
+        title = html_lib.unescape(m.group(1)).strip()
+    if not title:
+        h = soup.select_one("h1, .clear-infobar strong, .video-title")
+        if h:
+            title = h.get_text(" ", strip=True)
+
+    description = ""
+    desc_el = soup.select_one(".metadata-row.video-description")
+    if desc_el:
+        for br in desc_el.find_all("br"):
+            br.replace_with("\n")
+        description = desc_el.get_text("\n", strip=True)
+        # Some pages embed literal "<br>" text instead of real tags.
+        description = re.sub(r"(?i)<br\s*/?>", "\n", description)
+        description = re.sub(r"\n{3,}", "\n\n", description).strip()
+    if _xnxx_is_redundant_desc(description, title):
+        description = ""
+
+    pornstars = []
+    for a in soup.select('a.is-pornstar[href*="/search/"]'):
+        name = a.get_text(strip=True) or ""
+        if not name:
+            href = a.get("href") or ""
+            slug = href.rstrip("/").rsplit("/", 1)[-1]
+            name = slug.replace("+", " ").strip()
+        if name and name not in pornstars:
+            pornstars.append(name)
+
+    tags = []
+    for a in soup.select('a.is-keyword[href*="/search/"]'):
+        name = a.get_text(strip=True) or ""
+        if not name:
+            href = a.get("href") or ""
+            slug = href.rstrip("/").rsplit("/", 1)[-1]
+            name = slug.replace("+", " ").strip()
+        if name and name not in tags:
+            tags.append(name)
+
+    thumbnail = ""
+    og = soup.select_one('meta[property="og:image"]')
+    if og and og.get("content"):
+        thumbnail = str(og["content"]).strip()
+
+    m3u8 = None
+    hm = re.search(r"html5player\.setVideoHLS\('([^']+)'\);", raw)
+    if hm:
+        m3u8 = hm.group(1).strip() or None
+
+    return {
+        "title": title or "Unknown",
+        "description": description,
+        "tags": tags,
+        "categories": [],
+        "pornstars": pornstars,
+        "thumbnail": thumbnail,
+        "_m3u8_base_url": m3u8,
+        "url": url or None,
+    }
+
+
 def search_xnxx(query, count, cursor=0, min_duration=600):
     offset = _offset_cursor(cursor)
 
@@ -899,12 +999,24 @@ def search_xnxx(query, count, cursor=0, min_duration=600):
                 thumb = str(thumbs[0]) if thumbs else ""
             else:
                 thumb = str(thumbs)
+            title = str(_sget(v, "title", "") or "")
+            # xnxx_api.Video.description reads JSON-LD, which duplicates the title.
+            # Prefer the on-page `.video-description` block from html_content.
+            page_html = _sget(v, "html_content", "") or ""
+            page_meta = _xnxx_parse_detail(page_html, _sget(v, "url", "")) if page_html else {}
+            description = page_meta.get("description") or ""
+            tags = page_meta.get("tags") or list(_sget(v, "tags", []) or [])
+            pornstars = page_meta.get("pornstars") or list(_sget(v, "pornstars", []) or [])
+            if page_meta.get("thumbnail"):
+                thumb = page_meta["thumbnail"] or thumb
             return _norm(
-                _sget(v, "url", ""), _sget(v, "title", ""), dur_s or None,
+                _sget(v, "url", ""), title or page_meta.get("title") or "",
+                dur_s or None,
                 thumbnail=thumb,
-                tags=list(_sget(v, "tags", []) or []),
-                pornstars=list(_sget(v, "pornstars", []) or []),
-                description=str(_sget(v, "description", "") or ""),
+                tags=tags,
+                pornstars=pornstars,
+                description=description,
+                m3u8=page_meta.get("_m3u8_base_url"),
             )
 
         async def collect_fn(pages):

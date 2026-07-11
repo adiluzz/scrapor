@@ -33,6 +33,7 @@ from site_searchers import (  # noqa: E402
     _po_parse_detail,
     _xh_parse_detail,
     _xhamster_get,
+    _xnxx_parse_detail,
 )
 
 PREVIEW_BATCH = int(os.environ.get("SCRAPE_PAGE_BATCH", "50"))
@@ -134,6 +135,7 @@ _DETAIL_REFRESH_PARSERS: dict[str, tuple] = {
     "ParadiseHill": _ph_parse_detail,
     "PornOne": _po_parse_detail,
     "XHamster": _xh_parse_detail,
+    "XNXX": _xnxx_parse_detail,
 }
 
 _DOWNLOAD_URL_KEYS = ("_cdn_url", "_m3u8_base_url", "_part_urls")
@@ -202,9 +204,18 @@ def resolve_video_url(url: str, conn) -> dict:
         html = _xhamster_get(raw)
         if html:
             meta.update(_xh_parse_detail(html, raw))
+    elif source == "XNXX":
+        html = _html_get(raw)
+        if html:
+            meta.update(_xnxx_parse_detail(html, raw))
 
     if not meta.get("title") or meta.get("title") == "Unknown":
         meta.update(_yt_dlp_metadata(raw))
+    # yt-dlp / JSON-LD often copy the title into description for XNXX — drop that.
+    if source == "XNXX":
+        from site_searchers import _xnxx_is_redundant_desc
+        if _xnxx_is_redundant_desc(meta.get("description") or "", meta.get("title") or ""):
+            meta["description"] = ""
 
     canonical = meta.get("url") or raw
     in_catalog = db.video_exists(conn, canonical)

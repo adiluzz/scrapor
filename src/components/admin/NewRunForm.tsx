@@ -14,6 +14,7 @@ type TubeSite = {
 export default function NewRunForm() {
   const router = useRouter();
   const [query, setQuery] = useState("");
+  const [searchMode, setSearchMode] = useState<"query" | "category">("query");
   const [sources, setSources] = useState<string[]>([...SOURCE_SITES]);
   const [tubeSites, setTubeSites] = useState<TubeSite[]>([]);
   const [targetSiteIds, setTargetSiteIds] = useState<string[]>([]);
@@ -57,6 +58,7 @@ export default function NewRunForm() {
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
           query,
+          searchMode,
           sources,
           minDurationSec: minMinutes * 60,
           maxPerSite: parsedMax,
@@ -76,9 +78,53 @@ export default function NewRunForm() {
     <form onSubmit={submit} className="space-y-4 rounded-xl border border-zinc-800 bg-zinc-900 p-6">
       <h2 className="text-lg font-semibold text-white">New scrape run</h2>
       {error && <p className="rounded bg-red-500/10 px-3 py-2 text-sm text-red-400">{error}</p>}
-      <input required placeholder="Search query (e.g. milf)" value={query}
+
+      <div>
+        <p className="mb-2 text-sm text-zinc-400">Search by</p>
+        <div className="flex flex-wrap gap-2">
+          {(
+            [
+              { id: "query" as const, label: "Keyword" },
+              { id: "category" as const, label: "Category" },
+            ] as const
+          ).map((opt) => (
+            <label
+              key={opt.id}
+              className={`cursor-pointer rounded-full border px-3 py-1.5 text-sm ${
+                searchMode === opt.id
+                  ? "border-brand-500 bg-brand-600/20 text-brand-200"
+                  : "border-zinc-700 bg-zinc-950 text-zinc-400"
+              }`}
+            >
+              <input
+                type="radio"
+                className="hidden"
+                name="searchMode"
+                checked={searchMode === opt.id}
+                onChange={() => setSearchMode(opt.id)}
+              />
+              {opt.label}
+            </label>
+          ))}
+        </div>
+      </div>
+
+      <input
+        required
+        placeholder={
+          searchMode === "category"
+            ? "Category (e.g. milf, anal, pissing)"
+            : "Search query (e.g. milf)"
+        }
+        value={query}
         onChange={(e) => setQuery(e.target.value)}
-        className="w-full rounded-lg border border-zinc-700 bg-zinc-950 px-4 py-2.5 text-sm text-white focus:border-brand-500 focus:outline-none" />
+        className="w-full rounded-lg border border-zinc-700 bg-zinc-950 px-4 py-2.5 text-sm text-white focus:border-brand-500 focus:outline-none"
+      />
+      {searchMode === "category" && (
+        <p className="text-xs text-zinc-500">
+          Uses each source site&apos;s category listing when available (slug from the name you enter).
+        </p>
+      )}
 
       <div>
         <p className="mb-2 text-sm text-zinc-400">Source sites</p>

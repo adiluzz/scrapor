@@ -57,6 +57,11 @@ export default async function ScrapeRunsPage() {
                 <tr key={r.id} className="hover:bg-zinc-900/50">
                   <td className="px-4 py-3">
                     <Link href={`/admin/scrape-runs/${r.id}`} className="text-brand-400 hover:underline">{r.query}</Link>
+                    {r.searchMode === "category" && (
+                      <span className="ml-2 rounded border border-zinc-700 px-1.5 py-0.5 text-[10px] uppercase tracking-wide text-zinc-500">
+                        category
+                      </span>
+                    )}
                   </td>
                   <td className="px-4 py-3 text-xs text-zinc-400">
                     {r.targetSites.map((t) => t.site.name).join(", ") || "—"}

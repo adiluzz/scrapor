@@ -18,6 +18,7 @@ const schema = z
     limit: z.number().int().min(1).max(100).optional(),
     skip: z.number().int().min(0).max(100_000).optional(),
     excludeUrls: z.array(z.string().url()).optional(),
+    searchMode: z.enum(["query", "category"]).optional(),
   })
   .refine(
     (d) =>
@@ -53,6 +54,7 @@ export async function POST(request: Request) {
       limit: parsed.data.limit ?? PREVIEW_BATCH,
       skip: parsed.data.skip ?? 0,
       excludeUrls: parsed.data.excludeUrls,
+      searchMode: parsed.data.searchMode ?? "query",
     });
     return NextResponse.json(result);
   } catch (err) {

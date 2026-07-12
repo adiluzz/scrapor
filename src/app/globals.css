@@ -52,17 +52,113 @@
   height: var(--player-heatmap-height);
 }
 
-/* Unified hit target: heatmap + seek bar (hover = preview, click/drag = seek) */
+/* Unified hit target: heatmap + seek bar (hover = preview, click/drag = seek).
+   Horizontal inset must match .vjs-progress-control padding so clicks map onto
+   the visible track — otherwise the far-right padding zone seeks to 100%. */
 .video-player-root .video-player-timeline-zone {
   position: absolute;
-  left: 0;
-  right: 0;
+  left: 0.75rem;
+  right: 0.75rem;
   bottom: calc(var(--player-bar-height) - 0.25rem);
   height: var(--player-timeline-zone-height);
   z-index: 13;
   pointer-events: auto;
   cursor: pointer;
   touch-action: none;
+}
+
+/* YouTube-style double-tap skip feedback */
+.video-player-root .video-player-skip-flash {
+  pointer-events: none;
+  position: absolute;
+  top: 42%;
+  z-index: 16;
+  transform: translateY(-50%);
+}
+
+.video-player-root .video-player-skip-flash--left {
+  left: 10%;
+}
+
+.video-player-root .video-player-skip-flash--right {
+  right: 10%;
+}
+
+.video-player-root .video-player-skip-flash-ring {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.35rem;
+  width: 5.5rem;
+  height: 5.5rem;
+  border-radius: 9999px;
+  background: rgba(0, 0, 0, 0.45);
+  color: #fff;
+  animation: video-player-skip-pop 0.65s ease-out;
+}
+
+.video-player-root .video-player-skip-chevrons {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.05rem;
+}
+
+.video-player-root .video-player-skip-chevrons--back {
+  flex-direction: row-reverse;
+}
+
+.video-player-root .video-player-skip-chevron {
+  display: block;
+  width: 0.65rem;
+  height: 0.65rem;
+  border-right: 2.5px solid #fff;
+  border-top: 2.5px solid #fff;
+  transform: rotate(45deg);
+  opacity: 0.35;
+  animation: video-player-skip-chevron 0.55s ease-out infinite;
+}
+
+.video-player-root .video-player-skip-chevrons--back .video-player-skip-chevron {
+  transform: rotate(-135deg);
+}
+
+.video-player-root .video-player-skip-chevron:nth-child(2) {
+  animation-delay: 0.12s;
+}
+
+.video-player-root .video-player-skip-label {
+  font-size: 0.75rem;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  line-height: 1;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.5);
+}
+
+@keyframes video-player-skip-pop {
+  0% {
+    transform: scale(0.72);
+    opacity: 0;
+  }
+  35% {
+    transform: scale(1.05);
+    opacity: 1;
+  }
+  100% {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+
+@keyframes video-player-skip-chevron {
+  0%,
+  100% {
+    opacity: 0.3;
+  }
+  50% {
+    opacity: 1;
+  }
 }
 
 /* ── Video.js — themed control bar (uses --brand-* from BrandStyle) ── */
@@ -107,16 +203,21 @@
   min-width: 4em;
 }
 
+/* Push PiP + fullscreen to the right edge of the control bar.
+   Prefer margin on PiP when visible; otherwise on fullscreen alone.
+   (PiP is display:none on small screens — the + sibling rule must not
+   zero out fullscreen’s auto margin in that case.) */
 .video-player-root.video-player-themed .vjs-picture-in-picture-control:not(.vjs-hidden) {
   margin-left: auto;
 }
 
-.video-player-root.video-player-themed .vjs-picture-in-picture-control.vjs-hidden + .vjs-fullscreen-control,
-.video-player-root.video-player-themed .vjs-fullscreen-control:last-child {
+.video-player-root.video-player-themed .vjs-fullscreen-control {
   margin-left: auto;
 }
 
-.video-player-root.video-player-themed .vjs-picture-in-picture-control:not(.vjs-hidden) + .vjs-fullscreen-control {
+.video-player-root.video-player-themed
+  .vjs-picture-in-picture-control:not(.vjs-hidden)
+  + .vjs-fullscreen-control {
   margin-left: 0;
 }
 
@@ -172,6 +273,9 @@
   z-index: 12;
   pointer-events: none;
   cursor: pointer;
+  /* Keep the absolute scrubber out of the button-row flex sizing. */
+  flex: 0 0 auto;
+  margin: 0;
 }
 
 .video-player-root.video-player-themed .vjs-progress-holder {
@@ -282,12 +386,22 @@
     display: none !important;
   }
 
+  /* PiP is out of layout but still matches the + sibling selector above;
+     keep fullscreen pinned to the right on small screens. */
+  .video-player-root.video-player-themed
+    .vjs-picture-in-picture-control
+    + .vjs-fullscreen-control {
+    margin-left: auto;
+  }
+
   .video-player-root.video-player-themed .vjs-progress-control {
     padding: 0 0.5rem;
     height: calc(var(--player-progress-height) + 0.75rem);
   }
 
   .video-player-root .video-player-timeline-zone {
+    left: 0.5rem;
+    right: 0.5rem;
     bottom: calc(var(--player-bar-height) - 0.25rem);
     height: var(--player-timeline-zone-height);
   }

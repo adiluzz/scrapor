@@ -349,6 +349,8 @@ model ScrapeRun {
   siteId         String
   site           Site            @relation(fields: [siteId], references: [id])
   query          String
+  /// "query" = keyword search; "category" = browse source-site category pages (query holds the category name/slug).
+  searchMode     String          @default("query")
   selectedSites  String // JSON array of source sites to search
   minDurationSec Int             @default(600)
   maxPerSite     Int? // videos to download per site this run; null = ALL (paginate everything)

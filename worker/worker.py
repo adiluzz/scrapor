@@ -1057,6 +1057,7 @@ def process_scrape_search(r, payload_json: str):
                 limit=int(req.get("limit", 50)),
                 exclude_urls=req.get("excludeUrls"),
                 skip=int(req.get("skip", 0) or 0),
+                search_mode=str(req.get("searchMode") or "query"),
             )
         payload = {"ok": True, **result}
     except Exception as e:  # noqa: BLE001
@@ -1130,7 +1131,15 @@ def _process_source(conn, run, source, min_dur, max_per_site, seen, totals) -> s
                 if collected >= max_per_site:
                     break
                 batch_n = min(PAGE_BATCH, max_per_site - collected)
-            results, cursor, exhausted = searcher(run["query"], batch_n, cursor, min_dur)
+            mode = run.get("searchMode") or "query"
+            try:
+                results, cursor, exhausted = searcher(
+                    run["query"], batch_n, cursor, min_dur, mode
+                )
+            except TypeError:
+                results, cursor, exhausted = searcher(
+                    run["query"], batch_n, cursor, min_dur
+                )
             if not results:
                 break
 

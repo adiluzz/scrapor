@@ -121,7 +121,7 @@ async def _collect(agen, extract, need, min_duration, seen=None):
     """
     out = []
     saw_any = False
-    async for v in agen:
+    async for v in _aiter_any(agen):
         saw_any = True
         try:
             item = await extract(v)
@@ -143,9 +143,33 @@ async def _collect(agen, extract, need, min_duration, seen=None):
     return out, saw_any
 
 
+async def _aiter_any(obj):
+    """Yield from async generators, awaitables that return iterables, or sync iterables."""
+    if inspect.isawaitable(obj):
+        obj = await obj
+    if hasattr(obj, "__aiter__"):
+        async for item in obj:
+            yield item
+        return
+    if obj is None:
+        return
+    for item in obj:
+        yield item
+
+
 def _page_cursor(cursor):
     """HTML searchers use 1-based page cursors; 0 means page 1."""
     return max(1, int(cursor or 0))
+
+
+def _category_slug(text: str) -> str:
+    """Normalize a category name into a URL slug used by most tube sites."""
+    s = re.sub(r"[^\w\s-]", "", (text or "").strip().lower())
+    return re.sub(r"[\s_]+", "-", s).strip("-")
+
+
+def _is_category_mode(mode) -> bool:
+    return str(mode or "query").strip().lower() == "category"
 
 
 def _offset_cursor(cursor):
@@ -435,7 +459,11 @@ def _html_search(source, query, count, min_duration, *, cursor,
                 if not link_re.search(parsed.path):
                     continue
                 matching += 1
-                clean = f"{parsed.scheme}://{parsed.netloc}{parsed.path}"
+                # Keep query string when it carries the video id (Pornhub viewkey).
+                if parsed.query and re.search(r"(?:^|&)(?:viewkey|v)=", parsed.query, re.I):
+                    clean = f"{parsed.scheme}://{parsed.netloc}{parsed.path}?{parsed.query}"
+                else:
+                    clean = f"{parsed.scheme}://{parsed.netloc}{parsed.path}"
                 if clean in seen:
                     continue
                 seen.add(clean)
@@ -461,7 +489,18 @@ def _html_search(source, query, count, min_duration, *, cursor,
     return out, page, exhausted
 
 
-def _html_redtube(query, count, cursor=0, min_duration=600):
+def _html_redtube(query, count, cursor=0, min_duration=600, mode="query"):
+    if _is_category_mode(mode):
+        slug = _category_slug(query)
+        return _html_search(
+            "RedTube", query, count, min_duration, cursor=cursor,
+            domain="redtube.com", base="https://www.redtube.com",
+            page_url=lambda q, n: (
+                f"https://www.redtube.com/redtube/{slug}"
+                if n <= 1 else f"https://www.redtube.com/redtube/{slug}?page={n}"
+            ),
+            link_re=re.compile(r"^/\d{4,}$"),
+        )
     return _html_search(
         "RedTube", query, count, min_duration, cursor=cursor,
         domain="redtube.com", base="https://www.redtube.com",
@@ -470,7 +509,27 @@ def _html_redtube(query, count, cursor=0, min_duration=600):
     )
 
 
-def _html_spankbang(query, count, cursor=0, min_duration=600):
+def _html_spankbang(query, count, cursor=0, min_duration=600, mode="query"):
+    # Category browse URLs are geo/CF fragile; fall back to keyword search path.
+    if _is_category_mode(mode):
+        slug = _category_slug(query)
+        out = _html_search(
+            "SpankBang", query, count, min_duration, cursor=cursor,
+            domain="spankbang.com", base="https://spankbang.com",
+            page_url=lambda q, n: (
+                f"https://spankbang.com/category/{slug}/"
+                if n <= 1 else f"https://spankbang.com/category/{slug}/{n}/"
+            ),
+            link_re=re.compile(r"^/[0-9a-z]+/video/"),
+        )
+        if out[0]:
+            return out
+        return _html_search(
+            "SpankBang", query, count, min_duration, cursor=cursor,
+            domain="spankbang.com", base="https://spankbang.com",
+            page_url=lambda q, n: f"https://spankbang.com/s/{slug}/{n}/",
+            link_re=re.compile(r"^/[0-9a-z]+/video/"),
+        )
     return _html_search(
         "SpankBang", query, count, min_duration, cursor=cursor,
         domain="spankbang.com", base="https://spankbang.com",
@@ -604,18 +663,25 @@ def _xh_parse_detail(html, url):
     }
 
 
-def _xhamster_list_search(query, count, cursor=0, min_duration=600):
+def _xhamster_list_search(query, count, cursor=0, min_duration=600, mode="query"):
     """Listing-only xHamster search via embedded JSON + HTML links."""
     from urllib.parse import quote_plus
 
     md = _xhamster_min_duration_param(min_duration)
     q = quote_plus(query)
+    slug = _category_slug(query)
     out, seen = [], set()
     age_gate = False
     page = _page_cursor(cursor)
     try:
         while len(out) < count:
-            url = f"{_XH_BASE}/search/{q}?sort=longest&min-duration={md}&page={page}"
+            if _is_category_mode(mode):
+                url = (
+                    f"{_XH_BASE}/categories/{slug}"
+                    f"?sort=longest&min-duration={md}&page={page}"
+                )
+            else:
+                url = f"{_XH_BASE}/search/{q}?sort=longest&min-duration={md}&page={page}"
             html = _xhamster_get(url)
             if not html:
                 return out, page, page == _page_cursor(cursor), age_gate
@@ -641,15 +707,28 @@ def _xhamster_list_search(query, count, cursor=0, min_duration=600):
     return out, page, exhausted, age_gate
 
 
-def _html_xhamster(query, count, cursor=0, min_duration=600):
+def _html_xhamster(query, count, cursor=0, min_duration=600, mode="query"):
     """Legacy listing-only entry (tests); prefer search_xhamster for enrichment."""
-    out, page, exhausted, age_gate = _xhamster_list_search(query, count, cursor, min_duration)
+    out, page, exhausted, age_gate = _xhamster_list_search(
+        query, count, cursor, min_duration, mode=mode,
+    )
     if age_gate and not out:
         return [], page, True
     return out, page, exhausted
 
 
-def _html_youporn(query, count, cursor=0, min_duration=600):
+def _html_youporn(query, count, cursor=0, min_duration=600, mode="query"):
+    if _is_category_mode(mode):
+        slug = _category_slug(query)
+        return _html_search(
+            "YouPorn", query, count, min_duration, cursor=cursor,
+            domain="youporn.com", base="https://www.youporn.com",
+            page_url=lambda q, n: (
+                f"https://www.youporn.com/category/{slug}/"
+                if n <= 1 else f"https://www.youporn.com/category/{slug}/?page={n}"
+            ),
+            link_re=re.compile(r"^/watch/\d+"),
+        )
     return _html_search(
         "YouPorn", query, count, min_duration, cursor=cursor,
         domain="youporn.com", base="https://www.youporn.com",
@@ -672,6 +751,44 @@ _PH_LINK_RE = _PH_HEX_RE  # legacy alias
 _PH_VIDEO_LIST_RE = re.compile(r"var videoList = (\[.*?\]);", re.S)
 _PH_ACTOR_RE = re.compile(r"^/actor/\d+/?$", re.I)
 _PH_CATEGORY_RE = re.compile(r"^/category/[^/?#]+", re.I)
+
+# User-facing names → ParadiseHill /category/{slug}/ paths.
+_PH_CATEGORY_ALIASES = {
+    "milf": "mature",
+    "milfs": "mature",
+    "mature": "mature",
+    "anal": "anal-sex",
+    "anal-sex": "anal-sex",
+    "amateur": "amateur-porn",
+    "blowjob": "blow-job",
+    "blow-job": "blow-job",
+    "lesbian": "lesbian-porn",
+    "hentai": "hentai-animation",
+    "bbw": "fat",
+    "asian": "asians",
+    "ebony": "blacks-women",
+}
+
+
+def _ph_resolve_category_slug(query: str) -> str:
+    """Map a free-text category to a ParadiseHill /category/{slug} path segment."""
+    slug = _category_slug(query)
+    if not slug:
+        return slug
+    if slug in _PH_CATEGORY_ALIASES:
+        return _PH_CATEGORY_ALIASES[slug]
+    # Exact match against live categories index when available.
+    html = _html_get(f"{_PH_BASE}/categories/") or ""
+    paths = set(re.findall(r'href="(/category/[^"?#]+)', html, re.I))
+    want = f"/category/{slug}"
+    if want in paths or want + "/" in paths:
+        return slug
+    compact = slug.replace("-", "")
+    for path in paths:
+        name = path.rstrip("/").rsplit("/", 1)[-1].lower()
+        if name.replace("-", "") == compact:
+            return name
+    return slug
 
 
 def _ph_abs(url_or_path):
@@ -810,21 +927,36 @@ def _ph_search_items(html):
     return out
 
 
-def search_paradisehill(query, count, cursor=0, min_duration=600):
+def search_paradisehill(query, count, cursor=0, min_duration=600, mode="query"):
     """Search ParadiseHill and enrich each hit with detail-page metadata + MP4 parts."""
     from urllib.parse import quote_plus
     offset = _offset_cursor(cursor)
     need = offset + count
     q = quote_plus(query)
+    slug = _ph_resolve_category_slug(query) if _is_category_mode(mode) else _category_slug(query)
     all_stubs, seen = [], set()
     page = 1
     try:
         while len(all_stubs) < need:
-            page_url = (
-                f"{_PH_BASE}/search/?pattern={q}&what=1"
-                if page == 1 else f"{_PH_BASE}/search/?pattern={q}&what=1&page={page}"
-            )
+            if _is_category_mode(mode):
+                page_url = (
+                    f"{_PH_BASE}/category/{slug}/"
+                    if page == 1 else f"{_PH_BASE}/category/{slug}/?page={page}"
+                )
+            else:
+                page_url = (
+                    f"{_PH_BASE}/search/?pattern={q}&what=1"
+                    if page == 1 else f"{_PH_BASE}/search/?pattern={q}&what=1&page={page}"
+                )
             html = _html_get(page_url)
+            # Unknown category slug → fall back to keyword search once.
+            if _is_category_mode(mode) and page == 1 and not html:
+                page_url = f"{_PH_BASE}/search/?pattern={q}&what=1"
+                html = _html_get(page_url)
+                mode = "query"  # stay on search pagination for subsequent pages
+            if not html:
+                break
+            batch = _ph_search_items(html)
             if not html:
                 break
             batch = _ph_search_items(html)
@@ -978,7 +1110,21 @@ def _xnxx_parse_detail(html, url=""):
     }
 
 
-def search_xnxx(query, count, cursor=0, min_duration=600):
+def search_xnxx(query, count, cursor=0, min_duration=600, mode="query"):
+    # xnxx_api has no category browse; category mode uses /tags/{slug} listings.
+    if _is_category_mode(mode):
+        slug = _category_slug(query)
+        return _html_search(
+            "XNXX", query, count, min_duration, cursor=cursor,
+            domain="xnxx.com", base="https://www.xnxx.com",
+            page_url=lambda q, n: (
+                f"https://www.xnxx.com/tags/{slug}/{n - 1}"
+                if n > 1 else f"https://www.xnxx.com/tags/{slug}"
+            ),
+            link_re=re.compile(r"^/video-[a-z0-9]+/"),
+            per_page=28,
+        )
+
     offset = _offset_cursor(cursor)
 
     async def run(need):
@@ -1037,8 +1183,113 @@ def search_xnxx(query, count, cursor=0, min_duration=600):
 
 
 # ── PornHub (phub) ────────────────────────────────────────────────────
-def search_pornhub(query, count, cursor=0, min_duration=600):
+def _pornhub_category_slug(query: str):
+    """Map a free-text category to a phub category literal, or None."""
+    slug = _category_slug(query).replace("_", "-")
+    # Common aliases → phub literals
+    aliases = {
+        "teen": "teen",
+        "teens": "teen",
+        "redhead": "red-head",
+        "red-head": "red-head",
+        "hd": "hd-porn",
+        "hd-porn": "hd-porn",
+        "old-young": "old-young",
+        "step-fantasy": "step-fantasy",
+        "rough": "rough-sex",
+        "rough-sex": "rough-sex",
+    }
+    if slug in aliases:
+        return aliases[slug]
+    # Accept any phub-like slug characters; phub asserts on invalid literals.
+    if re.fullmatch(r"[a-z0-9]+(?:-[a-z0-9]+)*", slug):
+        return slug
+    return None
+
+
+def _html_pornhub(query, count, cursor=0, min_duration=600, mode="query"):
+    """HTML search/category listing fallback when the phub library fails."""
+    from urllib.parse import quote_plus
+    q = quote_plus(query)
+    slug = _category_slug(query)
+    if _is_category_mode(mode):
+        # Category-flavored listing via search (stable without category IDs).
+        page_url = lambda _q, n: (
+            f"https://www.pornhub.com/video/search?search={quote_plus(slug)}&page={n}"
+        )
+    else:
+        page_url = lambda _q, n: f"https://www.pornhub.com/video/search?search={q}&page={n}"
+    return _html_search(
+        "PornHub", query, count, min_duration, cursor=cursor,
+        domain="pornhub.com", base="https://www.pornhub.com",
+        page_url=page_url,
+        link_re=re.compile(r"/view_video\.php"),
+        per_page=20,
+    )
+
+
+def _phub_search_agen(client, query, pages, category=None):
+    """Return an iterable/async-iterable of videos across phub API versions."""
+    search_videos = getattr(client, "search_videos", None)
+    if callable(search_videos):
+        try:
+            if category:
+                return search_videos(query or category, pages=pages, category=category)
+            return search_videos(query, pages=pages)
+        except TypeError:
+            return search_videos(query or (category or ""), pages=pages)
+
+    # Newer phub: Client.search → Query with .pages / .sample
+    kwargs = {}
+    if category:
+        kwargs["category"] = category
+    try:
+        result = client.search(query or (category or ""), **kwargs)
+    except TypeError:
+        result = client.search(query or (category or ""))
+    except Exception:
+        return []
+
+    def _iter_pages():
+        yielded_pages = 0
+        pages_obj = getattr(result, "pages", None)
+        if pages_obj is None:
+            sample = getattr(result, "sample", None)
+            if callable(sample):
+                yield from sample(pages * 12)
+            return
+        try:
+            for page in pages_obj:
+                yielded_pages += 1
+                if page is None:
+                    continue
+                # page may be a list of videos or a single page object
+                try:
+                    for v in page:
+                        yield v
+                except TypeError:
+                    yield page
+                if yielded_pages >= max(1, pages):
+                    break
+        except Exception:
+            sample = getattr(result, "sample", None)
+            if callable(sample):
+                yield from sample(pages * 12)
+
+    return _iter_pages()
+
+
+def search_pornhub(query, count, cursor=0, min_duration=600, mode="query"):
+    # Category mode: prefer HTML listings (stable without phub category IDs / geo blocks).
+    if _is_category_mode(mode):
+        batch, next_cursor, exhausted = _html_pornhub(
+            query, count, cursor, min_duration, mode=mode,
+        )
+        if batch:
+            return batch, next_cursor, exhausted
+
     offset = _offset_cursor(cursor)
+    cat = _pornhub_category_slug(query) if _is_category_mode(mode) else None
 
     async def run(need):
         import phub
@@ -1063,20 +1314,24 @@ def search_pornhub(query, count, cursor=0, min_duration=600):
             )
 
         async def collect_fn(pages):
-            items, _ = await _collect(
-                client.search_videos(query, pages=pages), extract, need, min_duration,
-            )
+            agen = _phub_search_agen(client, query, pages, category=cat)
+            items, _ = await _collect(agen, extract, need, min_duration)
             return items
 
         return await _fetch_until(collect_fn, need, 12)
 
-    return asyncio.run(_run_paginated("PornHub", run, offset, count))
+    batch, next_cursor, exhausted = asyncio.run(_run_paginated("PornHub", run, offset, count))
+    if batch:
+        return batch, next_cursor, exhausted
+    return _html_pornhub(query, count, cursor, min_duration, mode=mode)
 
 
 # ── XHamster ──────────────────────────────────────────────────────────
-def search_xhamster(query, count, cursor=0, min_duration=600):
+def search_xhamster(query, count, cursor=0, min_duration=600, mode="query"):
     """Search xHamster via HTML + window.initials; enrich each hit from its video page."""
-    stubs, page, exhausted, age_gate = _xhamster_list_search(query, count, cursor, min_duration)
+    stubs, page, exhausted, age_gate = _xhamster_list_search(
+        query, count, cursor, min_duration, mode=mode,
+    )
     if age_gate and not stubs:
         return [], page, True
 
@@ -1109,7 +1364,20 @@ def search_xhamster(query, count, cursor=0, min_duration=600):
 
 
 # ── XVideos ───────────────────────────────────────────────────────────
-def search_xvideos(query, count, cursor=0, min_duration=600):
+def search_xvideos(query, count, cursor=0, min_duration=600, mode="query"):
+    if _is_category_mode(mode):
+        slug = _category_slug(query)
+        return _html_search(
+            "XVideos", query, count, min_duration, cursor=cursor,
+            domain="xvideos.com", base="https://www.xvideos.com",
+            page_url=lambda q, n: (
+                f"https://www.xvideos.com/tags/{slug}"
+                if n <= 1 else f"https://www.xvideos.com/tags/{slug}/{n - 1}"
+            ),
+            link_re=re.compile(r"^/video\."),
+            per_page=20,
+        )
+
     offset = _offset_cursor(cursor)
 
     async def run(need):
@@ -1150,8 +1418,13 @@ def _eporner_tag_slug(query):
     return re.sub(r"\s+", "-", (query or "").strip().lower())
 
 
-def _eporner_search_url(query, page):
+def _eporner_search_url(query, page, mode="query"):
     from urllib.parse import quote_plus
+    if _is_category_mode(mode):
+        slug = _category_slug(query)
+        if page <= 1:
+            return f"{_EP_BASE}/cat/{slug}/"
+        return f"{_EP_BASE}/cat/{slug}/{page}/"
     q = quote_plus(query)
     slug = _eporner_tag_slug(query)
     if page <= 1:
@@ -1285,13 +1558,13 @@ def _eporner_parse_detail(html, url):
     }
 
 
-def search_eporner(query, count, cursor=0, min_duration=600):
+def search_eporner(query, count, cursor=0, min_duration=600, mode="query"):
     """Search Eporner via HTML listings; enrich each hit with a dload fast-path URL."""
     page = _page_cursor(cursor)
     stubs, seen = [], set()
     try:
         while len(stubs) < count:
-            html = _html_get(_eporner_search_url(query, page))
+            html = _html_get(_eporner_search_url(query, page, mode=mode))
             if not html:
                 break
             batch = _eporner_search_items(html)
@@ -1391,8 +1664,13 @@ def _po_iso_duration(value):
     return total or None
 
 
-def _po_search_url(query, page):
+def _po_search_url(query, page, mode="query"):
     from urllib.parse import quote_plus
+    if _is_category_mode(mode):
+        slug = _category_slug(query)
+        if page <= 1:
+            return f"{_PO_BASE}/{slug}"
+        return f"{_PO_BASE}/{slug}/{page}"
     q = quote_plus(query)
     if page <= 1:
         return f"{_PO_BASE}/search?q={q}"
@@ -1572,14 +1850,14 @@ def _po_parse_detail(html, url):
     }
 
 
-def search_pornone(query, count, cursor=0, min_duration=600):
+def search_pornone(query, count, cursor=0, min_duration=600, mode="query"):
     """Search PornOne via HTML listings; enrich each hit with detail-page metadata."""
     page = _page_cursor(cursor)
     stubs, seen = [], set()
     has_next_page = True
     try:
         while len(stubs) < count and has_next_page:
-            html = _html_get(_po_search_url(query, page))
+            html = _html_get(_po_search_url(query, page, mode=mode))
             if not html:
                 has_next_page = False
                 break
@@ -1761,9 +2039,11 @@ def _ax_models_suggested(value):
     return out
 
 
-def _ax_search_url(query, page):
+def _ax_search_url(query, page, mode="query"):
     from urllib.parse import quote_plus
+    # ABXXX's public API is search-only; category mode searches the category name.
     q = quote_plus(query or "")
+    _ = mode  # reserved for a future category-filter path
     return (
         f"{_AX_BASE}/api/videos2.php?params="
         f"{_AX_API_LIFETIME}/str/relevance/{_AX_SEARCH_BATCH}/search..{page}.all..&s={q}"
@@ -1853,9 +2133,9 @@ def _ax_parse_detail(html, url):
     return _ax_parse_detail_by_id(m.group(1))
 
 
-def _ax_search_items(query, page):
+def _ax_search_items(query, page, mode="query"):
     """Return (videos, total_pages) from ABXXX search API."""
-    payload = _ax_api_json(_ax_search_url(query, page))
+    payload = _ax_api_json(_ax_search_url(query, page, mode=mode))
     if not isinstance(payload, dict):
         return [], 0
     videos = payload.get("videos") or []
@@ -1863,14 +2143,14 @@ def _ax_search_items(query, page):
     return videos, pages
 
 
-def search_abxxx(query, count, cursor=0, min_duration=600):
+def search_abxxx(query, count, cursor=0, min_duration=600, mode="query"):
     """Search ABXXX via JSON API; enrich each hit with detail metadata."""
     page = _page_cursor(cursor)
     stubs, seen = [], set()
     total_pages = None
     try:
         while len(stubs) < count:
-            batch, pages = _ax_search_items(query, page)
+            batch, pages = _ax_search_items(query, page, mode=mode)
             if total_pages is None:
                 total_pages = pages
             if not batch:
@@ -1932,7 +2212,10 @@ def search_abxxx(query, count, cursor=0, min_duration=600):
 
 
 # ── YouPorn ───────────────────────────────────────────────────────────
-def search_youporn(query, count, cursor=0, min_duration=600):
+def search_youporn(query, count, cursor=0, min_duration=600, mode="query"):
+    if _is_category_mode(mode):
+        return _html_youporn(query, count, cursor, min_duration, mode=mode)
+
     offset = _offset_cursor(cursor)
 
     async def run(need):
@@ -1961,12 +2244,35 @@ def search_youporn(query, count, cursor=0, min_duration=600):
     batch, next_cursor, exhausted = asyncio.run(_run_paginated("YouPorn", run, offset, count))
     if batch:
         return batch, next_cursor, exhausted
-    return _html_youporn(query, count, cursor, min_duration)
+    return _html_youporn(query, count, cursor, min_duration, mode=mode)
+
+
+def _hqporner_category(query):
+    """Resolve free text to an hqporner_api Category enum member, or None."""
+    try:
+        from hqporner_api.modules.locals import Category
+    except Exception:
+        return None
+    slug = _category_slug(query)
+    key = slug.replace("-", "_").upper()
+    if hasattr(Category, key):
+        return getattr(Category, key)
+    # Match enum values like "anal-sex-hd" / "milf"
+    want = slug.replace("_", "-")
+    for name in dir(Category):
+        if name.startswith("_"):
+            continue
+        val = getattr(Category, name)
+        raw = str(getattr(val, "value", val)).lower().replace("_", "-")
+        if raw == want or raw.replace("-", "") == want.replace("-", ""):
+            return val
+    return None
 
 
 # ── HQPorner ──────────────────────────────────────────────────────────
-def search_hqporner(query, count, cursor=0, min_duration=600):
+def search_hqporner(query, count, cursor=0, min_duration=600, mode="query"):
     offset = _offset_cursor(cursor)
+    category = _hqporner_category(query) if _is_category_mode(mode) else None
 
     async def run(need):
         import hqporner_api
@@ -1990,12 +2296,20 @@ def search_hqporner(query, count, cursor=0, min_duration=600):
             )
 
         async def collect_fn(pages):
-            items, _ = await _collect(client.search_videos(query, pages=pages), extract, need, min_duration)
+            if category is not None:
+                agen = client.get_videos_by_category(category, pages=pages)
+            else:
+                agen = client.search_videos(query, pages=pages)
+            items, _ = await _collect(agen, extract, need, min_duration)
             return items
 
         return await _fetch_until(collect_fn, need, 15)
 
-    return asyncio.run(_run_paginated("HQPorner", run, offset, count))
+    batch, next_cursor, exhausted = asyncio.run(_run_paginated("HQPorner", run, offset, count))
+    if batch or not _is_category_mode(mode):
+        return batch, next_cursor, exhausted
+    # Unknown category enum → keyword search fallback.
+    return search_hqporner(query, count, cursor, min_duration, mode="query")
 
 
 # ── yt-dlp generic fallback (RedTube / SpankBang) ─────────────────────

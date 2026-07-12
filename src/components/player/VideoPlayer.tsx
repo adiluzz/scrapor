@@ -12,6 +12,8 @@ type Storyboard = { sprite: string; cues: StoryboardCue[] } | null;
 
 const BUCKET_SEC = 5;
 const SKIP_SEC = 7;
+const DOUBLE_TAP_MS = 280;
+const SKIP_FLASH_MS = 700;
 
 export type VideoPlayerHandle = {
   getCurrentTime: () => number;
@@ -315,6 +317,14 @@ export default forwardRef(function VideoPlayer(
     scale: number;
   } | null>(null);
   const [touchUi, setTouchUi] = useState(false);
+  const [skipFlash, setSkipFlash] = useState<{
+    side: "left" | "right";
+    seconds: number;
+    key: number;
+  } | null>(null);
+  const lastSideTapRef = useRef<{ side: "left" | "right"; t: number } | null>(null);
+  const singleTapTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const skipFlashTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const clipLoopRef = useRef(clipLoop);
   const onTimeUpdateRef = useRef(onTimeUpdate);
   const onDurationRef = useRef(onDuration);
@@ -551,16 +561,45 @@ export default forwardRef(function VideoPlayer(
       const setScrubbing = (active: boolean) => {
         scrubbing = active;
         progressControl.classList.toggle("vjs-scrubbing", active);
+        try {
+          player.scrubbing(active);
+        } catch {
+          /* older video.js */
+        }
       };
 
       const seekFromClientX = (clientX: number) => {
+        // Prefer the visible seek track; fall back to the hit zone (same inset).
         const rect = seekBar.getBoundingClientRect();
-        if (rect.width <= 0) return;
-        const pct = Math.min(1, Math.max(0, (clientX - rect.left) / rect.width));
+        const zoneRect = timelineZone.getBoundingClientRect();
+        const track = rect.width > 0 ? rect : zoneRect;
+        if (track.width <= 0) return;
+        const pct = Math.min(1, Math.max(0, (clientX - track.left) / track.width));
         const dur = player.duration();
-        if (!dur || !Number.isFinite(dur)) return;
+        if (!dur || !Number.isFinite(dur) || dur <= 0) return;
+        let target = pct * dur;
+        try {
+          const seekable = player.seekable();
+          if (seekable && seekable.length > 0) {
+            const start = seekable.start(0);
+            const end = seekable.end(seekable.length - 1);
+            if (Number.isFinite(start) && Number.isFinite(end) && end > start) {
+              target = Math.min(end, Math.max(start, target));
+            }
+          }
+        } catch {
+          /* ignore seekable errors */
+        }
         player.userActive(true);
-        player.currentTime(pct * dur);
+        const wasEnded = player.ended();
+        player.currentTime(target);
+        // Seeking away from EOF leaves the element "ended" until playback resumes.
+        if (wasEnded) {
+          const p = player.play();
+          if (p && typeof (p as Promise<void>).catch === "function") {
+            (p as Promise<void>).catch(() => {});
+          }
+        }
       };
 
       const updatePreview = (clientX: number) => {
@@ -625,6 +664,7 @@ export default forwardRef(function VideoPlayer(
         e.stopPropagation();
         scrubbing = true;
         setScrubbing(true);
+        seekFromClientX(e.clientX);
         updatePreview(e.clientX);
       };
 
@@ -648,6 +688,7 @@ export default forwardRef(function VideoPlayer(
         wakeControls();
         scrubbing = true;
         setScrubbing(true);
+        seekFromClientX(touch.clientX);
         updatePreview(touch.clientX);
       };
 
@@ -718,6 +759,64 @@ export default forwardRef(function VideoPlayer(
     if (!dur || !Number.isFinite(dur)) return;
     seekTo(cur + deltaSec);
   }
+
+  function showSkipFlash(side: "left" | "right", addedSec: number = SKIP_SEC) {
+    setSkipFlash((prev) => {
+      if (prev && prev.side === side) {
+        return { side, seconds: prev.seconds + addedSec, key: prev.key + 1 };
+      }
+      return { side, seconds: addedSec, key: Date.now() };
+    });
+    if (skipFlashTimerRef.current) clearTimeout(skipFlashTimerRef.current);
+    skipFlashTimerRef.current = setTimeout(() => {
+      setSkipFlash(null);
+      skipFlashTimerRef.current = null;
+    }, SKIP_FLASH_MS);
+  }
+
+  function skipWithFlash(side: "left" | "right") {
+    const delta = side === "right" ? SKIP_SEC : -SKIP_SEC;
+    skipBy(delta);
+    showSkipFlash(side, SKIP_SEC);
+    const player = playerRef.current;
+    player?.userActive(true);
+    setControlsVisible(true);
+  }
+
+  function handleSideTap(side: "left" | "right") {
+    const now = Date.now();
+    const last = lastSideTapRef.current;
+    if (last && last.side === side && now - last.t <= DOUBLE_TAP_MS) {
+      if (singleTapTimerRef.current) {
+        clearTimeout(singleTapTimerRef.current);
+        singleTapTimerRef.current = null;
+      }
+      lastSideTapRef.current = null;
+      skipWithFlash(side);
+      return;
+    }
+    lastSideTapRef.current = { side, t: now };
+    if (singleTapTimerRef.current) clearTimeout(singleTapTimerRef.current);
+    singleTapTimerRef.current = setTimeout(() => {
+      singleTapTimerRef.current = null;
+      const player = playerRef.current;
+      if (!player) return;
+      player.userActive(true);
+      setControlsVisible(true);
+      if (player.paused()) {
+        player.play()?.catch(() => {});
+      } else {
+        player.pause();
+      }
+    }, DOUBLE_TAP_MS);
+  }
+
+  useEffect(() => {
+    return () => {
+      if (singleTapTimerRef.current) clearTimeout(singleTapTimerRef.current);
+      if (skipFlashTimerRef.current) clearTimeout(skipFlashTimerRef.current);
+    };
+  }, []);
 
   function flushWatch(useBeacon = false) {
     const buckets = Array.from(watchedBuckets.current);
@@ -841,17 +940,25 @@ export default forwardRef(function VideoPlayer(
       if (!player || status !== "playing") return;
       const t = e.target as HTMLElement | null;
       if (t && (t.tagName === "INPUT" || t.tagName === "TEXTAREA" || t.isContentEditable)) return;
-      const cur = player.currentTime() || 0;
-      if (e.key === "ArrowRight") {
+      if (e.key === " " || e.code === "Space") {
         e.preventDefault();
-        player.currentTime(Math.min(player.duration() || cur, cur + SKIP_SEC));
+        if (player.paused()) {
+          player.play()?.catch(() => {});
+        } else {
+          player.pause();
+        }
+      } else if (e.key === "ArrowRight") {
+        e.preventDefault();
+        skipWithFlash("right");
       } else if (e.key === "ArrowLeft") {
         e.preventDefault();
-        player.currentTime(Math.max(0, cur - SKIP_SEC));
+        skipWithFlash("left");
       }
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
+    // skipWithFlash closes over latest setters; rebind when playback status changes.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [status]);
 
   async function grantAndPlay(adSessionId: string, outcome: string) {
@@ -1017,23 +1124,49 @@ export default forwardRef(function VideoPlayer(
         <div ref={videoRef} className="video-player-vjs-mount w-full h-full" />
       </div>
 
-      {status === "playing" && (
+      {status === "playing" && touchUi && (
         <>
           <button
             type="button"
-            aria-label="Skip back 7 seconds"
-            onClick={() => skipBy(-SKIP_SEC)}
-            className="absolute left-0 top-0 z-[5] w-[38%] bg-transparent"
+            aria-label={`Double-tap to skip back ${SKIP_SEC} seconds`}
+            onClick={(e) => {
+              e.preventDefault();
+              handleSideTap("left");
+            }}
+            className="absolute left-0 top-0 z-[5] w-[40%] touch-manipulation bg-transparent"
             style={{ bottom: "var(--player-bar-height)" }}
           />
           <button
             type="button"
-            aria-label="Skip forward 7 seconds"
-            onClick={() => skipBy(SKIP_SEC)}
-            className="absolute right-0 top-0 z-[5] w-[38%] bg-transparent"
+            aria-label={`Double-tap to skip forward ${SKIP_SEC} seconds`}
+            onClick={(e) => {
+              e.preventDefault();
+              handleSideTap("right");
+            }}
+            className="absolute right-0 top-0 z-[5] w-[40%] touch-manipulation bg-transparent"
             style={{ bottom: "var(--player-bar-height)" }}
           />
         </>
+      )}
+
+      {skipFlash && (
+        <div
+          key={skipFlash.key}
+          className={`video-player-skip-flash video-player-skip-flash--${skipFlash.side}`}
+          aria-hidden
+        >
+          <div className="video-player-skip-flash-ring">
+            <div
+              className={`video-player-skip-chevrons ${
+                skipFlash.side === "left" ? "video-player-skip-chevrons--back" : ""
+              }`}
+            >
+              <span className="video-player-skip-chevron" />
+              <span className="video-player-skip-chevron" />
+            </div>
+            <span className="video-player-skip-label">{skipFlash.seconds} seconds</span>
+          </div>
+        </div>
       )}
 
       <div className={`absolute inset-0 z-20 flex flex-col bg-black ${status === "ad" ? "" : "hidden"}`}>

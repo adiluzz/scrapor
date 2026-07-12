@@ -19,6 +19,7 @@ type TubeSite = {
 export default function InteractiveScrapeForm() {
   const router = useRouter();
   const [query, setQuery] = useState("");
+  const [searchMode, setSearchMode] = useState<"query" | "category">("query");
   const [sources, setSources] = useState<string[]>([...SOURCE_SITES]);
   const [tubeSites, setTubeSites] = useState<TubeSite[]>([]);
   const [targetSiteIds, setTargetSiteIds] = useState<string[]>([]);
@@ -101,6 +102,7 @@ export default function InteractiveScrapeForm() {
           ? { urls }
           : {
               query,
+              searchMode,
               sources,
               minDurationSec: minMinutes * 60,
               cursors: append ? cursors : undefined,
@@ -246,9 +248,9 @@ export default function InteractiveScrapeForm() {
           <div>
             <h2 className="text-lg font-semibold text-white">Interactive scrape</h2>
             <p className="mt-1 max-w-2xl text-sm text-zinc-400">
-              Search by query or paste video page URLs from supported sites. Preview thumbnails,
-              copy source URLs, pick videos to download, and load 50 more search results at a time.
-              Use “Skip first N videos” to offset into search results.
+              Search by keyword or category, or paste video page URLs from supported sites. Preview
+              thumbnails, copy source URLs, pick videos to download, and load 50 more search results
+              at a time. Use “Skip first N videos” to offset into search results.
             </p>
           </div>
           <Link
@@ -259,14 +261,54 @@ export default function InteractiveScrapeForm() {
           </Link>
         </div>
 
+        <div>
+          <p className="mb-2 text-sm text-zinc-400">Search by</p>
+          <div className="flex flex-wrap gap-2">
+            {(
+              [
+                { id: "query" as const, label: "Keyword" },
+                { id: "category" as const, label: "Category" },
+              ] as const
+            ).map((opt) => (
+              <label
+                key={opt.id}
+                className={`cursor-pointer rounded-full border px-3 py-1.5 text-sm ${
+                  searchMode === opt.id
+                    ? "border-brand-500 bg-brand-600/20 text-brand-200"
+                    : "border-zinc-700 bg-zinc-950 text-zinc-400"
+                }`}
+              >
+                <input
+                  type="radio"
+                  className="hidden"
+                  name="searchMode"
+                  checked={searchMode === opt.id}
+                  onChange={() => setSearchMode(opt.id)}
+                  disabled={searching || downloading}
+                />
+                {opt.label}
+              </label>
+            ))}
+          </div>
+        </div>
+
         <input
           required
-          placeholder="Search query (e.g. milf)"
+          placeholder={
+            searchMode === "category"
+              ? "Category (e.g. milf, anal, pissing)"
+              : "Search query (e.g. milf)"
+          }
           value={query}
           onChange={(e) => setQuery(e.target.value)}
           disabled={searching || downloading}
           className="w-full rounded-lg border border-zinc-700 bg-zinc-950 px-4 py-2.5 text-sm text-white focus:border-brand-500 focus:outline-none"
         />
+        {searchMode === "category" && (
+          <p className="text-xs text-zinc-500">
+            Browses each source site&apos;s category listing when available.
+          </p>
+        )}
 
         <div>
           <p className="mb-2 text-sm text-zinc-400">Source sites</p>

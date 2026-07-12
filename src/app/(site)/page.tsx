@@ -133,7 +133,7 @@ export default async function HomePage({
     return <StudioHome site={site} base={base} />;
   }
 
-  const { videos, total, totalPages } = await listVideos(siteId, params);
+  const { videos, totalPages } = await listVideos(siteId, params);
   const isSearch = Boolean(params.q);
 
   return (
@@ -152,7 +152,6 @@ export default async function HomePage({
           ) : (
             site.homeH1 || site.name
           )}
-          <span className="mt-1 block text-sm font-normal text-zinc-500 sm:ml-2 sm:mt-0 sm:inline">{total} videos</span>
         </h1>
         <Filters />
       </div>

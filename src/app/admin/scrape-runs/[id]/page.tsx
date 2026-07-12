@@ -43,6 +43,9 @@ export default async function RunDetailPage({ params }: { params: Promise<{ id: 
           “{run.query}” <span className={`ml-2 text-base ${statusColor[run.status]}`}>{run.status}</span>
         </h1>
         <div className="mt-2 flex flex-wrap gap-x-6 gap-y-2 text-sm">
+          <span className="text-zinc-400">
+            {run.searchMode === "category" ? "category" : "keyword"}
+          </span>
           <span className="text-emerald-400">{run.newVideos} new</span>
           <span className="text-zinc-400">{run.skipped} skipped</span>
           <span className="text-red-400">{run.failed} failed</span>

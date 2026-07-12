@@ -257,11 +257,13 @@ def search_candidates(
     limit: int = 50,
     exclude_urls: list[str] | None = None,
     skip: int = 0,
+    search_mode: str = "query",
 ) -> dict:
     """Collect up to `limit` unique video candidates across `sources`.
 
     When `skip` > 0, the first `skip` unique hits are discarded (used to offset
     into search results on the initial interactive preview).
+    `search_mode` is \"query\" (keyword) or \"category\" (source-site category browse).
     """
     cursors = dict(cursors or {})
     exhausted: dict[str, bool] = {s: False for s in sources}
@@ -270,6 +272,7 @@ def search_candidates(
     videos: list[dict] = []
     skip = max(0, int(skip or 0))
     skipped = 0
+    mode = "category" if str(search_mode or "").strip().lower() == "category" else "query"
 
     conn = db.connect()
     try:
@@ -289,7 +292,14 @@ def search_candidates(
                 # Fetch enough to cover remaining skip + remaining limit.
                 remaining_skip = max(0, skip - skipped)
                 need = min(PREVIEW_BATCH, remaining_skip + (limit - len(videos)))
-                batch, next_cursor, is_exhausted = searcher(query, need, cursor, min_duration_sec)
+                try:
+                    batch, next_cursor, is_exhausted = searcher(
+                        query, need, cursor, min_duration_sec, mode
+                    )
+                except TypeError:
+                    batch, next_cursor, is_exhausted = searcher(
+                        query, need, cursor, min_duration_sec
+                    )
                 cursors[source] = next_cursor
                 if is_exhausted:
                     exhausted[source] = True
@@ -337,6 +347,7 @@ def main() -> None:
             limit=int(req.get("limit", 50)),
             exclude_urls=req.get("excludeUrls"),
             skip=int(req.get("skip", 0) or 0),
+            search_mode=str(req.get("searchMode") or "query"),
         )
     json.dump(result, sys.stdout)
 

@@ -374,7 +374,7 @@ def load_run(conn, run_id: str):
     with conn.cursor() as cur:
         cur.execute(
             'SELECT id,"siteId",query,"selectedSites","minDurationSec","maxPerSite",'
-            '"selectedCandidates",status '
+            '"selectedCandidates",status,"searchMode" '
             'FROM "ScrapeRun" WHERE id=%s',
             (run_id,),
         )
@@ -393,6 +393,7 @@ def load_run(conn, run_id: str):
         "id": row[0], "siteId": row[1], "query": row[2],
         "selectedSites": row[3], "minDurationSec": row[4],
         "maxPerSite": row[5], "selectedCandidates": row[6], "status": row[7],
+        "searchMode": row[8] or "query",
         "targetSiteIds": target_site_ids,
     }
 

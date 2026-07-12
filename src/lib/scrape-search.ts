@@ -18,6 +18,8 @@ export type ScrapeSearchParams = {
   /** Skip this many unique search hits before returning results (initial search only). */
   skip?: number;
   excludeUrls?: string[];
+  /** "query" (keyword) or "category" (source-site category browse). */
+  searchMode?: "query" | "category";
 };
 
 /** How long the web app waits for the worker to finish an interactive search. */
@@ -68,6 +70,7 @@ async function runLocalPythonSearch(params: ScrapeSearchParams): Promise<ScrapeS
     limit: params.limit ?? PREVIEW_BATCH,
     skip: params.skip ?? 0,
     excludeUrls: params.excludeUrls,
+    searchMode: params.searchMode ?? "query",
   });
 
   return await new Promise((resolve, reject) => {
@@ -119,6 +122,7 @@ async function runRedisSearch(params: ScrapeSearchParams): Promise<ScrapeSearchR
       limit: params.limit ?? PREVIEW_BATCH,
       skip: params.skip ?? 0,
       excludeUrls: params.excludeUrls,
+      searchMode: params.searchMode ?? "query",
     })
   );
 

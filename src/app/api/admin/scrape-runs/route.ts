@@ -32,6 +32,7 @@ const schema = z
     candidates: z.array(candidateSchema).min(1).optional(),
     // Managed tube sites new videos should be published to.
     targetSiteIds: z.array(z.string().min(1)).min(1),
+    searchMode: z.enum(["query", "category"]).optional(),
   })
   .refine((d) => Boolean(d.query?.trim()) || (d.candidates?.length ?? 0) > 0, {
     message: "Provide a search query or selected video candidates",
@@ -89,6 +90,7 @@ export async function POST(request: Request) {
     data: {
       siteId: g.siteId,
       query: runQuery,
+      searchMode: candidates ? "query" : (parsed.data.searchMode ?? "query"),
       selectedSites: JSON.stringify(sources),
       minDurationSec: parsed.data.minDurationSec ?? 600,
       maxPerSite: candidates ? candidates.length : (parsed.data.maxPerSite ?? null),

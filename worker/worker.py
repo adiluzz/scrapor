@@ -143,7 +143,13 @@ _DOWNLOAD_UA = (
 )
 
 
-def _download_m3u8(m3u8: str, dest: str, dl_env: dict, timeout: int | None = None):
+def _download_m3u8(
+    m3u8: str,
+    dest: str,
+    dl_env: dict,
+    timeout: int | None = None,
+    duration_sec: int | float | None = None,
+):
     """Download XHamster-style HLS template URLs, preferring highest quality."""
     timeout = timeout if timeout is not None else DOWNLOAD_TIMEOUT
     last_result = None
@@ -151,7 +157,8 @@ def _download_m3u8(m3u8: str, dest: str, dl_env: dict, timeout: int | None = Non
         stream_url = m3u8.replace("_TPL_", quality)
         cmd = ["ffmpeg", "-y", "-i", stream_url, "-c", "copy", dest]
         last_result = subprocess.run(cmd, capture_output=True, timeout=timeout, env=dl_env)
-        if os.path.exists(dest) and os.path.getsize(dest) > 100_000:
+        ok, _reason = _download_looks_complete(dest, duration_sec)
+        if ok:
             return True, last_result, quality
         if os.path.exists(dest):
             os.remove(dest)
@@ -242,6 +249,35 @@ def _disk_free_mb(path: str = "/tmp") -> int:
         return (st.f_bavail * st.f_frsize) // (1024 * 1024)
     except OSError:
         return 0
+
+
+def _min_download_bytes(duration_sec: int | float | None) -> int:
+    """
+    Reject truncated downloads that still clear a tiny absolute floor.
+
+    Failed/interrupted HLS often leaves 128KiB–512KiB stubs that used to pass
+    the old 100KB check and get marked READY — those play as broken videos.
+    """
+    floor = 2_000_000  # 2 MiB absolute minimum
+    if duration_sec and float(duration_sec) > 0:
+        # ~200 kbps ≈ 25 KB/s — below any real 480p encode for the claimed length
+        return max(floor, int(float(duration_sec) * 25_000))
+    return floor
+
+
+def _download_looks_complete(path: str, duration_sec: int | float | None = None) -> tuple[bool, str]:
+    """Return (ok, reason) after size (+ optional duration) sanity checks."""
+    if not os.path.exists(path):
+        return False, "missing"
+    size = os.path.getsize(path)
+    need = _min_download_bytes(duration_sec)
+    if size < need:
+        return False, f"too small ({size} bytes, need >= {need})"
+    if duration_sec and float(duration_sec) >= 120:
+        probed = media.probe_duration(path)
+        if probed and probed < float(duration_sec) * 0.5:
+            return False, f"duration too short (probed {probed:.0f}s vs expected {int(duration_sec)}s)"
+    return True, "ok"
 
 
 def _download_eporner(page_url: str, dload_url: str, dest: str, dl_env: dict) -> tuple[bool, subprocess.CompletedProcess | None]:
@@ -386,8 +422,16 @@ def _download(video, dest_dir, force_ytdlp: bool = False) -> tuple[bool, str, di
     """
     os.makedirs(dest_dir, exist_ok=True)
     dest = os.path.join(dest_dir, "video.mp4")
-    if os.path.exists(dest) and os.path.getsize(dest) > 100_000:
+    duration_hint = video.get("duration_sec")
+    cached_ok, cached_reason = _download_looks_complete(dest, duration_hint)
+    if cached_ok:
         return True, "cached", {"method": "cache"}
+    if os.path.exists(dest):
+        # Stale truncated cache from a prior failed attempt.
+        try:
+            os.remove(dest)
+        except OSError:
+            pass
 
     free_mb = _disk_free_mb(dest_dir)
     if free_mb and free_mb < 2048:
@@ -431,7 +475,9 @@ def _download(video, dest_dir, force_ytdlp: bool = False) -> tuple[bool, str, di
             last_result = subprocess.run(cmd, capture_output=True, timeout=DOWNLOAD_LONG_TIMEOUT, env=dl_env)
         elif m3u8:
             method = "ffmpeg-m3u8"
-            ok, last_result, quality = _download_m3u8(m3u8, dest, dl_env)
+            ok, last_result, quality = _download_m3u8(
+                m3u8, dest, dl_env, duration_sec=duration_hint,
+            )
             if not ok:
                 return False, "m3u8 download failed at all qualities", {
                     "method": method,
@@ -460,19 +506,21 @@ def _download(video, dest_dir, force_ytdlp: bool = False) -> tuple[bool, str, di
             if SCRAPE_PROXY:
                 cmd[1:1] = ["--proxy", SCRAPE_PROXY]
             last_result = subprocess.run(cmd, capture_output=True, timeout=DOWNLOAD_LONG_TIMEOUT, env=dl_env)
-            if not (os.path.exists(dest) and os.path.getsize(dest) > 100_000):
+            ok_dest, _ = _download_looks_complete(dest, duration_hint)
+            if not ok_dest:
                 for f in os.listdir(dest_dir):
                     if f.startswith("dl."):
                         shutil.move(os.path.join(dest_dir, f), dest)
                         break
 
-        if os.path.exists(dest) and os.path.getsize(dest) > 100_000:
+        ok, reason = _download_looks_complete(dest, duration_hint)
+        if ok:
             return True, "ok", {"method": method}
 
         size = os.path.getsize(dest) if os.path.exists(dest) else 0
         stderr = _stderr_tail(last_result)
         rc = last_result.returncode if last_result else None
-        return False, f"output missing or too small ({size} bytes)", {
+        return False, reason if reason != "missing" else f"output missing or too small ({size} bytes)", {
             "method": method,
             "exitCode": rc,
             "stderr": stderr,

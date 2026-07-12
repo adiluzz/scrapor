@@ -96,7 +96,7 @@ export default async function PornstarsPage({
               className="group flex flex-col items-center rounded-xl border border-zinc-800 bg-zinc-900 p-4 text-center hover:border-brand-500/50"
             >
               <PornstarAvatar name={s.name} pornstar={s} size="xl" className="mb-3" />
-              <span className="truncate text-sm font-medium text-zinc-200 group-hover:text-white">{s.name}</span>
+              <span className="block w-full min-w-0 truncate text-sm font-medium text-zinc-200 group-hover:text-white">{s.name}</span>
               <span className="text-xs text-zinc-500">{s._count.videos} videos</span>
             </Link>
           ))}

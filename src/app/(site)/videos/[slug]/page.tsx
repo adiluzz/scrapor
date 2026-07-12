@@ -177,7 +177,7 @@ export default async function VideoPage({
         />
 
         <div className="w-full">
-          <h1 className="text-lg font-bold text-zinc-100 sm:text-xl">{video.title}</h1>
+          <h1 className="text-lg font-bold break-words text-zinc-100 sm:text-xl">{video.title}</h1>
           <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-zinc-500">
             <span>{video.viewCount.toLocaleString()} views</span>
             {video.durationSec ? <span>· {formatDuration(video.durationSec)}</span> : null}
@@ -226,7 +226,7 @@ export default async function VideoPage({
           )}
 
           {video.description && (
-            <p className="mt-4 whitespace-pre-line text-sm leading-relaxed text-zinc-400">
+            <p className="mt-4 whitespace-pre-line break-words text-sm leading-relaxed text-zinc-400">
               {video.description}
             </p>
           )}

@@ -52,7 +52,7 @@ export default async function TagsIndexPage() {
             <Link
               key={t.id}
               href={`/tags/${t.slug}`}
-              className="rounded-full border border-zinc-800 bg-zinc-900 px-3 py-1.5 text-sm text-zinc-300 hover:border-brand-500/40 hover:text-brand-300"
+              className="max-w-full break-words rounded-full border border-zinc-800 bg-zinc-900 px-3 py-1.5 text-sm text-zinc-300 hover:border-brand-500/40 hover:text-brand-300"
             >
               {t.name}
               <span className="ml-1.5 text-xs text-zinc-500">{t._count.videos}</span>

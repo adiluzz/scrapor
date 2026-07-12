@@ -54,7 +54,7 @@ export default async function SiteLayout({ children }: { children: React.ReactNo
   const isStudio = site.kind === "STUDIO";
 
   return (
-    <div className="min-h-screen bg-zinc-950 text-zinc-100">
+    <div className="min-h-screen overflow-x-hidden bg-zinc-950 text-zinc-100">
       <BrandStyle primaryColor={site.primaryColor} />
       <ConsentModeDefault />
       {gaId ? <GoogleAnalytics measurementId={gaId} /> : null}
@@ -62,7 +62,7 @@ export default async function SiteLayout({ children }: { children: React.ReactNo
         <Script src="https://a.magsrv.com/ad-provider.js" strategy="afterInteractive" />
       ) : null}
       <Header site={site} />
-      <main className="mx-auto max-w-7xl px-4 py-6">{children}</main>
+      <main className="mx-auto w-full max-w-7xl px-3 py-4 sm:px-4 sm:py-6">{children}</main>
       <Footer siteName={site.name} isStudio={isStudio} />
       {!ageVerified && <AgeGate siteName={site.name} />}
       <CookieConsent siteName={site.name} />

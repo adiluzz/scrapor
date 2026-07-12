@@ -43,7 +43,7 @@ export default async function CreatorsPage() {
               <div className="mb-3 flex h-20 w-20 items-center justify-center overflow-hidden rounded-full bg-gradient-to-br from-indigo-600 to-brand-600 text-2xl font-bold text-white">
                 {c.displayName.charAt(0).toUpperCase()}
               </div>
-              <span className="truncate text-sm font-medium text-zinc-200 group-hover:text-white">{c.displayName}</span>
+              <span className="block w-full min-w-0 truncate text-sm font-medium text-zinc-200 group-hover:text-white">{c.displayName}</span>
               <span className="text-xs text-zinc-500">{c._count.videos} videos</span>
             </Link>
           ))}

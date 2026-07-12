@@ -58,15 +58,15 @@ export default function Logo({
 
   const isFbb = site?.logoKey === "fbb-mark";
   const inner = (
-    <span className={`inline-flex items-center gap-2.5 ${className}`}>
+    <span className={`inline-flex max-w-full min-w-0 items-center gap-2 sm:gap-2.5 ${className}`}>
       <SiteMark
         logoKey={site?.logoKey}
         primaryColor={site?.primaryColor}
         id={admin ? "admin" : "header"}
-        className={isFbb ? "h-10 w-10 shrink-0" : undefined}
+        className={isFbb ? "h-9 w-9 shrink-0 sm:h-10 sm:w-10" : "h-8 w-8 shrink-0 sm:h-9 sm:w-9"}
       />
       <span
-        className={`text-2xl font-black tracking-tight leading-none ${isFbb ? "italic" : ""}`}
+        className={`min-w-0 truncate text-xl font-black tracking-tight leading-none sm:text-2xl ${isFbb ? "italic" : ""}`}
       >
         <span className="text-white">{left}</span>
         <span style={{ color: accent }} className={isFbb ? "tracking-[0.12em] text-[0.72em] font-bold not-italic" : undefined}>
@@ -83,7 +83,7 @@ export default function Logo({
   return (
     <Link
       href={href}
-      className="shrink-0 rounded-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500/60"
+      className="min-w-0 max-w-full rounded-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500/60"
     >
       {inner}
     </Link>

@@ -59,7 +59,7 @@ export default function CookieConsent({ siteName, forceOpen = false, onClose }: 
       role="dialog"
       aria-label="Cookie consent"
       aria-live="polite"
-      className="fixed inset-x-0 bottom-0 z-[90] border-t border-zinc-800 bg-zinc-900/95 p-4 shadow-2xl backdrop-blur sm:p-6"
+      className="fixed inset-x-0 bottom-0 z-[90] border-t border-zinc-800 bg-zinc-900/95 px-4 pb-[max(1rem,env(safe-area-inset-bottom))] pt-4 shadow-2xl backdrop-blur sm:px-6 sm:pb-[max(1.5rem,env(safe-area-inset-bottom))] sm:pt-6"
     >
       <div className="mx-auto flex max-w-7xl flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
         <div className="max-w-3xl text-sm leading-relaxed text-zinc-300">

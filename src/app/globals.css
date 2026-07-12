@@ -278,6 +278,10 @@
     min-width: 2.5rem;
   }
 
+  .video-player-root.video-player-themed .vjs-picture-in-picture-control {
+    display: none !important;
+  }
+
   .video-player-root.video-player-themed .vjs-progress-control {
     padding: 0 0.5rem;
     height: calc(var(--player-progress-height) + 0.75rem);
@@ -298,7 +302,7 @@
   position: fixed;
   inset: 0;
   z-index: 9999;
-  width: 100vw !important;
+  width: 100% !important;
   height: var(--player-viewport-height, 100dvh) !important;
   max-height: var(--player-viewport-height, 100dvh);
   background: #000;

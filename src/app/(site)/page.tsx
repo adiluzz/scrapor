@@ -146,13 +146,13 @@ export default async function HomePage({
       )}
       <AdZone zoneId={site.exoZoneHome ?? undefined} insClass={site.exoInsClass} className="mb-5" />
       <div className="mb-5 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <h1 className="text-xl font-semibold text-zinc-100">
+        <h1 className="min-w-0 text-lg font-semibold break-words text-zinc-100 sm:text-xl">
           {isSearch ? (
             <>Results for &ldquo;{params.q}&rdquo;</>
           ) : (
             site.homeH1 || site.name
           )}
-          <span className="ml-2 text-sm font-normal text-zinc-500">{total} videos</span>
+          <span className="mt-1 block text-sm font-normal text-zinc-500 sm:ml-2 sm:mt-0 sm:inline">{total} videos</span>
         </h1>
         <Filters />
       </div>

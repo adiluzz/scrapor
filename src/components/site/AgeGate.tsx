@@ -37,10 +37,10 @@ export default function AgeGate({ siteName = "this site" }: { siteName?: string 
       role="dialog"
       aria-modal="true"
       aria-label="Age verification"
-      className="fixed inset-0 z-[100] flex items-center justify-center bg-black/95 p-4 backdrop-blur"
+      className="fixed inset-0 z-[100] flex items-center justify-center overflow-y-auto bg-black/95 p-4 backdrop-blur"
     >
-      <div className="w-full max-w-md rounded-2xl border border-zinc-800 bg-zinc-900 p-8 text-center shadow-2xl">
-        <h2 className="text-2xl font-bold text-white">Age verification</h2>
+      <div className="my-auto w-full max-w-md rounded-2xl border border-zinc-800 bg-zinc-900 p-5 text-center shadow-2xl sm:p-8 max-h-[min(90dvh,40rem)] overflow-y-auto">
+        <h2 className="text-xl font-bold text-white sm:text-2xl">Age verification</h2>
         <p className="mt-2 text-sm text-zinc-500">You are about to enter {siteName}.</p>
         <p className="mt-4 text-sm leading-relaxed text-zinc-400">
           This website contains age-restricted material including nudity and explicit depictions of

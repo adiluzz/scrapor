@@ -40,13 +40,15 @@ export default function AdZone({
   if (!zoneId) return null;
 
   return (
-    <div className={`flex flex-col items-center ${className}`}>
+    <div className={`flex w-full max-w-full flex-col items-center overflow-x-hidden ${className}`}>
       {label && <span className="mb-1 text-[10px] uppercase tracking-wide text-zinc-600">Advertisement</span>}
-      <ins
-        className={resolvedClass}
-        data-zoneid={zoneId}
-        style={minHeight ? { display: "block", minHeight } : { display: "block" }}
-      />
+      <div className="flex w-full max-w-full justify-center overflow-x-hidden [&_iframe]:max-w-full [&_ins]:max-w-full">
+        <ins
+          className={resolvedClass}
+          data-zoneid={zoneId}
+          style={minHeight ? { display: "block", minHeight, maxWidth: "100%" } : { display: "block", maxWidth: "100%" }}
+        />
+      </div>
     </div>
   );
 }

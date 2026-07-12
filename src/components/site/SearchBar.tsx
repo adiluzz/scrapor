@@ -65,10 +65,10 @@ export default function SearchBar({ initial = "" }: { initial?: string }) {
   const groupLabels: Record<string, string> = { pornstar: "Pornstars", tag: "Tags", search: "Searches" };
 
   return (
-    <div ref={boxRef} className="relative w-full max-w-xl">
+    <div ref={boxRef} className="relative w-full min-w-0 max-w-xl">
       <form
         onSubmit={(e) => { e.preventDefault(); go(value); }}
-        className="flex"
+        className="flex min-w-0"
       >
         <input
           value={value}
@@ -76,10 +76,18 @@ export default function SearchBar({ initial = "" }: { initial?: string }) {
           onKeyDown={onKeyDown}
           onFocus={() => suggestions.length && setOpen(true)}
           placeholder="Search videos, pornstars, tags…"
-          className="flex-1 rounded-l-full bg-zinc-900 border border-zinc-700 px-5 py-2.5 text-sm text-zinc-100 placeholder-zinc-500 focus:outline-none focus:border-brand-500"
+          aria-label="Search videos, pornstars, tags"
+          className="min-w-0 flex-1 rounded-l-full border border-zinc-700 bg-zinc-900 px-3 py-2 text-sm text-zinc-100 placeholder-zinc-500 focus:border-brand-500 focus:outline-none sm:px-5 sm:py-2.5"
         />
-        <button type="submit" className="rounded-r-full bg-brand-600 hover:bg-brand-500 px-5 text-white text-sm font-medium">
-          Search
+        <button
+          type="submit"
+          aria-label="Search"
+          className="inline-flex shrink-0 items-center justify-center rounded-r-full bg-brand-600 px-3 text-sm font-medium text-white hover:bg-brand-500 sm:px-5"
+        >
+          <svg className="h-5 w-5 sm:hidden" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2} aria-hidden>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-4.35-4.35M11 19a8 8 0 100-16 8 8 0 000 16z" />
+          </svg>
+          <span className="hidden sm:inline">Search</span>
         </button>
       </form>
 

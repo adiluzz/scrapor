@@ -1669,28 +1669,49 @@ def _po_search_url(query, page, mode="query"):
     if _is_category_mode(mode):
         slug = _category_slug(query)
         if page <= 1:
-            return f"{_PO_BASE}/{slug}"
-        return f"{_PO_BASE}/{slug}/{page}"
+            return f"{_PO_BASE}/{slug}/"
+        return f"{_PO_BASE}/{slug}/{page}/"
     q = quote_plus(query)
     if page <= 1:
         return f"{_PO_BASE}/search?q={q}"
     return f"{_PO_BASE}/search/{page}?q={q}"
 
 
+def _po_page_num_from_href(href: str) -> int | None:
+    """Extract listing page number from a PornOne category/search href."""
+    from urllib.parse import urlparse
+    if not href:
+        return None
+    path = (urlparse(href).path or "").rstrip("/")
+    m = re.search(r"/(\d+)$", path)
+    return int(m.group(1)) if m else None
+
+
 def _po_next_search_page(html, current_page):
-    """Follow PornOne's bottom pagination nav (gosearch / Next Page) to the next page."""
+    """Follow PornOne's bottom pagination nav to the next page.
+
+    Search listings use ``span[title=Next Page]`` with ``gosearch(N)``.
+    Category listings use real ``<a href="/slug/N/">`` links (no gosearch).
+    """
     from bs4 import BeautifulSoup
     soup = BeautifulSoup(html or "", "html.parser")
     for nav in soup.select('nav[aria-label="Pagination"]'):
-        nxt = nav.select_one('span[title="Next Page"]')
+        nxt = nav.select_one('[title="Next Page"]')
         if not nxt:
             continue
         onclick = nxt.get("onclick") or ""
         m = re.search(r"gosearch\((\d+)\)", onclick)
-        if not m:
+        if m:
+            page = int(m.group(1))
+            if page > current_page:
+                return page
             continue
-        page = int(m.group(1))
-        if page > current_page:
+        href = nxt.get("href") or ""
+        if not href and nxt.name != "a":
+            parent = nxt.find_parent("a")
+            href = (parent.get("href") if parent else "") or ""
+        page = _po_page_num_from_href(href)
+        if page is not None and page > current_page:
             return page
     return None
 

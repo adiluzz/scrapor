@@ -1133,7 +1133,7 @@ export default forwardRef(function VideoPlayer(
               e.preventDefault();
               handleSideTap("left");
             }}
-            className="absolute left-0 top-0 z-[5] w-[40%] touch-manipulation bg-transparent"
+            className="video-player-skip-zone absolute left-0 top-0 w-[40%] touch-manipulation bg-transparent"
             style={{ bottom: "var(--player-bar-height)" }}
           />
           <button
@@ -1143,7 +1143,7 @@ export default forwardRef(function VideoPlayer(
               e.preventDefault();
               handleSideTap("right");
             }}
-            className="absolute right-0 top-0 z-[5] w-[40%] touch-manipulation bg-transparent"
+            className="video-player-skip-zone absolute right-0 top-0 w-[40%] touch-manipulation bg-transparent"
             style={{ bottom: "var(--player-bar-height)" }}
           />
         </>

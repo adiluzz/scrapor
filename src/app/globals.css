@@ -67,12 +67,21 @@
   touch-action: none;
 }
 
+/* Double-tap skip hit targets (above video, below scrubber/heatmap). */
+.video-player-root .video-player-skip-zone {
+  z-index: 12;
+  pointer-events: auto;
+  border: 0;
+  padding: 0;
+  -webkit-tap-highlight-color: transparent;
+}
+
 /* YouTube-style double-tap skip feedback */
 .video-player-root .video-player-skip-flash {
   pointer-events: none;
   position: absolute;
-  top: 42%;
   z-index: 16;
+  top: 42%;
   transform: translateY(-50%);
 }
 
@@ -483,6 +492,15 @@
   z-index: 2147483645;
 }
 
+/* Immersive .video-js is position:fixed; z-index:99999 — skip zones must clear it. */
+.video-player-root.video-player-immersive .video-player-skip-zone {
+  z-index: 2147483644;
+}
+
+.video-player-root.video-player-immersive .video-player-skip-flash {
+  z-index: 2147483644;
+}
+
 /* Scrub preview must sit above the fixed .video-js layer (z-index: 99999). */
 .video-player-root.video-player-immersive .video-player-scrub-preview {
   z-index: 2147483647;
@@ -554,4 +572,14 @@
 .video-player-root:fullscreen .video-player-heatmap,
 .video-player-root:-webkit-full-screen .video-player-heatmap {
   z-index: 2147483645;
+}
+
+.video-player-root:fullscreen .video-player-skip-zone,
+.video-player-root:-webkit-full-screen .video-player-skip-zone {
+  z-index: 2147483644;
+}
+
+.video-player-root:fullscreen .video-player-skip-flash,
+.video-player-root:-webkit-full-screen .video-player-skip-flash {
+  z-index: 2147483644;
 }

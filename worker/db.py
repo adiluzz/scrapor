@@ -426,6 +426,87 @@ def list_active_runs(conn):
         return [r[0] for r in cur.fetchall()]
 
 
+def load_run_persisted_totals(conn, run_id: str) -> dict:
+    """Totals derived from persisted videos + outcomes (survive worker restarts)."""
+    with conn.cursor() as cur:
+        cur.execute('SELECT count(*) FROM "Video" WHERE "scrapeRunId"=%s', (run_id,))
+        new_videos = int(cur.fetchone()[0] or 0)
+        cur.execute(
+            'SELECT outcome, count(*) FROM "ScrapeRunOutcome" WHERE "runId"=%s GROUP BY outcome',
+            (run_id,),
+        )
+        skipped = failed = 0
+        for outcome, n in cur.fetchall():
+            if outcome == "SKIPPED":
+                skipped = int(n or 0)
+            elif outcome == "FAILED":
+                failed = int(n or 0)
+    return {
+        "new": new_videos,
+        "skip": skipped,
+        "fail": failed,
+        "found": new_videos + skipped + failed,
+    }
+
+
+def load_site_persisted_counters(conn, run_id: str, source_site: str) -> dict:
+    """Per-source counters from videos + outcomes for a source site."""
+    with conn.cursor() as cur:
+        cur.execute(
+            'SELECT count(*) FROM "Video" WHERE "scrapeRunId"=%s AND "sourceSite"=%s',
+            (run_id, source_site),
+        )
+        new_videos = int(cur.fetchone()[0] or 0)
+        cur.execute(
+            'SELECT outcome, count(*) FROM "ScrapeRunOutcome" '
+            'WHERE "runId"=%s AND "sourceSite"=%s GROUP BY outcome',
+            (run_id, source_site),
+        )
+        skipped = failed = 0
+        for outcome, n in cur.fetchall():
+            if outcome == "SKIPPED":
+                skipped = int(n or 0)
+            elif outcome == "FAILED":
+                failed = int(n or 0)
+    processed = new_videos + skipped + failed
+    return {
+        "found": processed,
+        "new_videos": new_videos,
+        "skipped": skipped,
+        "failed": failed,
+    }
+
+
+def load_run_seen_keys(conn, run_id: str) -> set[str]:
+    """Canonical URLs already handled in this run (added, skipped, or failed)."""
+    keys: set[str] = set()
+    with conn.cursor() as cur:
+        cur.execute(
+            'SELECT "sourceUrl","dedupeKey" FROM "Video" WHERE "scrapeRunId"=%s',
+            (run_id,),
+        )
+        for source_url, dedupe in cur.fetchall():
+            key = dedupe or canonical_key(source_url or "") or (source_url or "")
+            if key:
+                keys.add(key)
+        cur.execute('SELECT url FROM "ScrapeRunOutcome" WHERE "runId"=%s', (run_id,))
+        for (url,) in cur.fetchall():
+            key = canonical_key(url or "") or (url or "")
+            if key:
+                keys.add(key)
+    return keys
+
+
+def get_run_site_status(conn, run_id: str, source_site: str) -> str | None:
+    with conn.cursor() as cur:
+        cur.execute(
+            'SELECT status FROM "ScrapeRunSite" WHERE "runId"=%s AND "sourceSite"=%s',
+            (run_id, source_site),
+        )
+        row = cur.fetchone()
+    return row[0] if row else None
+
+
 def set_run_status(conn, run_id, status, started=False, finished=False):
     sets = ['status=%s']
     vals = [status]

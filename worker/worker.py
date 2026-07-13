@@ -983,8 +983,10 @@ def _process_selected(conn, run, candidates, totals) -> str:
             break
 
         db.set_run_site(conn, run_id, source, status="RUNNING")
-        s = {"found": len(vids), "new_videos": 0, "skipped": 0, "failed": 0}
-        totals["found"] += len(vids)
+        s = db.load_site_persisted_counters(conn, run_id, source)
+        # Interactive runs know the candidate count up front.
+        s["found"] = max(s["found"], len(vids))
+        totals["found"] = max(totals["found"], totals["new"] + totals["skip"] + totals["fail"] + len(vids))
 
         def record(outcome):
             if outcome == "new":
@@ -1000,10 +1002,11 @@ def _process_selected(conn, run, candidates, totals) -> str:
         fresh = []
         for v in vids:
             key = db.canonical_key(v.get("url") or "") or v.get("url") or ""
-            if not key or key in seen:
+            if not key:
                 record("skip")
-                reason = "Duplicate in this run" if key in seen else "Missing URL"
-                db.record_run_outcome(conn, run_id, v, source, "skip", reason, "dedup")
+                db.record_run_outcome(conn, run_id, v, source, "skip", "Missing URL", "dedup")
+                continue
+            if key in seen:
                 continue
             seen.add(key)
             fresh.append(v)
@@ -1181,9 +1184,19 @@ def _process_source(conn, run, source, min_dur, max_per_site, seen, totals) -> s
         return "done"
 
     db.set_run_site(conn, run_id, source, status="RUNNING")
-    s = {"found": 0, "new_videos": 0, "skipped": 0, "failed": 0}
+    # Seed from persisted rows so a worker restart doesn't wipe prior progress.
+    s = db.load_site_persisted_counters(conn, run_id, source)
+    with conn.cursor() as cur:
+        cur.execute(
+            'SELECT found FROM "ScrapeRunSite" WHERE "runId"=%s AND "sourceSite"=%s',
+            (run_id, source),
+        )
+        row = cur.fetchone()
+        if row and int(row[0] or 0) > s["found"]:
+            s["found"] = int(row[0])
     download_all = max_per_site is None
-    collected = 0  # search-result slots consumed (toward cap or ALL_CAP safety)
+    # Already-processed slots toward maxPerSite / ALL_CAP (videos + outcomes).
+    collected = s["new_videos"] + s["skipped"] + s["failed"]
     cursor = 0  # page cursor (HTML / Eporner) or result offset (API libs)
     stopped = False
 
@@ -1222,16 +1235,22 @@ def _process_source(conn, run, source, min_dur, max_per_site, seen, totals) -> s
             if not results:
                 break
 
-            # Cross-source within-run dedup by canonical key before downloading.
+            # Cross-source / resume dedup by canonical key before downloading.
+            # `seen` is warmed from videos/outcomes already handled in this run
+            # (including prior worker sessions), so resume does not re-count them.
             fresh = []
+            batch_keys: set[str] = set()
             for v in results:
                 key = db.canonical_key(v["url"]) or v["url"]
                 if key in seen:
+                    continue
+                if key in batch_keys:
                     record("skip")
                     db.record_run_outcome(
                         conn, run_id, v, source, "skip", "Duplicate in this run", "dedup"
                     )
                     continue
+                batch_keys.add(key)
                 seen.add(key)
                 fresh.append(v)
             s["found"] += len(results)
@@ -1326,8 +1345,11 @@ def process_run(conn, run_id: str):
         except Exception:  # noqa: BLE001
             pass
 
-    seen = set()  # within-run dedup across sources
-    totals = {"new": 0, "skip": 0, "fail": 0, "found": 0}
+    seen = db.load_run_seen_keys(conn, run_id)  # within-run dedup across sources (+ resume)
+    totals = db.load_run_persisted_totals(conn, run_id)
+    if any(totals.values()):
+        _event("info", "run_resume_totals", runId=run_id, **totals)
+        db.update_run_totals(conn, run_id, totals["new"], totals["skip"], totals["fail"], totals["found"])
     stopped = False
 
     if selected:
@@ -1340,6 +1362,10 @@ def process_run(conn, run_id: str):
             if _run_stopped(conn, run_id):
                 stopped = True
                 break
+            site_status = db.get_run_site_status(conn, run_id, source)
+            if site_status == "DONE":
+                _event("info", "source_already_done", runId=run_id, sourceSite=source)
+                continue
             outcome = _process_source(conn, run, source, min_dur, max_per_site, seen, totals)
             db.update_run_totals(conn, run_id, totals["new"], totals["skip"], totals["fail"], totals["found"])
             if outcome == "stopped":

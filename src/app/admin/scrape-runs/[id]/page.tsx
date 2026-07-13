@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import { prisma } from "@/lib/db";
 import { requireAdmin } from "@/lib/session";
 import { loadScrapeRunOutcomes } from "@/lib/scrape-run-outcomes";
+import { loadScrapeRunDisplayStats } from "@/lib/scrape-run-stats";
 import RunActions from "@/components/admin/RunActions";
 import ScrapeRunOutcomeLists from "@/components/admin/ScrapeRunOutcomeLists";
 
@@ -29,11 +30,10 @@ export default async function RunDetailPage({ params }: { params: Promise<{ id: 
   });
   if (!run) notFound();
 
-  const { skipped, failed } = await loadScrapeRunOutcomes(
-    run.id,
-    run.selectedCandidates,
-    run.status
-  );
+  const [{ skipped, failed }, stats] = await Promise.all([
+    loadScrapeRunOutcomes(run.id, run.selectedCandidates, run.status),
+    loadScrapeRunDisplayStats(run.id),
+  ]);
 
   return (
     <div className="space-y-8">
@@ -46,9 +46,9 @@ export default async function RunDetailPage({ params }: { params: Promise<{ id: 
           <span className="text-zinc-400">
             {run.searchMode === "category" ? "category" : "keyword"}
           </span>
-          <span className="text-emerald-400">{run.newVideos} new</span>
-          <span className="text-zinc-400">{run.skipped} skipped</span>
-          <span className="text-red-400">{run.failed} failed</span>
+          <span className="text-emerald-400">{stats.newVideos} new</span>
+          <span className="text-zinc-400">{stats.skipped} skipped</span>
+          <span className="text-red-400">{stats.failed} failed</span>
           <span className="text-zinc-500">min {Math.round(run.minDurationSec / 60)} min</span>
           <span className="text-zinc-500">
             {run.selectedCandidates
@@ -79,7 +79,7 @@ export default async function RunDetailPage({ params }: { params: Promise<{ id: 
           <RunActions
             runId={run.id}
             status={run.status}
-            failed={run.failed}
+            failed={stats.failed}
             hasSelectedCandidates={Boolean(run.selectedCandidates)}
           />
         </div>
@@ -101,24 +101,34 @@ export default async function RunDetailPage({ params }: { params: Promise<{ id: 
               </tr>
             </thead>
             <tbody className="divide-y divide-zinc-800">
-              {run.siteResults.map((s) => (
-                <tr key={s.id}>
-                  <td className="px-4 py-3 text-zinc-200">{s.sourceSite}</td>
-                  <td className={`px-4 py-3 ${statusColor[s.status]}`}>{s.status}</td>
-                  <td className="px-4 py-3 text-zinc-400">{s.found}</td>
-                  <td className="px-4 py-3 text-emerald-400">{s.newVideos}</td>
-                  <td className="px-4 py-3 text-zinc-400">{s.skipped}</td>
-                  <td className="px-4 py-3 text-red-400">{s.failed}</td>
-                  <td className="px-4 py-3 max-w-xs truncate text-red-300/70">{s.error || "—"}</td>
-                </tr>
-              ))}
+              {run.siteResults.map((s) => {
+                const derived = stats.bySource.get(s.sourceSite);
+                const newVideos = derived?.newVideos ?? 0;
+                const skippedN = derived?.skipped ?? 0;
+                const failedN = derived?.failed ?? 0;
+                const found = Math.max(s.found, derived?.processed ?? 0);
+                return (
+                  <tr key={s.id}>
+                    <td className="px-4 py-3 text-zinc-200">{s.sourceSite}</td>
+                    <td className={`px-4 py-3 ${statusColor[s.status]}`}>{s.status}</td>
+                    <td className="px-4 py-3 text-zinc-400">{found}</td>
+                    <td className="px-4 py-3 text-emerald-400">{newVideos}</td>
+                    <td className="px-4 py-3 text-zinc-400">{skippedN}</td>
+                    <td className="px-4 py-3 text-red-400">{failedN}</td>
+                    <td className="px-4 py-3 max-w-xs truncate text-red-300/70">{s.error || "—"}</td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         </div>
       </section>
 
       <section>
-        <h2 className="mb-3 text-lg font-semibold text-white">Videos added ({run.videos.length})</h2>
+        <h2 className="mb-3 text-lg font-semibold text-white">
+          Videos added ({stats.newVideos}
+          {run.videos.length < stats.newVideos ? `, showing latest ${run.videos.length}` : ""})
+        </h2>
         <ul className="divide-y divide-zinc-800 rounded-xl border border-zinc-800">
           {run.videos.length === 0 ? (
             <li className="px-4 py-8 text-center text-sm text-zinc-500">No videos added yet.</li>

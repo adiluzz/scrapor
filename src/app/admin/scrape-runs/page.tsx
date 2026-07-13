@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { prisma } from "@/lib/db";
 import { requireAdmin } from "@/lib/session";
+import { loadScrapeRunDisplayStatsMany } from "@/lib/scrape-run-stats";
 import NewRunForm from "@/components/admin/NewRunForm";
 
 export const dynamic = "force-dynamic";
@@ -22,6 +23,7 @@ export default async function ScrapeRunsPage() {
       targetSites: { include: { site: { select: { name: true, domain: true } } } },
     },
   });
+  const statsByRun = await loadScrapeRunDisplayStatsMany(runs.map((r) => r.id));
 
   return (
     <div className="space-y-8">
@@ -53,26 +55,29 @@ export default async function ScrapeRunsPage() {
             {runs.length === 0 ? (
               <tr><td colSpan={7} className="px-4 py-8 text-center text-zinc-500">No runs yet.</td></tr>
             ) : (
-              runs.map((r) => (
-                <tr key={r.id} className="hover:bg-zinc-900/50">
-                  <td className="px-4 py-3">
-                    <Link href={`/admin/scrape-runs/${r.id}`} className="text-brand-400 hover:underline">{r.query}</Link>
-                    {r.searchMode === "category" && (
-                      <span className="ml-2 rounded border border-zinc-700 px-1.5 py-0.5 text-[10px] uppercase tracking-wide text-zinc-500">
-                        category
-                      </span>
-                    )}
-                  </td>
-                  <td className="px-4 py-3 text-xs text-zinc-400">
-                    {r.targetSites.map((t) => t.site.name).join(", ") || "—"}
-                  </td>
-                  <td className={`px-4 py-3 ${statusColor[r.status]}`}>{r.status}</td>
-                  <td className="px-4 py-3 text-emerald-400">{r.newVideos}</td>
-                  <td className="px-4 py-3 text-zinc-400">{r.skipped}</td>
-                  <td className="px-4 py-3 text-red-400">{r.failed}</td>
-                  <td className="px-4 py-3 text-zinc-500">{new Date(r.createdAt).toLocaleString()}</td>
-                </tr>
-              ))
+              runs.map((r) => {
+                const stats = statsByRun.get(r.id) ?? { newVideos: 0, skipped: 0, failed: 0 };
+                return (
+                  <tr key={r.id} className="hover:bg-zinc-900/50">
+                    <td className="px-4 py-3">
+                      <Link href={`/admin/scrape-runs/${r.id}`} className="text-brand-400 hover:underline">{r.query}</Link>
+                      {r.searchMode === "category" && (
+                        <span className="ml-2 rounded border border-zinc-700 px-1.5 py-0.5 text-[10px] uppercase tracking-wide text-zinc-500">
+                          category
+                        </span>
+                      )}
+                    </td>
+                    <td className="px-4 py-3 text-xs text-zinc-400">
+                      {r.targetSites.map((t) => t.site.name).join(", ") || "—"}
+                    </td>
+                    <td className={`px-4 py-3 ${statusColor[r.status]}`}>{r.status}</td>
+                    <td className="px-4 py-3 text-emerald-400">{stats.newVideos}</td>
+                    <td className="px-4 py-3 text-zinc-400">{stats.skipped}</td>
+                    <td className="px-4 py-3 text-red-400">{stats.failed}</td>
+                    <td className="px-4 py-3 text-zinc-500">{new Date(r.createdAt).toLocaleString()}</td>
+                  </tr>
+                );
+              })
             )}
           </tbody>
         </table>

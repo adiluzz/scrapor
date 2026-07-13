@@ -163,16 +163,20 @@ def _unique_slug(conn, site_id: str, title: str) -> str:
     return slug
 
 
-def upsert_pornstar(conn, site_id: str, name: str) -> str:
+def upsert_pornstar(conn, site_id: str, name: str) -> tuple[str, bool]:
+    """Insert or update a pornstar. Returns (id, created)."""
     slug = slugify(name)
     pid = _cuid()
     with conn.cursor() as cur:
         cur.execute(
             'INSERT INTO "Pornstar" (id,"siteId",name,slug) VALUES (%s,%s,%s,%s) '
-            'ON CONFLICT ("siteId",slug) DO UPDATE SET name=EXCLUDED.name RETURNING id',
+            'ON CONFLICT ("siteId",slug) DO UPDATE SET name=EXCLUDED.name '
+            "RETURNING id, (xmax = 0) AS inserted",
             (pid, site_id, name, slug),
         )
-        return cur.fetchone()[0]
+        row = cur.fetchone()
+        # PostgreSQL: xmax=0 on INSERT; non-zero when ON CONFLICT DO UPDATE ran.
+        return row[0], int(row[1] or 0) == 0
 
 
 def upsert_tag(conn, site_id: str, name: str) -> str:
@@ -207,6 +211,8 @@ def create_video(conn, *, site_id, source_url, title, description, duration_sec,
     Insert a Video under site_id (storage/origin for S3 paths), then publish it
     to each target site via VideoSite. Taxonomy (tags/pornstars/categories) is
     linked on the storage site only (v1).
+
+    Returns (video_id, slug, new_pornstar_ids).
     """
     vid = _cuid()
     slug = _unique_slug(conn, site_id, title)
@@ -214,6 +220,7 @@ def create_video(conn, *, site_id, source_url, title, description, duration_sec,
     publish_ids = list(dict.fromkeys(
         sid for sid in (target_site_ids or [site_id]) if sid
     )) or [site_id]
+    new_pornstar_ids: list[str] = []
     with conn.cursor() as cur:
         cur.execute(
             'INSERT INTO "Video" '
@@ -234,7 +241,9 @@ def create_video(conn, *, site_id, source_url, title, description, duration_sec,
     for name in pornstars or []:
         if not name.strip():
             continue
-        pid = upsert_pornstar(conn, site_id, name.strip())
+        pid, created = upsert_pornstar(conn, site_id, name.strip())
+        if created:
+            new_pornstar_ids.append(pid)
         with conn.cursor() as cur:
             cur.execute(
                 'INSERT INTO "VideoPornstar" ("videoId","pornstarId") VALUES (%s,%s) '
@@ -260,7 +269,7 @@ def create_video(conn, *, site_id, source_url, title, description, duration_sec,
                 'ON CONFLICT DO NOTHING',
                 (vid, cid),
             )
-    return vid, slug
+    return vid, slug, new_pornstar_ids
 
 
 def load_video(conn, video_id: str):

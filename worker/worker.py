@@ -38,6 +38,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import db  # noqa: E402
 import storage  # noqa: E402
 import media  # noqa: E402
+import tpdb  # noqa: E402
 from site_searchers import SEARCHERS  # noqa: E402
 from scrape_search import apply_download_urls, refresh_download_urls, resolve_urls, search_candidates  # noqa: E402
 
@@ -114,6 +115,7 @@ CREATOR_QUEUE_KEY = "creator:queue"
 PREVIEW_QUEUE_KEY = "preview:queue"
 REDOWNLOAD_QUEUE_KEY = "redownload:queue"
 SCRAPE_SEARCH_QUEUE_KEY = "scrape:search:queue"
+PORNSTAR_TPDB_QUEUE_KEY = "pornstar:tpdb:queue"
 SCRAPE_SEARCH_RESULT_PREFIX = "scrape:search:result:"
 # Shared volume the web app writes creator uploads to (see docker-compose).
 UPLOAD_DIR = os.environ.get("UPLOAD_DIR", os.path.join(ROOT, "uploads"))
@@ -602,7 +604,7 @@ def _process_one(run, source_site, video) -> ProcessOutcome:
 
             keys = dict(v=None, t=None, p=None, sb=None, vtt=None)
             # site_id = run storage/origin (S3 paths); VideoSite covers all publish targets.
-            vid, slug = db.create_video(
+            vid, slug, new_pornstar_ids = db.create_video(
                 conn, site_id=site_id, source_url=url, title=video["title"],
                 description=video.get("description"), duration_sec=duration,
                 source_site=source_site, scrape_run_id=run["id"],
@@ -612,6 +614,7 @@ def _process_one(run, source_site, video) -> ProcessOutcome:
                 categories=video.get("categories"),
                 target_site_ids=run.get("targetSiteIds") or [site_id],
             )
+            _enqueue_pornstar_tpdb(new_pornstar_ids)
 
             if storage.configured():
                 keys["v"] = storage.upload(video_path, storage.key_video(site_id, vid), "video/mp4")
@@ -1068,6 +1071,82 @@ def process_scrape_search(r, payload_json: str):
            ok=payload.get("ok", True))
 
 
+def _redis():
+    import redis as redis_lib
+    return redis_lib.from_url(os.environ.get("REDIS_URL", "redis://localhost:6379"))
+
+
+def _enqueue_pornstar_tpdb(pornstar_ids: list[str] | None) -> None:
+    """Queue newly created pornstars for ThePornDB enrichment (non-blocking)."""
+    ids = [pid for pid in (pornstar_ids or []) if pid]
+    if not ids or not tpdb.configured():
+        return
+    try:
+        r = _redis()
+        for pid in ids:
+            r.rpush(PORNSTAR_TPDB_QUEUE_KEY, pid)
+        _event("info", "pornstar_tpdb_enqueued", count=len(ids), pornstarIds=ids[:20])
+    except Exception as e:  # noqa: BLE001
+        _event("warning", "pornstar_tpdb_enqueue_failed", reason=str(e)[:300], count=len(ids))
+
+
+def process_pornstar_tpdb(conn, pornstar_id: str) -> None:
+    result = tpdb.enrich_pornstar(conn, pornstar_id)
+    if result.get("ok"):
+        _event(
+            "info",
+            "pornstar_tpdb_enriched",
+            pornstarId=pornstar_id,
+            tpdbId=result.get("tpdbId"),
+            imageSaved=result.get("imageSaved"),
+        )
+    else:
+        _event(
+            "warning",
+            "pornstar_tpdb_enrich_failed",
+            pornstarId=pornstar_id,
+            reason=(result.get("error") or "unknown")[:300],
+        )
+
+
+def backfill_pornstar_tpdb(conn, limit: int | None = None, delay_sec: float = 0.4) -> None:
+    """Enrich all pornstars missing TPDB data (used by --backfill-tpdb)."""
+    if not tpdb.configured():
+        log.error(_j("TPDB_API_KEY not configured — cannot backfill"))
+        return
+    rows = tpdb.list_pornstars_without_data(conn, limit=limit)
+    _event("info", "pornstar_tpdb_backfill_start", total=len(rows), limit=limit)
+    ok = fail = 0
+    for i, (pid, name) in enumerate(rows, start=1):
+        result = tpdb.enrich_pornstar(conn, pid)
+        if result.get("ok"):
+            ok += 1
+            _event(
+                "info",
+                "pornstar_tpdb_backfill_ok",
+                index=i,
+                total=len(rows),
+                pornstarId=pid,
+                name=name,
+                tpdbId=result.get("tpdbId"),
+                imageSaved=result.get("imageSaved"),
+            )
+        else:
+            fail += 1
+            _event(
+                "warning",
+                "pornstar_tpdb_backfill_fail",
+                index=i,
+                total=len(rows),
+                pornstarId=pid,
+                name=name,
+                reason=(result.get("error") or "unknown")[:300],
+            )
+        if delay_sec > 0:
+            time.sleep(delay_sec)
+    _event("info", "pornstar_tpdb_backfill_done", ok=ok, fail=fail, total=len(rows))
+
+
 def _run_background(job_name: str, fn, *args):
     """Run a long job in a thread so the queue loop can still handle search requests."""
 
@@ -1281,6 +1360,23 @@ def main():
     parser.add_argument("--run", help="Process a single existing ScrapeRun id and exit")
     parser.add_argument("--regenerate-preview", help="Regenerate hover preview for a Video id and exit")
     parser.add_argument("--redownload", help="Re-download source video for a Video id and exit")
+    parser.add_argument(
+        "--backfill-tpdb",
+        action="store_true",
+        help="Enrich all pornstars missing ThePornDB data, then exit",
+    )
+    parser.add_argument(
+        "--backfill-limit",
+        type=int,
+        default=None,
+        help="Optional cap for --backfill-tpdb",
+    )
+    parser.add_argument(
+        "--backfill-delay",
+        type=float,
+        default=0.4,
+        help="Seconds between TPDB requests during backfill (default 0.4)",
+    )
     args = parser.parse_args()
 
     conn = db.connect()
@@ -1291,6 +1387,10 @@ def main():
 
     if args.redownload:
         process_redownload(conn, args.redownload)
+        return
+
+    if args.backfill_tpdb:
+        backfill_pornstar_tpdb(conn, limit=args.backfill_limit, delay_sec=args.backfill_delay)
         return
 
     if args.run:
@@ -1313,8 +1413,15 @@ def main():
         log.error(_j(f"resume scan failed: {e}"))
 
     log.info(_j("worker started, waiting for jobs"))
-    # Search requests must not wait behind long scrape/creator jobs.
-    queue_priority = [SCRAPE_SEARCH_QUEUE_KEY, PREVIEW_QUEUE_KEY, REDOWNLOAD_QUEUE_KEY, CREATOR_QUEUE_KEY, QUEUE_KEY]
+    # Search / TPDB enrich must not wait behind long scrape/creator jobs.
+    queue_priority = [
+        SCRAPE_SEARCH_QUEUE_KEY,
+        PORNSTAR_TPDB_QUEUE_KEY,
+        PREVIEW_QUEUE_KEY,
+        REDOWNLOAD_QUEUE_KEY,
+        CREATOR_QUEUE_KEY,
+        QUEUE_KEY,
+    ]
     while True:
         try:
             item = r.blpop(queue_priority, timeout=5)
@@ -1324,6 +1431,8 @@ def main():
             job_id = item[1].decode() if isinstance(item[1], bytes) else item[1]
             if queue == SCRAPE_SEARCH_QUEUE_KEY:
                 process_scrape_search(r, job_id)
+            elif queue == PORNSTAR_TPDB_QUEUE_KEY:
+                _run_background("pornstar-tpdb", process_pornstar_tpdb, job_id)
             elif queue == PREVIEW_QUEUE_KEY:
                 _run_background("preview", process_regenerate_preview, job_id)
             elif queue == REDOWNLOAD_QUEUE_KEY:

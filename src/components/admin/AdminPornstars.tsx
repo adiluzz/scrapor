@@ -184,6 +184,11 @@ function PornstarImageEditor({
           </Link>
           <p className="text-xs text-zinc-500">
             {star.videoCount} video{star.videoCount === 1 ? "" : "s"} · /pornstars/{star.slug}
+            {star.tpdbSyncedAt || star.tpdbId ? (
+              <span className="ml-2 text-emerald-500/90">· TPDB</span>
+            ) : (
+              <span className="ml-2 text-amber-500/80">· no data</span>
+            )}
           </p>
           {star.siteCounts && star.siteCounts.length > 0 ? (
             <div className="mt-2 flex flex-wrap gap-1.5">
@@ -306,6 +311,7 @@ export default function AdminPornstars({
   tpdbConfigured: boolean;
 }) {
   const [q, setQ] = useState("");
+  const [dataFilter, setDataFilter] = useState<"all" | "with" | "without">("all");
   const [page, setPage] = useState(1);
   const [rows, setRows] = useState(initialPornstars);
   const [total, setTotal] = useState(initialTotal);
@@ -315,19 +321,20 @@ export default function AdminPornstars({
   const totalPages = Math.max(1, Math.ceil(total / pageSize));
 
   const load = useCallback(
-    async (query: string, pageNum: number) => {
+    async (query: string, pageNum: number, data: "all" | "with" | "without") => {
       setSearching(true);
       try {
         const params = new URLSearchParams({
           limit: String(pageSize),
           page: String(pageNum),
+          data,
         });
         if (query.trim()) params.set("q", query.trim());
         const res = await fetch(`/api/admin/pornstars?${params}`);
-        const data = await res.json();
+        const payload = await res.json();
         if (res.ok) {
-          setRows(data.pornstars ?? []);
-          setTotal(typeof data.total === "number" ? data.total : 0);
+          setRows(payload.pornstars ?? []);
+          setTotal(typeof payload.total === "number" ? payload.total : 0);
         }
       } finally {
         setSearching(false);
@@ -341,9 +348,9 @@ export default function AdminPornstars({
       setReady(true);
       return;
     }
-    const t = setTimeout(() => void load(q, page), 300);
+    const t = setTimeout(() => void load(q, page, dataFilter), 300);
     return () => clearTimeout(t);
-  }, [q, page, load, ready]);
+  }, [q, page, dataFilter, load, ready]);
 
   function handleUpdated(id: string, patch: Partial<PornstarRow>) {
     setRows((prev) =>
@@ -366,6 +373,31 @@ export default function AdminPornstars({
           placeholder="Filter pornstars…"
           className="w-full max-w-md rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm text-white"
         />
+        <div className="flex rounded-lg border border-zinc-700 p-0.5 text-xs">
+          {(
+            [
+              { id: "all" as const, label: "All" },
+              { id: "with" as const, label: "With data" },
+              { id: "without" as const, label: "No data" },
+            ] as const
+          ).map((opt) => (
+            <button
+              key={opt.id}
+              type="button"
+              onClick={() => {
+                setDataFilter(opt.id);
+                setPage(1);
+              }}
+              className={`rounded-md px-3 py-1.5 transition ${
+                dataFilter === opt.id
+                  ? "bg-zinc-700 text-white"
+                  : "text-zinc-400 hover:text-zinc-200"
+              }`}
+            >
+              {opt.label}
+            </button>
+          ))}
+        </div>
         <p className="text-xs text-zinc-500">
           {searching ? "Loading…" : `Showing ${from}–${to} of ${total}`}
         </p>

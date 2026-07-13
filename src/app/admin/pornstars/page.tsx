@@ -64,7 +64,7 @@ export default async function AdminPornstarsPage() {
         </h1>
         <p className="mt-1 max-w-2xl text-sm text-zinc-400">
           All pornstars across the network. Per-site counts reflect videos published on each
-          website. Upload portraits or fetch profile data from{" "}
+          website. New pornstars are enriched from{" "}
           <a
             href="https://theporndb.net"
             target="_blank"
@@ -72,8 +72,8 @@ export default async function AdminPornstarsPage() {
             className="text-brand-400 hover:underline"
           >
             ThePornDB
-          </a>
-          .
+          </a>{" "}
+          automatically. Filter by With data / No data, or upload portraits manually.
         </p>
         {!isTpdbConfigured() && (
           <p className="mt-2 text-xs text-amber-500/90">

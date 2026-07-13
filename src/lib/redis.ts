@@ -38,6 +38,9 @@ export const SCRAPE_SEARCH_QUEUE_KEY = "scrape:search:queue";
 /** Redis queue for re-downloading a video from its source URL (Video ids). */
 export const REDOWNLOAD_QUEUE_KEY = "redownload:queue";
 
+/** Pornstar ids awaiting ThePornDB profile/image enrichment. */
+export const PORNSTAR_TPDB_QUEUE_KEY = "pornstar:tpdb:queue";
+
 export function scrapeSearchResultKey(requestId: string): string {
   return `scrape:search:result:${requestId}`;
 }

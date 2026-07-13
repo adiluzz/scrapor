@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/db";
+import { enrichPornstarFromTpdbInBackground } from "@/lib/enrich-pornstar-tpdb";
 import { slugify } from "@/lib/slug";
 import {
   GOLDEN_DROP_ICON,
@@ -77,14 +78,30 @@ export async function linkPornstars(siteId: string, videoId: string, names: stri
     if (!name) continue;
     const slug = slugify(name);
     if (!slug) continue;
-    const star = await prisma.pornstar.upsert({
+    const existing = await prisma.pornstar.findUnique({
       where: { siteId_slug: { siteId, slug } },
-      update: { name },
-      create: { siteId, slug, name },
+      select: { id: true },
     });
+    let starId: string;
+    let created = false;
+    if (existing) {
+      await prisma.pornstar.update({
+        where: { id: existing.id },
+        data: { name },
+      });
+      starId = existing.id;
+    } else {
+      const star = await prisma.pornstar.create({
+        data: { siteId, slug, name },
+      });
+      starId = star.id;
+      created = true;
+    }
     await prisma.videoPornstar
-      .create({ data: { videoId, pornstarId: star.id } })
+      .create({ data: { videoId, pornstarId: starId } })
       .catch(() => {});
+    // Auto-enrich new pornstars from ThePornDB (profile + image).
+    if (created) enrichPornstarFromTpdbInBackground(starId);
   }
 }
 

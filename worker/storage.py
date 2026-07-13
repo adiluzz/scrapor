@@ -33,6 +33,7 @@ def key_thumb(site_id, video_id):        return f"sites/{site_id}/videos/{video_
 def key_preview(site_id, video_id):      return f"sites/{site_id}/videos/{video_id}/preview.mp4"
 def key_storyboard(site_id, video_id):   return f"sites/{site_id}/videos/{video_id}/storyboard.jpg"
 def key_storyboard_vtt(site_id, video_id): return f"sites/{site_id}/videos/{video_id}/storyboard.vtt"
+def key_pornstar_image(site_id, pornstar_id): return f"sites/{site_id}/pornstars/{pornstar_id}/image.jpg"
 
 
 def upload(local_path, key, content_type):

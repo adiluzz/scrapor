@@ -32,14 +32,14 @@ export default function VideoGridWithNativeAd({
     <>
       <VideoGrid videos={first} />
       {showMid && (
-        <div className="my-5 space-y-3">
+        <div className="ad-slot my-5 space-y-3">
           <AdZone zoneId={midZone} insClass={site.exoInsClass} minHeight={90} />
           {juicyOn && <JuicyAdZone zoneId={site.juicyAdsZoneNative} enabled />}
         </div>
       )}
       {rest.length > 0 && <VideoGrid videos={rest} />}
       {!showMid && site.exoZoneGridNative && videos.length > 0 && (
-        <div className="mt-5">
+        <div className="ad-slot mt-5">
           <AdZone zoneId={site.exoZoneGridNative} insClass={site.exoInsClass} minHeight={90} />
         </div>
       )}

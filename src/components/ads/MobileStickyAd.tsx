@@ -24,7 +24,7 @@ export default function MobileStickyAd({
   if (!zoneId || dismissed) return null;
 
   return (
-    <div className="fixed inset-x-0 bottom-0 z-40 border-t border-zinc-800 bg-zinc-950/95 p-2 backdrop-blur sm:hidden">
+    <div className="ad-slot-sticky fixed inset-x-0 bottom-0 z-40 border-t border-zinc-800 bg-zinc-950/95 px-2 pb-2 pt-4 backdrop-blur sm:hidden">
       <button
         type="button"
         aria-label="Dismiss ad"
@@ -33,7 +33,7 @@ export default function MobileStickyAd({
       >
         ✕
       </button>
-      <div className="flex justify-center overflow-hidden pt-3">
+      <div className="ad-slot mx-auto w-full max-w-full overflow-hidden">
         <ins
           className={resolvedClass}
           data-zoneid={zoneId}

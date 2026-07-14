@@ -38,21 +38,13 @@ export default function ExoPopunder({
 
   if (!enabled || !zoneId || !active) return null;
 
+  // Popunder uses the same async <ins> pattern as banners; do not clip it away.
   return (
     <ins
       className={resolvedClass}
       data-zoneid={zoneId}
       aria-hidden="true"
-      style={{
-        position: "absolute",
-        width: 0,
-        height: 0,
-        overflow: "hidden",
-        clip: "rect(0,0,0,0)",
-        border: 0,
-        padding: 0,
-        margin: 0,
-      }}
+      data-ad-format="popunder"
     />
   );
 }

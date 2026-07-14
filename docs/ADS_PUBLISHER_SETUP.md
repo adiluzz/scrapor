@@ -56,3 +56,14 @@ Admin field names must match exactly:
 1. Hard-refresh a tube homepage and a video page (ad blockers hide slots).
 2. Confirm Exo/Juicy dashboards show impressions within ~24h.
 3. Popunder and fullscreen should each fire at most once per browser session.
+4. **Exo `<ins>` class** must be identical on every site that shares the same
+   ExoClick publisher account (typically `eas6a97888e2`). A typo here leaves
+   empty “Advertisement” gaps with no creative.
+5. **Desktop Fullpage Interstitial** only fires after a real user click (Exo
+   zone Trigger Method). Mobile Fullpage Interstitial is a separate Exo format —
+   if mobile fullscreen is needed, create that zone and paste its ID into
+   `exoZoneVideoFullscreen` (or keep desktop-only).
+6. **Mobile sticky** zones should be Exo format **Mobile Banner 320x50** (not
+   Native). Wrong format still fills but looks broken / misaligned on mobile.
+7. Banner slots center whatever creative size Exo returns; prefer matching
+   zone formats (Leaderboard / Multi-format) for full-width look.

@@ -583,3 +583,58 @@
 .video-player-root:-webkit-full-screen .video-player-skip-flash {
   z-index: 2147483644;
 }
+
+/* ── Publisher ad slots ──────────────────────────────────────────────
+   Exo/Juicy inject fixed-size creatives. Always center them so banners
+   stay aligned with the site column regardless of creative dimensions. */
+.ad-slot {
+  display: flex;
+  width: 100%;
+  max-width: 100%;
+  flex-direction: column;
+  align-items: center;
+  overflow-x: hidden;
+  text-align: center;
+}
+
+.ad-slot-fill {
+  display: flex;
+  width: 100%;
+  max-width: 100%;
+  justify-content: center;
+  overflow-x: hidden;
+}
+
+.ad-slot > ins,
+.ad-slot iframe,
+.ad-slot .exo-native-widget,
+.ad-slot [id^="exo-native"],
+.ad-slot [id^="exo-video"],
+.ad-slot > div {
+  margin-left: auto !important;
+  margin-right: auto !important;
+  max-width: 100%;
+}
+
+.ad-slot-sticky {
+  width: 100%;
+  display: block;
+}
+
+.ad-slot-sticky .ad-slot {
+  min-height: 50px;
+}
+
+/* Fullpage interstitial / popunder tags: stay in-DOM for Exo (no clip:rect),
+   but take no layout space. */
+ins[data-ad-format="fullscreen"],
+ins[data-ad-format="popunder"] {
+  display: block !important;
+  width: 0 !important;
+  height: 0 !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  overflow: hidden !important;
+  border: 0 !important;
+  pointer-events: none;
+}

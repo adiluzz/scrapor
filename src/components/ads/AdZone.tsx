@@ -40,20 +40,20 @@ export default function AdZone({
   if (!zoneId) return null;
 
   return (
-    <div className={`flex w-full max-w-full flex-col items-center overflow-x-hidden ${className}`}>
-      {label && <span className="mb-1 text-[10px] uppercase tracking-wide text-zinc-600">Advertisement</span>}
-      <div className="flex w-full max-w-full justify-center overflow-x-hidden [&_iframe]:max-w-full [&_ins]:max-w-full">
-        <ins
-          className={resolvedClass}
-          data-zoneid={zoneId}
-          style={{
-            display: "block",
-            width: "100%",
-            maxWidth: "100%",
-            minHeight: minHeight ?? 90,
-          }}
-        />
-      </div>
+    <div className={`ad-slot ${className}`}>
+      {label && (
+        <span className="mb-1 text-[10px] uppercase tracking-wide text-zinc-600">Advertisement</span>
+      )}
+      {/*
+        Do not force width:100% on <ins> — Exo injects fixed-size creatives
+        (300x250, 728x90, etc.) into that box and they stick left. Let the
+        creative size itself; .ad-slot CSS centers whatever Exo injects.
+      */}
+      <ins
+        className={resolvedClass}
+        data-zoneid={zoneId}
+        style={{ display: "block", minHeight: minHeight ?? 90 }}
+      />
     </div>
   );
 }

@@ -50,22 +50,15 @@ export default function ExoFullscreenOverlay({
 
   if (!zoneId || !enabled) return null;
 
+  // Exo expects a normal <ins> tag (see ad-provider docs). Zero-size clip/absolute
+  // wrappers can prevent Desktop/Mobile Fullpage Interstitial from binding click
+  // triggers. Keep the slot in-DOM but visually inert until Exo opens its overlay.
   return (
     <ins
       className={resolvedClass}
       data-zoneid={zoneId}
       aria-hidden="true"
-      style={{
-        position: "absolute",
-        width: 0,
-        height: 0,
-        overflow: "hidden",
-        clip: "rect(0,0,0,0)",
-        whiteSpace: "nowrap",
-        border: 0,
-        padding: 0,
-        margin: 0,
-      }}
+      data-ad-format="fullscreen"
     />
   );
 }

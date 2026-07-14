@@ -34,9 +34,11 @@ export default function JuicyAdZone({
   if (!enabled || !zoneId) return null;
 
   return (
-    <div className={`flex w-full flex-col items-center overflow-x-hidden ${className}`}>
-      {label && <span className="mb-1 text-[10px] uppercase tracking-wide text-zinc-600">Advertisement</span>}
-      <div id={containerId} className="flex w-full max-w-full justify-center overflow-x-hidden" />
+    <div className={`ad-slot ${className}`}>
+      {label && (
+        <span className="mb-1 text-[10px] uppercase tracking-wide text-zinc-600">Advertisement</span>
+      )}
+      <div id={containerId} className="ad-slot-fill w-full max-w-full" />
     </div>
   );
 }

@@ -181,7 +181,7 @@ export default async function VideoPage({
         ])}
       />
 
-      <div className="mx-auto w-full max-w-7xl space-y-6">
+      <div className="mx-auto w-full space-y-6">
         {adminPreview && (
           <div className="rounded-lg border border-amber-500/40 bg-amber-500/10 px-4 py-2 text-sm text-amber-300">
             Admin preview — this video is{" "}
@@ -270,7 +270,7 @@ export default async function VideoPage({
       </div>
 
       {related.length > 0 && (
-        <section className="mx-auto w-full max-w-7xl">
+        <section className="mx-auto w-full">
           <h2 className="mb-3 text-lg font-semibold text-zinc-200">Related videos</h2>
           <VideoGrid videos={related} />
         </section>

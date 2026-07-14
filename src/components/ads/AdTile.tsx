@@ -35,7 +35,7 @@ export default function AdTile({
   if (!zoneId || noFill) return null;
 
   return (
-    <div className="ad-slot block overflow-hidden rounded-xl border border-zinc-800 bg-zinc-900">
+    <div className="ad-slot block min-w-[220px] overflow-hidden rounded-xl border border-zinc-800 bg-zinc-900">
       <div className="relative aspect-video overflow-hidden bg-zinc-800">
         <ins
           ref={insRef}

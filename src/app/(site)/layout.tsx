@@ -70,7 +70,7 @@ export default async function SiteLayout({ children }: { children: React.ReactNo
         <Script src="https://a.magsrv.com/ad-provider.js" strategy="afterInteractive" />
       ) : null}
       <Header site={site} />
-      <main className="mx-auto w-full max-w-7xl px-3 py-4 sm:px-4 sm:py-6">{children}</main>
+      <main className="mx-auto w-full px-3 py-4 sm:px-4 sm:py-6 lg:px-6">{children}</main>
       <Footer
         siteName={site.name}
         isStudio={isStudio}

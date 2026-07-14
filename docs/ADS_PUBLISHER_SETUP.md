@@ -80,7 +80,8 @@ Admin field names must match exactly:
 6. **Mobile sticky** zones should be Exo format **Mobile Banner 320x50** (not
    Native). Wrong format still fills but looks broken / misaligned on mobile.
    If Exo leaves the sticky empty, the Juicy banner zone is used as fallback.
-7. Home desktop: Exo + Juicy sit in a sticky right sidebar; card-sized native
-   tiles sit inside the video grid. Mobile: banners stack above the grid.
+7. Home desktop: full-width video grid (min card width 220px); Exo sticky
+   right sidebar; Juicy sits in the grid as a card-sized tile (same as Exo
+   native tiles). Mobile: Exo banner above the grid.
 8. Video desktop: Exo + Juicy side-by-side under the player; floating corner +
    in-video overlay activate when their Juicy zone IDs are set.

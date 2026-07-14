@@ -18,7 +18,7 @@ export default async function Header({
 
   return (
     <header className="sticky top-0 z-30 border-b border-zinc-800/90 bg-zinc-950/90 backdrop-blur supports-[backdrop-filter]:bg-zinc-950/80">
-      <div className="mx-auto flex w-full max-w-7xl flex-col gap-3 px-4 py-3 md:flex-row md:items-center">
+      <div className="mx-auto flex w-full flex-col gap-3 px-4 py-3 md:flex-row md:items-center lg:px-6">
         <div className="flex min-w-0 items-center justify-between gap-3 md:contents">
           <div className="min-w-0 flex-1 md:flex-none">
             <Logo site={site} />

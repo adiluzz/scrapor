@@ -5,6 +5,7 @@ import { Fragment, useEffect, useRef, useState } from "react";
 import type { VideoCardData } from "@/lib/queries";
 import VideoCardPreview from "@/components/site/VideoCardPreview";
 import AdTile from "@/components/ads/AdTile";
+import JuicyAdTile from "@/components/ads/JuicyAdTile";
 
 function timeAgo(date: Date | string) {
   const d = new Date(date);
@@ -46,7 +47,7 @@ function Card({
       href={href}
       onMouseEnter={onEnter}
       onMouseLeave={onLeave}
-      className="group block overflow-hidden rounded-xl bg-zinc-900 border border-zinc-800 hover:border-zinc-600 transition-colors"
+      className="group block min-w-[220px] overflow-hidden rounded-xl border border-zinc-800 bg-zinc-900 transition-colors hover:border-zinc-600"
     >
       <div className="relative aspect-video overflow-hidden bg-zinc-800">
         {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -91,6 +92,9 @@ export default function VideoGrid({
   adTileZoneId,
   adTileInsClass,
   adTilePositions = [],
+  juicyTileZoneId,
+  juicyTileEnabled = true,
+  juicyTilePositions = [],
 }: {
   videos: VideoCardData[];
   /** Link prefix before `/${slug}` (default: public `/videos`). Must be a string — not a function — so Server Components can pass it. */
@@ -100,6 +104,11 @@ export default function VideoGrid({
   adTileInsClass?: string | null;
   /** 1-based card positions where an ad tile is inserted (e.g. [4, 12]). */
   adTilePositions?: number[];
+  /** JuicyAds zone rendered as a card-sized in-grid tile. */
+  juicyTileZoneId?: string | null;
+  juicyTileEnabled?: boolean;
+  /** 1-based card positions for Juicy tiles (e.g. [6]). */
+  juicyTilePositions?: number[];
 }) {
   const [playingId, setPlayingId] = useState<string | null>(null);
   const [isTouch, setIsTouch] = useState(false);
@@ -136,13 +145,18 @@ export default function VideoGrid({
   }
 
   const tilePositions = adTileZoneId ? adTilePositions : [];
+  const juicyPositions =
+    juicyTileEnabled && juicyTileZoneId ? juicyTilePositions : [];
 
   return (
-    <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
+    <div className="grid grid-cols-[repeat(auto-fill,minmax(220px,1fr))] gap-3">
       {videos.map((v, i) => (
         <Fragment key={v.id}>
           {tilePositions.includes(i + 1) && (
             <AdTile zoneId={adTileZoneId} insClass={adTileInsClass} />
+          )}
+          {juicyPositions.includes(i + 1) && (
+            <JuicyAdTile zoneId={juicyTileZoneId} enabled={juicyTileEnabled} />
           )}
           <Card
             v={v}

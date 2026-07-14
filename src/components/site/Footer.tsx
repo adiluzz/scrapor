@@ -18,7 +18,7 @@ export default function Footer({
 
   return (
     <footer className="mt-16 border-t border-zinc-800 bg-zinc-950">
-      <div className="mx-auto max-w-7xl px-4 py-8 text-sm text-zinc-500">
+      <div className="mx-auto w-full px-4 py-8 text-sm text-zinc-500 lg:px-6">
         {showHubs && (
           <div className="mb-8 grid gap-6 sm:grid-cols-2">
             <PopularLinksStrip title="Popular tags" links={popularTags} hrefPrefix="/tags" />

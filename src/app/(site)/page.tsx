@@ -1,5 +1,4 @@
 import AdZone from "@/components/ads/AdZone";
-import JuicyAdZone from "@/components/ads/JuicyAdZone";
 import VideoGridWithNativeAd from "@/components/ads/VideoGridWithNativeAd";
 import JsonLd from "@/components/site/JsonLd";
 import PopularLinksStrip from "@/components/site/PopularLinksStrip";
@@ -161,14 +160,11 @@ export default async function HomePage({
           <JsonLd data={organizationJsonLd(base, site)} />
         </>
       )}
-      {/* Mobile: banners stacked on top. Desktop (lg): sticky 300px right sidebar. */}
+      {/* Mobile: Exo banner on top. Desktop (lg): sticky 300px right sidebar. Juicy sits in the video grid as a card tile. */}
       <div className="flex flex-col gap-5 lg:flex-row lg:items-start lg:gap-6">
         <aside className="lg:order-2 lg:w-[300px] lg:shrink-0">
           <div className="space-y-5 lg:sticky lg:top-20">
             <AdZone zoneId={site.exoZoneHome ?? undefined} insClass={site.exoInsClass} />
-            {site.adsJuicyEnabled && (
-              <JuicyAdZone zoneId={site.juicyAdsZoneBanner} enabled />
-            )}
           </div>
         </aside>
         <div className="min-w-0 flex-1 lg:order-1">

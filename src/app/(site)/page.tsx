@@ -57,11 +57,14 @@ export async function generateMetadata({
 
   const title = siteHomeTitle(site);
   const description = siteHomeDescription(site);
+  // Absolute with trailing slash — matches the sitemap's `${base}/` so Google
+  // sees one canonical form for the homepage.
+  const base = await getSiteBaseUrl();
   return {
     title,
     description,
     keywords: keywordsMeta(site),
-    alternates: { canonical: "/" },
+    alternates: { canonical: `${base}/` },
     openGraph: buildOpenGraph({
       title,
       description,

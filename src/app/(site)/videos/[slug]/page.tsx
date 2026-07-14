@@ -190,15 +190,9 @@ export default async function VideoPage({
           </div>
         )}
 
-        {/* Desktop: banners beside player. Mobile: player first, banners under. Single slot each (Juicy IDs must be unique). */}
-        <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-center lg:gap-5">
-          <aside className="order-2 mx-auto w-full max-w-[300px] shrink-0 lg:order-1 lg:mx-0 lg:w-[300px]">
-            <div className="ad-slot lg:sticky lg:top-20">
-              <AdZone zoneId={site.exoZoneUnderPlayer} insClass={site.exoInsClass} />
-            </div>
-          </aside>
-
-          <div className="order-1 mx-auto min-w-0 w-full max-w-4xl flex-1 lg:order-2">
+        {/* Desktop: larger player left, both banners stacked on the right. Mobile: player then banners. */}
+        <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:gap-5">
+          <div className="min-w-0 w-full flex-1 lg:max-w-[calc(100%-320px)]">
             <VideoPlayer
               videoId={video.id}
               poster={poster}
@@ -206,79 +200,80 @@ export default async function VideoPage({
               heatmap={heatmap}
               invideoZoneId={site.adsJuicyEnabled && !adminPreview ? site.juicyAdsZoneInvideo : null}
             />
+
+            <div className="mt-5">
+              <h1 className="text-lg font-bold break-words text-zinc-100 sm:text-xl">{video.title}</h1>
+              <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-zinc-500">
+                <span>{video.viewCount.toLocaleString()} views</span>
+                {video.durationSec ? <span>· {formatDuration(video.durationSec)}</span> : null}
+              </div>
+
+              {video.pornstars.length > 0 && (
+                <div className="mt-3 flex flex-wrap gap-2">
+                  {video.pornstars.map((p) => (
+                    <Link
+                      key={p.pornstarId}
+                      href={`/pornstars/${p.pornstar.slug}`}
+                      className="rounded-full bg-brand-600/15 px-3 py-1 text-sm font-medium text-brand-400 hover:bg-brand-600/25"
+                    >
+                      {p.pornstar.name}
+                    </Link>
+                  ))}
+                </div>
+              )}
+
+              {video.categories.length > 0 && (
+                <div className="mt-3 flex flex-wrap gap-2">
+                  {video.categories.map((c) => (
+                    <span
+                      key={c.categoryId}
+                      className="rounded-full bg-zinc-800 px-3 py-1 text-sm text-zinc-300"
+                    >
+                      {c.category.name}
+                    </span>
+                  ))}
+                </div>
+              )}
+
+              {video.tags.length > 0 && (
+                <div className="mt-3 flex flex-wrap gap-2">
+                  {video.tags.map((t) => (
+                    <TagBadge
+                      key={t.tagId}
+                      name={t.tag.name}
+                      slug={t.tag.slug}
+                      icon={t.tag.icon}
+                      href={`/tags/${t.tag.slug}`}
+                      className={isVerifiedBadgeTag(t.tag) ? "" : "hover:bg-zinc-700"}
+                    />
+                  ))}
+                </div>
+              )}
+
+              {video.description && (
+                <p className="mt-4 whitespace-pre-line break-words text-sm leading-relaxed text-zinc-400">
+                  {video.description}
+                </p>
+              )}
+
+              {site.kind !== "STUDIO" && site.adsCamWidgetEnabled && (
+                <div className="mt-6">
+                  <StripchatWidget
+                    widgetId={site.stripchatWidgetId}
+                    affiliateUrl={site.stripchatAffiliateUrl}
+                    enabled
+                  />
+                </div>
+              )}
+            </div>
           </div>
 
-          <aside className="order-3 mx-auto w-full max-w-[300px] shrink-0 lg:mx-0 lg:w-[300px]">
-            <div className="ad-slot lg:sticky lg:top-20">
+          <aside className="mx-auto w-full max-w-[300px] shrink-0 lg:mx-0 lg:w-[300px]">
+            <div className="space-y-5 lg:sticky lg:top-20">
+              <AdZone zoneId={site.exoZoneUnderPlayer} insClass={site.exoInsClass} />
               {site.adsJuicyEnabled && <JuicyAdZone zoneId={site.juicyAdsZoneBanner} enabled />}
             </div>
           </aside>
-        </div>
-
-        <div className="mx-auto w-full max-w-4xl">
-          <h1 className="text-lg font-bold break-words text-zinc-100 sm:text-xl">{video.title}</h1>
-          <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-zinc-500">
-            <span>{video.viewCount.toLocaleString()} views</span>
-            {video.durationSec ? <span>· {formatDuration(video.durationSec)}</span> : null}
-          </div>
-
-          {video.pornstars.length > 0 && (
-            <div className="mt-3 flex flex-wrap gap-2">
-              {video.pornstars.map((p) => (
-                <Link
-                  key={p.pornstarId}
-                  href={`/pornstars/${p.pornstar.slug}`}
-                  className="rounded-full bg-brand-600/15 px-3 py-1 text-sm font-medium text-brand-400 hover:bg-brand-600/25"
-                >
-                  {p.pornstar.name}
-                </Link>
-              ))}
-            </div>
-          )}
-
-          {video.categories.length > 0 && (
-            <div className="mt-3 flex flex-wrap gap-2">
-              {video.categories.map((c) => (
-                <span
-                  key={c.categoryId}
-                  className="rounded-full bg-zinc-800 px-3 py-1 text-sm text-zinc-300"
-                >
-                  {c.category.name}
-                </span>
-              ))}
-            </div>
-          )}
-
-          {video.tags.length > 0 && (
-            <div className="mt-3 flex flex-wrap gap-2">
-              {video.tags.map((t) => (
-                <TagBadge
-                  key={t.tagId}
-                  name={t.tag.name}
-                  slug={t.tag.slug}
-                  icon={t.tag.icon}
-                  href={`/tags/${t.tag.slug}`}
-                  className={isVerifiedBadgeTag(t.tag) ? "" : "hover:bg-zinc-700"}
-                />
-              ))}
-            </div>
-          )}
-
-          {video.description && (
-            <p className="mt-4 whitespace-pre-line break-words text-sm leading-relaxed text-zinc-400">
-              {video.description}
-            </p>
-          )}
-
-          {site.kind !== "STUDIO" && site.adsCamWidgetEnabled && (
-            <div className="mt-6">
-              <StripchatWidget
-                widgetId={site.stripchatWidgetId}
-                affiliateUrl={site.stripchatAffiliateUrl}
-                enabled
-              />
-            </div>
-          )}
         </div>
       </div>
 

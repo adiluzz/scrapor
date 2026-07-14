@@ -597,13 +597,15 @@
   text-align: center;
 }
 
-/* In-grid tiles must mirror video cards — never flex-center the creative. */
+/* In-grid tiles match video thumbnails (16:9) — clip creatives hard. */
 .ad-slot-tile {
   display: block;
   width: 100%;
   max-width: 100%;
   overflow: hidden;
   text-align: left;
+  align-self: start;
+  contain: layout paint;
 }
 
 .ad-slot-tile iframe,
@@ -616,9 +618,16 @@
 
 .ad-slot-tile-media {
   position: relative;
+  width: 100%;
   aspect-ratio: 16 / 9;
-  overflow: hidden;
+  overflow: hidden !important;
   background: #27272a;
+}
+
+.ad-slot-tile-media iframe,
+.ad-slot-tile-media > div,
+.ad-slot-tile-media > ins {
+  max-width: none !important;
 }
 
 .ad-slot-tile-scale {

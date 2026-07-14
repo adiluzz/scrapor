@@ -11,9 +11,8 @@ declare global {
 }
 
 /**
- * JuicyAds unit styled exactly like a video card: 16:9 media + footer strip.
- * Fixed-size Juicy creatives are cover-scaled into the media box so the tile
- * never looks like a tiny centered widget in the grid.
+ * In-grid Juicy ad matching a video thumbnail (16:9 only — no title footer).
+ * Cover-scales the fixed creative into the media box.
  */
 export default function JuicyAdTile({
   zoneId,
@@ -53,14 +52,12 @@ export default function JuicyAdTile({
     const update = () => {
       const { width: w, height: h } = el.getBoundingClientRect();
       if (w <= 0 || h <= 0) return;
-      // Cover-fit the fixed creative into the 16:9 card media.
       setScale(Math.max(w / width, h / height));
     };
 
     update();
     const ro = new ResizeObserver(update);
     ro.observe(el);
-    // Juicy often injects late; remeasure a few times after push.
     const t1 = window.setTimeout(update, 400);
     const t2 = window.setTimeout(update, 1500);
     const t3 = window.setTimeout(update, 4000);
@@ -75,8 +72,8 @@ export default function JuicyAdTile({
   if (!enabled || !zoneId) return null;
 
   return (
-    <div className="ad-slot-tile group block min-w-[220px] overflow-hidden rounded-xl border border-zinc-800 bg-zinc-900 transition-colors hover:border-zinc-600">
-      <div ref={mediaRef} className="ad-slot-tile-media">
+    <div className="ad-slot-tile group block w-full min-w-[220px] self-start overflow-hidden rounded-xl border border-zinc-800 bg-zinc-900 transition-colors hover:border-zinc-600">
+      <div ref={mediaRef} className="ad-slot-tile-media relative aspect-video overflow-hidden bg-zinc-800">
         <div
           className="ad-slot-tile-scale"
           style={{
@@ -92,10 +89,9 @@ export default function JuicyAdTile({
             style={{ display: "block", width, height }}
           />
         </div>
-      </div>
-      <div className="p-2.5">
-        <p className="line-clamp-2 text-sm text-zinc-200">Advertisement</p>
-        <p className="mt-1 text-[11px] text-zinc-500">Sponsored</p>
+        <span className="pointer-events-none absolute bottom-1.5 left-1.5 z-[1] rounded bg-black/80 px-1.5 py-0.5 text-[11px] text-zinc-300">
+          Ad
+        </span>
       </div>
     </div>
   );

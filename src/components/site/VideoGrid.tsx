@@ -47,7 +47,7 @@ function Card({
       href={href}
       onMouseEnter={onEnter}
       onMouseLeave={onLeave}
-      className="group block min-w-[220px] overflow-hidden rounded-xl border border-zinc-800 bg-zinc-900 transition-colors hover:border-zinc-600"
+      className="group block min-w-[220px] w-full self-start overflow-hidden rounded-xl border border-zinc-800 bg-zinc-900 transition-colors hover:border-zinc-600"
     >
       <div className="relative aspect-video overflow-hidden bg-zinc-800">
         {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -149,7 +149,7 @@ export default function VideoGrid({
     juicyTileEnabled && juicyTileZoneId ? juicyTilePositions : [];
 
   return (
-    <div className="grid grid-cols-[repeat(auto-fill,minmax(220px,1fr))] gap-3">
+    <div className="grid grid-cols-[repeat(auto-fill,minmax(220px,1fr))] items-start gap-3">
       {videos.map((v, i) => (
         <Fragment key={v.id}>
           {tilePositions.includes(i + 1) && (

@@ -4,10 +4,8 @@ import { useEffect, useRef, useState } from "react";
 import { EXO_INS_CLASS, serveExoAds } from "@/lib/exo-click";
 
 /**
- * Ad with the exact footprint of a video card, meant to sit inside the video
- * grid (aspect-video creative area + a title-line strip). Served from an Exo
- * native zone; if nothing fills within the grace period the tile removes
- * itself so the grid never shows an empty card.
+ * In-grid Exo ad matching a video thumbnail (16:9 only — no title footer).
+ * Removes itself on no-fill so the grid never shows an empty card.
  */
 export default function AdTile({
   zoneId,
@@ -35,18 +33,17 @@ export default function AdTile({
   if (!zoneId || noFill) return null;
 
   return (
-    <div className="ad-slot-tile group block min-w-[220px] overflow-hidden rounded-xl border border-zinc-800 bg-zinc-900 transition-colors hover:border-zinc-600">
-      <div className="ad-slot-tile-media">
+    <div className="ad-slot-tile group block w-full min-w-[220px] self-start overflow-hidden rounded-xl border border-zinc-800 bg-zinc-900 transition-colors hover:border-zinc-600">
+      <div className="ad-slot-tile-media relative aspect-video overflow-hidden bg-zinc-800">
         <ins
           ref={insRef}
           className={resolvedClass}
           data-zoneid={zoneId}
           style={{ display: "block", width: "100%", height: "100%", position: "absolute", inset: 0 }}
         />
-      </div>
-      <div className="p-2.5">
-        <p className="line-clamp-2 text-sm text-zinc-200">Advertisement</p>
-        <p className="mt-1 text-[11px] text-zinc-500">Sponsored</p>
+        <span className="pointer-events-none absolute bottom-1.5 left-1.5 rounded bg-black/80 px-1.5 py-0.5 text-[11px] text-zinc-300">
+          Ad
+        </span>
       </div>
     </div>
   );

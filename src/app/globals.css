@@ -616,6 +616,19 @@
   max-width: 100%;
 }
 
+/* Juicy/Exo inject iframes with inline z-index (often 399+), which otherwise
+   paints above AgeGate / cookie consent. Keep slot creatives in normal flow. */
+.ad-slot,
+.ad-slot iframe,
+.ad-slot ins,
+.ad-slot > * {
+  z-index: auto !important;
+}
+
+.age-gate {
+  z-index: 100000 !important;
+}
+
 .ad-slot-sticky {
   width: 100%;
   display: block;

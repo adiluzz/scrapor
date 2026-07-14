@@ -37,7 +37,7 @@ export default function AgeGate({ siteName = "this site" }: { siteName?: string 
       role="dialog"
       aria-modal="true"
       aria-label="Age verification"
-      className="fixed inset-0 z-[100] flex items-center justify-center overflow-y-auto bg-black/95 p-4 backdrop-blur"
+      className="age-gate fixed inset-0 z-[100000] flex items-center justify-center overflow-y-auto bg-black/95 p-4 backdrop-blur"
     >
       <div className="my-auto w-full max-w-md rounded-2xl border border-zinc-800 bg-zinc-900 p-5 text-center shadow-2xl sm:p-8 max-h-[min(90dvh,40rem)] overflow-y-auto">
         <h2 className="text-xl font-bold text-white sm:text-2xl">Age verification</h2>

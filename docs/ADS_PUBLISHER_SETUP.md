@@ -1,7 +1,7 @@
 # Publisher ad setup (Monetization Plan 2 — Medium)
 
 After deploying, create zones on each network and paste IDs into
-**Admin → Websites → {site} → Ads** (and Exo verification into **SEO**).
+**Admin → Websites → {site} → Ads** (and verification metas into **SEO**).
 
 Do this for **pisster.com** and **fbbtube.com**. Skip Sharlila unless you want studio ads.
 
@@ -11,6 +11,7 @@ Admin field names must match exactly:
 |-------------|---------|----------------|
 | `exoInsClass` | ExoClick | Account `<ins>` class (e.g. `eas6a97888e2`) |
 | `exoSiteVerification` | ExoClick | Site verification meta (SEO form) |
+| `juicyAdsSiteVerification` | JuicyAds | Site verification meta content (SEO form) |
 | `exoZoneHome` | ExoClick | Banner or Native — home |
 | `exoZoneUnderPlayer` | ExoClick | Banner or Native — under player |
 | `exoZoneVideoFullscreen` | ExoClick | Fullpage Interstitial (1/session in code) |
@@ -38,9 +39,11 @@ Admin field names must match exactly:
 
 ## B) JuicyAds — https://www.juicyads.com
 
-1. Publisher signup → add both domains.
-2. Per site: banner zone + native zone → paste into `juicyAdsZoneBanner` / `juicyAdsZoneNative`.
-3. Paste site ID into `juicyAdsSiteId`; enable `adsJuicyEnabled`.
+1. Publisher signup → add both domains (each site gets its own verification token).
+2. Paste the meta **content** into Admin → SEO → **JuicyAds site verification** per site
+   (emitted as `<meta name="juicy-ads-site-verification" content="…">`).
+3. Per site: banner zone + native zone → paste into `juicyAdsZoneBanner` / `juicyAdsZoneNative`.
+4. Paste site ID into `juicyAdsSiteId`; enable `adsJuicyEnabled`.
 
 ## C) Stripchat affiliate
 

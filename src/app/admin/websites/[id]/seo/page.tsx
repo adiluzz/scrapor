@@ -29,6 +29,7 @@ export default async function WebsiteSeoPage({ params }: { params: Promise<{ id:
           seoKeywords: parseSeoKeywords(site.seoKeywords).join(", "),
           ogImagePath: site.ogImagePath,
           exoSiteVerification: site.exoSiteVerification,
+          juicyAdsSiteVerification: site.juicyAdsSiteVerification,
           homeH1: site.homeH1,
           homeIntroHtml: site.homeIntroHtml,
           gaMeasurementId: site.gaMeasurementId,

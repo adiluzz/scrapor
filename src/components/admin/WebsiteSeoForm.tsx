@@ -12,6 +12,7 @@ type SeoFields = {
   seoKeywords: string;
   ogImagePath: string | null;
   exoSiteVerification: string | null;
+  juicyAdsSiteVerification: string | null;
   homeH1: string | null;
   homeIntroHtml: string | null;
   gaMeasurementId: string | null;
@@ -48,6 +49,7 @@ export default function WebsiteSeoForm({
     seoKeywords: initial.seoKeywords || "",
     ogImagePath: initial.ogImagePath || "",
     exoSiteVerification: initial.exoSiteVerification || "",
+    juicyAdsSiteVerification: initial.juicyAdsSiteVerification || "",
     homeH1: initial.homeH1 || "",
     homeIntroHtml: initial.homeIntroHtml || "",
     gaMeasurementId: initial.gaMeasurementId || "",
@@ -94,6 +96,7 @@ export default function WebsiteSeoForm({
           seoKeywords: keywords,
           ogImagePath: nullIfEmpty(form.ogImagePath),
           exoSiteVerification: nullIfEmpty(form.exoSiteVerification),
+          juicyAdsSiteVerification: nullIfEmpty(form.juicyAdsSiteVerification),
           homeH1: nullIfEmpty(form.homeH1),
           homeIntroHtml: nullIfEmpty(form.homeIntroHtml),
           gaMeasurementId: form.gaMeasurementId.trim() || null,
@@ -186,7 +189,22 @@ export default function WebsiteSeoForm({
             value={form.exoSiteVerification}
             onChange={(e) => set("exoSiteVerification", e.target.value)}
             className={inputClass}
+            placeholder="Meta content value only"
           />
+        </label>
+
+        <label className="block space-y-1.5">
+          <span className="text-sm text-zinc-400">JuicyAds site verification</span>
+          <input
+            value={form.juicyAdsSiteVerification}
+            onChange={(e) => set("juicyAdsSiteVerification", e.target.value)}
+            className={inputClass}
+            placeholder="Content from juicy-ads-site-verification meta"
+          />
+          <span className="text-xs text-zinc-500">
+            Paste only the content value from JuicyAds. Emitted site-wide as meta name
+            juicy-ads-site-verification.
+          </span>
         </label>
 
         <label className="block space-y-1.5">

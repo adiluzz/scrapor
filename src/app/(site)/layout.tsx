@@ -28,6 +28,9 @@ export async function generateMetadata(): Promise<Metadata> {
   if (site.exoSiteVerification) {
     other["6a97888e-site-verification"] = site.exoSiteVerification;
   }
+  if (site.juicyAdsSiteVerification) {
+    other["juicy-ads-site-verification"] = site.juicyAdsSiteVerification;
+  }
   return {
     title: { default: title, template: `%s · ${site.name}` },
     description,

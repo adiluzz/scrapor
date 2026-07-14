@@ -36,6 +36,7 @@ const patchSchema = z.object({
   seoKeywords: z.union([z.string(), z.array(z.string())]).nullable().optional(),
   ogImagePath: z.string().max(500).nullable().optional(),
   exoSiteVerification: z.string().max(200).nullable().optional(),
+  juicyAdsSiteVerification: z.string().max(200).nullable().optional(),
   homeH1: z.string().max(300).nullable().optional(),
   homeIntroHtml: z.string().max(20000).nullable().optional(),
   gaMeasurementId: z
@@ -151,6 +152,8 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
       seoKeywords: serializeSeoKeywords(d.seoKeywords),
       ogImagePath: d.ogImagePath === undefined ? undefined : d.ogImagePath,
       exoSiteVerification: d.exoSiteVerification === undefined ? undefined : d.exoSiteVerification,
+      juicyAdsSiteVerification:
+        d.juicyAdsSiteVerification === undefined ? undefined : d.juicyAdsSiteVerification,
       homeH1: d.homeH1 === undefined ? undefined : d.homeH1,
       homeIntroHtml: d.homeIntroHtml === undefined ? undefined : d.homeIntroHtml,
       gaMeasurementId:

@@ -37,6 +37,9 @@ export async function generateMetadata({
   if (site.exoSiteVerification) {
     other["6a97888e-site-verification"] = site.exoSiteVerification;
   }
+  if (site.juicyAdsSiteVerification) {
+    other["juicy-ads-site-verification"] = site.juicyAdsSiteVerification;
+  }
 
   if (q && site.kind !== "STUDIO") {
     const title = searchPageTitle(q, site);

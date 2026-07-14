@@ -1,34 +1,49 @@
 "use client";
 
-import { useEffect, useId } from "react";
+import { useEffect } from "react";
+
+const JADS_SRC = "https://poweredby.jads.co/js/jads.js";
+
+declare global {
+  interface Window {
+    adsbyjuicy?: Array<{ adzone: number | string }>;
+  }
+}
 
 /**
- * JuicyAds zone — loads their zone script when a zone ID is configured.
- * Used as secondary fill alongside ExoClick.
+ * JuicyAds v3 zone — loads jads.js once, renders `<ins id={zoneId}>`, and
+ * queues `adsbyjuicy.push({ adzone })` (matches Juicy "Get Code" snippet).
  */
 export default function JuicyAdZone({
   zoneId,
   enabled = true,
   className = "",
   label = true,
+  width = 300,
+  height = 250,
 }: {
   zoneId?: string | null;
   enabled?: boolean;
   className?: string;
   label?: boolean;
+  /** Zone creative size from Juicy Get Code (default 300×250). */
+  width?: number;
+  height?: number;
 }) {
-  const reactId = useId();
-  const containerId = `juicy-${reactId.replace(/:/g, "")}`;
-
   useEffect(() => {
     if (!enabled || !zoneId) return;
-    const existing = document.querySelector(`script[data-juicy-zone="${zoneId}"]`);
-    if (existing) return;
-    const script = document.createElement("script");
-    script.async = true;
-    script.dataset.juicyZone = zoneId;
-    script.src = `https://js.juicyads.com/${zoneId}.js`;
-    document.body.appendChild(script);
+
+    let script = document.querySelector<HTMLScriptElement>(`script[src="${JADS_SRC}"]`);
+    if (!script) {
+      script = document.createElement("script");
+      script.async = true;
+      script.setAttribute("data-cfasync", "false");
+      script.src = JADS_SRC;
+      document.body.appendChild(script);
+    }
+
+    window.adsbyjuicy = window.adsbyjuicy || [];
+    window.adsbyjuicy.push({ adzone: Number(zoneId) || zoneId });
   }, [enabled, zoneId]);
 
   if (!enabled || !zoneId) return null;
@@ -38,7 +53,13 @@ export default function JuicyAdZone({
       {label && (
         <span className="mb-1 text-[10px] uppercase tracking-wide text-zinc-600">Advertisement</span>
       )}
-      <div id={containerId} className="ad-slot-fill w-full max-w-full" />
+      <ins
+        id={zoneId}
+        data-width={width}
+        data-height={height}
+        className="ad-slot-fill inline-block max-w-full"
+        style={{ display: "block", width, height, maxWidth: "100%" }}
+      />
     </div>
   );
 }

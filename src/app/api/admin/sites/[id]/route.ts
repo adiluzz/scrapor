@@ -47,6 +47,20 @@ const patchSchema = z.object({
       (v) => v == null || v.trim() === "" || /^G-[A-Z0-9]+$/i.test(v.trim()),
       "Must be a GA4 id like G-XXXXXXXX"
     ),
+  seoVideoTitleTpl: z.string().max(500).nullable().optional(),
+  seoVideoDescTpl: z.string().max(2000).nullable().optional(),
+  seoPornstarTitleTpl: z.string().max(500).nullable().optional(),
+  seoPornstarDescTpl: z.string().max(2000).nullable().optional(),
+  seoTagTitleTpl: z.string().max(500).nullable().optional(),
+  seoTagDescTpl: z.string().max(2000).nullable().optional(),
+  seoCreatorTitleTpl: z.string().max(500).nullable().optional(),
+  seoCreatorDescTpl: z.string().max(2000).nullable().optional(),
+  seoTagsIndexTitle: z.string().max(500).nullable().optional(),
+  seoTagsIndexDesc: z.string().max(2000).nullable().optional(),
+  seoPornstarsIndexTitle: z.string().max(500).nullable().optional(),
+  seoPornstarsIndexDesc: z.string().max(2000).nullable().optional(),
+  seoCreatorsIndexTitle: z.string().max(500).nullable().optional(),
+  seoCreatorsIndexDesc: z.string().max(2000).nullable().optional(),
   vastTagUrl: z.string().max(2000).nullable().optional(),
   adSkipSeconds: z.number().int().min(0).max(120).optional(),
   adMinViewSeconds: z.number().int().min(0).max(120).optional(),
@@ -55,6 +69,18 @@ const patchSchema = z.object({
   exoZoneHome: z.string().max(120).nullable().optional(),
   exoZoneUnderPlayer: z.string().max(120).nullable().optional(),
   exoZoneVideoFullscreen: z.string().max(120).nullable().optional(),
+  exoZoneGridNative: z.string().max(120).nullable().optional(),
+  exoZoneMobileSticky: z.string().max(120).nullable().optional(),
+  exoZonePopunder: z.string().max(120).nullable().optional(),
+  exoZoneMidList: z.string().max(120).nullable().optional(),
+  juicyAdsSiteId: z.string().max(120).nullable().optional(),
+  juicyAdsZoneBanner: z.string().max(120).nullable().optional(),
+  juicyAdsZoneNative: z.string().max(120).nullable().optional(),
+  stripchatWidgetId: z.string().max(200).nullable().optional(),
+  stripchatAffiliateUrl: z.string().max(2000).nullable().optional(),
+  adsPopunderEnabled: z.boolean().optional(),
+  adsJuicyEnabled: z.boolean().optional(),
+  adsCamWidgetEnabled: z.boolean().optional(),
 });
 
 function serializeSeoKeywords(value: string | string[] | null | undefined): string | null | undefined {
@@ -133,6 +159,24 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
           : d.gaMeasurementId && d.gaMeasurementId.trim()
             ? d.gaMeasurementId.trim()
             : null,
+      seoVideoTitleTpl: d.seoVideoTitleTpl === undefined ? undefined : d.seoVideoTitleTpl,
+      seoVideoDescTpl: d.seoVideoDescTpl === undefined ? undefined : d.seoVideoDescTpl,
+      seoPornstarTitleTpl: d.seoPornstarTitleTpl === undefined ? undefined : d.seoPornstarTitleTpl,
+      seoPornstarDescTpl: d.seoPornstarDescTpl === undefined ? undefined : d.seoPornstarDescTpl,
+      seoTagTitleTpl: d.seoTagTitleTpl === undefined ? undefined : d.seoTagTitleTpl,
+      seoTagDescTpl: d.seoTagDescTpl === undefined ? undefined : d.seoTagDescTpl,
+      seoCreatorTitleTpl: d.seoCreatorTitleTpl === undefined ? undefined : d.seoCreatorTitleTpl,
+      seoCreatorDescTpl: d.seoCreatorDescTpl === undefined ? undefined : d.seoCreatorDescTpl,
+      seoTagsIndexTitle: d.seoTagsIndexTitle === undefined ? undefined : d.seoTagsIndexTitle,
+      seoTagsIndexDesc: d.seoTagsIndexDesc === undefined ? undefined : d.seoTagsIndexDesc,
+      seoPornstarsIndexTitle:
+        d.seoPornstarsIndexTitle === undefined ? undefined : d.seoPornstarsIndexTitle,
+      seoPornstarsIndexDesc:
+        d.seoPornstarsIndexDesc === undefined ? undefined : d.seoPornstarsIndexDesc,
+      seoCreatorsIndexTitle:
+        d.seoCreatorsIndexTitle === undefined ? undefined : d.seoCreatorsIndexTitle,
+      seoCreatorsIndexDesc:
+        d.seoCreatorsIndexDesc === undefined ? undefined : d.seoCreatorsIndexDesc,
       vastTagUrl: d.vastTagUrl === undefined ? undefined : d.vastTagUrl,
       adSkipSeconds: d.adSkipSeconds,
       adMinViewSeconds: d.adMinViewSeconds,
@@ -142,6 +186,19 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
       exoZoneUnderPlayer: d.exoZoneUnderPlayer === undefined ? undefined : d.exoZoneUnderPlayer,
       exoZoneVideoFullscreen:
         d.exoZoneVideoFullscreen === undefined ? undefined : d.exoZoneVideoFullscreen,
+      exoZoneGridNative: d.exoZoneGridNative === undefined ? undefined : d.exoZoneGridNative,
+      exoZoneMobileSticky: d.exoZoneMobileSticky === undefined ? undefined : d.exoZoneMobileSticky,
+      exoZonePopunder: d.exoZonePopunder === undefined ? undefined : d.exoZonePopunder,
+      exoZoneMidList: d.exoZoneMidList === undefined ? undefined : d.exoZoneMidList,
+      juicyAdsSiteId: d.juicyAdsSiteId === undefined ? undefined : d.juicyAdsSiteId,
+      juicyAdsZoneBanner: d.juicyAdsZoneBanner === undefined ? undefined : d.juicyAdsZoneBanner,
+      juicyAdsZoneNative: d.juicyAdsZoneNative === undefined ? undefined : d.juicyAdsZoneNative,
+      stripchatWidgetId: d.stripchatWidgetId === undefined ? undefined : d.stripchatWidgetId,
+      stripchatAffiliateUrl:
+        d.stripchatAffiliateUrl === undefined ? undefined : d.stripchatAffiliateUrl,
+      adsPopunderEnabled: d.adsPopunderEnabled,
+      adsJuicyEnabled: d.adsJuicyEnabled,
+      adsCamWidgetEnabled: d.adsCamWidgetEnabled,
     },
   });
 

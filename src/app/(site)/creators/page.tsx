@@ -2,21 +2,36 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { prisma } from "@/lib/db";
 import { getCurrentSite, getCurrentSiteId } from "@/lib/site";
-import { keywordsMeta } from "@/lib/seo";
+import {
+  buildOpenGraph,
+  creatorsIndexDescription,
+  creatorsIndexTitle,
+  keywordsMeta,
+} from "@/lib/seo";
 
 export const dynamic = "force-dynamic";
 
 export async function generateMetadata(): Promise<Metadata> {
   const site = await getCurrentSite();
+  const title = creatorsIndexTitle(site);
+  const description = creatorsIndexDescription(site);
   return {
-    title: "Creators",
-    description: `Independent creators publishing videos on ${site.name}.`,
+    title,
+    description,
     keywords: keywordsMeta(site, ["creators"]),
     alternates: { canonical: "/creators" },
+    openGraph: buildOpenGraph({
+      title,
+      description,
+      url: "/creators",
+      siteName: site.name,
+      image: site.ogImagePath,
+    }),
   };
 }
 
 export default async function CreatorsPage() {
+  const site = await getCurrentSite();
   const siteId = await getCurrentSiteId();
   const creators = await prisma.creatorProfile.findMany({
     where: { siteId },
@@ -24,10 +39,11 @@ export default async function CreatorsPage() {
     include: { _count: { select: { videos: true } } },
     take: 200,
   });
+  const title = creatorsIndexTitle(site);
 
   return (
     <>
-      <h1 className="mb-5 text-xl font-semibold text-zinc-100">Creators</h1>
+      <h1 className="mb-5 text-xl font-semibold text-zinc-100">{title}</h1>
       {creators.length === 0 ? (
         <p className="py-16 text-center text-zinc-500">No creators yet. Want to be the first?{" "}
           <Link href="/dashboard" className="text-brand-400 hover:underline">Apply here.</Link>

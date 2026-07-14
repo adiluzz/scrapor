@@ -8,6 +8,7 @@ export async function generateMetadata(): Promise<Metadata> {
   return {
     title: "DMCA Policy",
     description: `Copyright infringement and DMCA takedown policy for ${site.name}.`,
+    alternates: { canonical: "/dmca" },
   };
 }
 

@@ -8,7 +8,7 @@ import Filters from "@/components/site/Filters";
 import Pagination from "@/components/site/Pagination";
 import InPageSearch from "@/components/site/InPageSearch";
 import JsonLd from "@/components/site/JsonLd";
-import { buildOpenGraph, getSiteBaseUrl, keywordsMeta, pornstarPageDescription } from "@/lib/seo";
+import { buildOpenGraph, getSiteBaseUrl, keywordsMeta, creatorPageDescription, creatorPageTitle } from "@/lib/seo";
 
 export const dynamic = "force-dynamic";
 type SearchParams = Record<string, string | string[] | undefined>;
@@ -26,8 +26,8 @@ export async function generateMetadata({
   const site = await getCurrentSite();
   const c = await getCreator(site.id, slug);
   if (!c) return { title: "Not found" };
-  const title = `${c.displayName} Videos`;
-  const description = pornstarPageDescription(c.displayName, site, c.bio);
+  const title = creatorPageTitle(c.displayName, site);
+  const description = creatorPageDescription(c.displayName, site, c.bio);
   return {
     title,
     description,
@@ -38,6 +38,7 @@ export async function generateMetadata({
       description,
       url: `/creators/${c.slug}`,
       siteName: site.name,
+      image: site.ogImagePath,
     }),
   };
 }
@@ -65,7 +66,7 @@ export default async function CreatorPage({
           "@context": "https://schema.org",
           "@type": "Person",
           name: creator.displayName,
-          description: pornstarPageDescription(creator.displayName, site, creator.bio),
+          description: creatorPageDescription(creator.displayName, site, creator.bio),
           url: `${base}/creators/${creator.slug}`,
         }}
       />

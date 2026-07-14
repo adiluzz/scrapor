@@ -17,10 +17,14 @@ import {
   keywordsMeta,
   videoObjectJsonLd,
   videoPageDescription,
+  videoPageTitle,
 } from "@/lib/seo";
 import { publicVideoContentUrl, publicVideoThumbnailUrl } from "@/lib/video-sitemap";
 import AdZone from "@/components/ads/AdZone";
 import ExoFullscreenOverlay from "@/components/ads/ExoFullscreenOverlay";
+import ExoPopunder from "@/components/ads/ExoPopunder";
+import JuicyAdZone from "@/components/ads/JuicyAdZone";
+import StripchatWidget from "@/components/ads/StripchatWidget";
 import TagBadge from "@/components/site/TagBadge";
 import { isVerifiedBadgeTag } from "@/lib/verified-tags";
 
@@ -61,10 +65,13 @@ export async function generateMetadata({
   const site = await getCurrentSite();
   const video = await getVideo(site.id, slug);
   if (!video) return { title: "Not found" };
-  const description = videoPageDescription(video.title, site, video.description);
+  const description = videoPageDescription(video.title, site, video.description, {
+    tags: video.tags.map((t) => t.tag.name).join(", "),
+    duration: video.durationSec ? formatDuration(video.durationSec) : "",
+  });
   const tagNames = video.tags.map((t) => t.tag.name);
   const categoryNames = video.categories.map((c) => c.category.name);
-  const title = video.title;
+  const title = videoPageTitle(video.title, site);
   const base = await getSiteBaseUrl();
   const poster = publicVideoThumbnailUrl(base, video.id);
   return {
@@ -73,14 +80,14 @@ export async function generateMetadata({
     keywords: keywordsMeta(site, [...categoryNames, ...tagNames, video.title]),
     alternates: { canonical: `/videos/${video.slug}` },
     openGraph: buildOpenGraph({
-      title: video.title,
+      title,
       description,
       url: `/videos/${video.slug}`,
       image: poster,
       type: "video.other",
       siteName: site.name,
     }),
-    twitter: { card: "summary_large_image", title: video.title, description, images: poster ? [poster] : undefined },
+    twitter: { card: "summary_large_image", title, description, images: poster ? [poster] : undefined },
   };
 }
 
@@ -133,10 +140,17 @@ export default async function VideoPage({
   return (
     <div className="relative space-y-6">
       {!adminPreview && (
-        <ExoFullscreenOverlay
-          zoneId={site.exoZoneVideoFullscreen}
-          insClass={site.exoInsClass}
-        />
+        <>
+          <ExoFullscreenOverlay
+            zoneId={site.exoZoneVideoFullscreen}
+            insClass={site.exoInsClass}
+          />
+          <ExoPopunder
+            zoneId={site.exoZonePopunder}
+            enabled={site.adsPopunderEnabled}
+            insClass={site.exoInsClass}
+          />
+        </>
       )}
       <JsonLd
         data={videoObjectJsonLd({
@@ -236,6 +250,18 @@ export default async function VideoPage({
             insClass={site.exoInsClass}
             className="mt-6"
           />
+          {site.adsJuicyEnabled && (
+            <JuicyAdZone zoneId={site.juicyAdsZoneBanner} enabled className="mt-4" />
+          )}
+          {site.kind !== "STUDIO" && site.adsCamWidgetEnabled && (
+            <div className="mt-6">
+              <StripchatWidget
+                widgetId={site.stripchatWidgetId}
+                affiliateUrl={site.stripchatAffiliateUrl}
+                enabled
+              />
+            </div>
+          )}
         </div>
       </div>
 

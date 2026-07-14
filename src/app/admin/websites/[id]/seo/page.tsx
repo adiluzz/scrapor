@@ -32,6 +32,20 @@ export default async function WebsiteSeoPage({ params }: { params: Promise<{ id:
           homeH1: site.homeH1,
           homeIntroHtml: site.homeIntroHtml,
           gaMeasurementId: site.gaMeasurementId,
+          seoVideoTitleTpl: site.seoVideoTitleTpl,
+          seoVideoDescTpl: site.seoVideoDescTpl,
+          seoPornstarTitleTpl: site.seoPornstarTitleTpl,
+          seoPornstarDescTpl: site.seoPornstarDescTpl,
+          seoTagTitleTpl: site.seoTagTitleTpl,
+          seoTagDescTpl: site.seoTagDescTpl,
+          seoCreatorTitleTpl: site.seoCreatorTitleTpl,
+          seoCreatorDescTpl: site.seoCreatorDescTpl,
+          seoTagsIndexTitle: site.seoTagsIndexTitle,
+          seoTagsIndexDesc: site.seoTagsIndexDesc,
+          seoPornstarsIndexTitle: site.seoPornstarsIndexTitle,
+          seoPornstarsIndexDesc: site.seoPornstarsIndexDesc,
+          seoCreatorsIndexTitle: site.seoCreatorsIndexTitle,
+          seoCreatorsIndexDesc: site.seoCreatorsIndexDesc,
         }}
       />
     </div>

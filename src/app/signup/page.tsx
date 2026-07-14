@@ -11,6 +11,7 @@ export async function generateMetadata(): Promise<Metadata> {
   return {
     title: `Sign up · ${site.name}`,
     description: siteHomeDescription(site),
+    robots: { index: false, follow: false },
   };
 }
 

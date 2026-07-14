@@ -1,8 +1,6 @@
-import Link from "next/link";
-import Filters from "@/components/site/Filters";
-import Pagination from "@/components/site/Pagination";
-import VideoGrid from "@/components/site/VideoGrid";
 import AdZone from "@/components/ads/AdZone";
+import JuicyAdZone from "@/components/ads/JuicyAdZone";
+import VideoGridWithNativeAd from "@/components/ads/VideoGridWithNativeAd";
 import JsonLd from "@/components/site/JsonLd";
 import SiteSeoIntro from "@/components/site/SiteSeoIntro";
 import { listVideos, parseDiscoveryParams } from "@/lib/queries";
@@ -19,6 +17,9 @@ import {
   websiteJsonLd,
 } from "@/lib/seo";
 import type { Metadata } from "next";
+import Link from "next/link";
+import Filters from "@/components/site/Filters";
+import Pagination from "@/components/site/Pagination";
 
 export const dynamic = "force-dynamic";
 
@@ -58,7 +59,13 @@ export async function generateMetadata({
     description,
     keywords: keywordsMeta(site),
     alternates: { canonical: "/" },
-    openGraph: buildOpenGraph({ title, description, url: "/", siteName: site.name }),
+    openGraph: buildOpenGraph({
+      title,
+      description,
+      url: "/",
+      siteName: site.name,
+      image: site.ogImagePath,
+    }),
     other,
   };
 }
@@ -145,6 +152,9 @@ export default async function HomePage({
         </>
       )}
       <AdZone zoneId={site.exoZoneHome ?? undefined} insClass={site.exoInsClass} className="mb-5" />
+      {site.adsJuicyEnabled && (
+        <JuicyAdZone zoneId={site.juicyAdsZoneBanner} enabled className="mb-5" />
+      )}
       <div className="mb-5 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <h1 className="min-w-0 text-lg font-semibold break-words text-zinc-100 sm:text-xl">
           {isSearch ? (
@@ -155,7 +165,7 @@ export default async function HomePage({
         </h1>
         <Filters />
       </div>
-      <VideoGrid videos={videos} />
+      <VideoGridWithNativeAd videos={videos} site={site} />
       <Pagination page={params.page} totalPages={totalPages} />
       {!isSearch && <SiteSeoIntro site={site} />}
     </>

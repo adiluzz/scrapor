@@ -16,6 +16,7 @@ import ConsentModeDefault from "@/components/site/ConsentModeDefault";
 import CookieConsent from "@/components/site/CookieConsent";
 import GoogleAnalytics from "@/components/site/GoogleAnalytics";
 import BrandStyle from "@/components/brand/BrandStyle";
+import MobileStickyAd from "@/components/ads/MobileStickyAd";
 
 export async function generateMetadata(): Promise<Metadata> {
   const site = await getCurrentSite();
@@ -64,6 +65,9 @@ export default async function SiteLayout({ children }: { children: React.ReactNo
       <Header site={site} />
       <main className="mx-auto w-full max-w-7xl px-3 py-4 sm:px-4 sm:py-6">{children}</main>
       <Footer siteName={site.name} isStudio={isStudio} />
+      {!isStudio && (
+        <MobileStickyAd zoneId={site.exoZoneMobileSticky} insClass={site.exoInsClass} />
+      )}
       {!ageVerified && <AgeGate siteName={site.name} />}
       <CookieConsent siteName={site.name} />
     </div>

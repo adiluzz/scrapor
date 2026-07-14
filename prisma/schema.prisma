@@ -41,6 +41,22 @@ model Site {
   /// GA4 measurement id for this host (e.g. G-XXXXXXXX).
   gaMeasurementId String?
 
+  // SEO page templates — placeholders: {title} {name} {site} {tagline} {niche} {query} {tags} {duration} {description}
+  seoVideoTitleTpl          String?
+  seoVideoDescTpl           String?
+  seoPornstarTitleTpl       String?
+  seoPornstarDescTpl        String?
+  seoTagTitleTpl            String?
+  seoTagDescTpl             String?
+  seoCreatorTitleTpl        String?
+  seoCreatorDescTpl         String?
+  seoTagsIndexTitle         String?
+  seoTagsIndexDesc          String?
+  seoPornstarsIndexTitle    String?
+  seoPornstarsIndexDesc     String?
+  seoCreatorsIndexTitle     String?
+  seoCreatorsIndexDesc      String?
+
   // Ads (per-site network config)
   vastTagUrl              String?
   adSkipSeconds           Int      @default(5)
@@ -50,6 +66,18 @@ model Site {
   exoZoneHome             String?
   exoZoneUnderPlayer      String?
   exoZoneVideoFullscreen  String?
+  exoZoneGridNative       String?
+  exoZoneMobileSticky     String?
+  exoZonePopunder         String?
+  exoZoneMidList          String?
+  juicyAdsSiteId          String?
+  juicyAdsZoneBanner      String?
+  juicyAdsZoneNative      String?
+  stripchatWidgetId       String?
+  stripchatAffiliateUrl   String?
+  adsPopunderEnabled      Boolean  @default(true)
+  adsJuicyEnabled         Boolean  @default(true)
+  adsCamWidgetEnabled     Boolean  @default(true)
 
   createdAt    DateTime             @default(now())
   updatedAt    DateTime             @updatedAt

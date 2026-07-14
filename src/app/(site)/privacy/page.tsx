@@ -7,6 +7,7 @@ export async function generateMetadata(): Promise<Metadata> {
   return {
     title: "Privacy Policy",
     description: `How ${site.name} collects, uses, and protects your personal data, including cookies and Google Analytics.`,
+    alternates: { canonical: "/privacy" },
   };
 }
 

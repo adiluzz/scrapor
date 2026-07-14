@@ -54,9 +54,11 @@ export async function GET() {
     `${base}/tags`,
     `${base}/pornstars`,
     `${base}/creators`,
+    `${base}/our-network`,
     `${base}/privacy`,
     `${base}/dmca`,
     `${base}/2257`,
+    ...(site.kind === "STUDIO" ? [`${base}/contact`] : []),
   ];
 
   const chunks: string[] = [

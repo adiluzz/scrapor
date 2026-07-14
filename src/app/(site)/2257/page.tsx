@@ -8,6 +8,7 @@ export async function generateMetadata(): Promise<Metadata> {
   return {
     title: "2257 Statement",
     description: `18 U.S.C. § 2257 record-keeping compliance statement for ${site.name}.`,
+    alternates: { canonical: "/2257" },
   };
 }
 

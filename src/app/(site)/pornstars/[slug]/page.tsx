@@ -4,7 +4,7 @@ import { prisma } from "@/lib/db";
 import { getCurrentSite } from "@/lib/site";
 import { listVideos, parseDiscoveryParams } from "@/lib/queries";
 import { pornstarHasVideosOnSite } from "@/lib/pornstar-sites";
-import VideoGrid from "@/components/site/VideoGrid";
+import VideoGridWithNativeAd from "@/components/ads/VideoGridWithNativeAd";
 import Filters from "@/components/site/Filters";
 import Pagination from "@/components/site/Pagination";
 import InPageSearch from "@/components/site/InPageSearch";
@@ -14,9 +14,12 @@ import JsonLd from "@/components/site/JsonLd";
 import {
   buildOpenGraph,
   getSiteBaseUrl,
+  itemListJsonLd,
   keywordsMeta,
   pornstarPageDescription,
+  pornstarPageTitle,
 } from "@/lib/seo";
+import { pornstarImageUrl } from "@/lib/pornstar-image";
 
 export const dynamic = "force-dynamic";
 type SearchParams = Record<string, string | string[] | undefined>;
@@ -40,8 +43,9 @@ export async function generateMetadata({
   const site = await getCurrentSite();
   const star = await getStar(site.id, slug);
   if (!star) return { title: "Not found" };
-  const title = `${star.name} Videos`;
+  const title = pornstarPageTitle(star.name, site);
   const description = pornstarPageDescription(star.name, site, star.bio);
+  const image = pornstarImageUrl(star);
   return {
     title,
     description,
@@ -52,6 +56,7 @@ export async function generateMetadata({
       description,
       url: `/pornstars/${star.slug}`,
       siteName: site.name,
+      image: image || site.ogImagePath,
     }),
   };
 }
@@ -84,7 +89,14 @@ export default async function PornstarPage({
           name: star.name,
           description: pornstarPageDescription(star.name, site, star.bio),
           url: `${base}/pornstars/${star.slug}`,
+          ...(pornstarImageUrl(star) ? { image: `${base}${pornstarImageUrl(star)}` } : {}),
         }}
+      />
+      <JsonLd
+        data={itemListJsonLd({
+          name: pornstarPageTitle(star.name, site),
+          urls: videos.map((v) => `${base}/videos/${v.slug}`),
+        })}
       />
 
       <div className="mb-8 flex flex-col items-center gap-5 sm:flex-row sm:items-start">
@@ -102,7 +114,7 @@ export default async function PornstarPage({
         <Filters />
       </div>
 
-      <VideoGrid videos={videos} />
+      <VideoGridWithNativeAd videos={videos} site={site} />
       <Pagination page={dp.page} totalPages={totalPages} />
     </div>
   );

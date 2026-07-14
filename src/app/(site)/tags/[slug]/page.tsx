@@ -6,11 +6,12 @@ import { listVideos, parseDiscoveryParams } from "@/lib/queries";
 import {
   buildOpenGraph,
   getSiteBaseUrl,
+  itemListJsonLd,
   keywordsMeta,
   tagPageDescription,
   tagPageTitle,
 } from "@/lib/seo";
-import VideoGrid from "@/components/site/VideoGrid";
+import VideoGridWithNativeAd from "@/components/ads/VideoGridWithNativeAd";
 import Filters from "@/components/site/Filters";
 import Pagination from "@/components/site/Pagination";
 import JsonLd from "@/components/site/JsonLd";
@@ -43,6 +44,7 @@ export async function generateMetadata({
       description,
       url: `/tags/${tag.slug}`,
       siteName: site.name,
+      image: site.ogImagePath,
     }),
   };
 }
@@ -77,6 +79,12 @@ export default async function TagPage({
           numberOfItems: total,
         }}
       />
+      <JsonLd
+        data={itemListJsonLd({
+          name: tagPageTitle(tag.name, site),
+          urls: videos.map((v) => `${base}/videos/${v.slug}`),
+        })}
+      />
       <div className="mb-5 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <h1 className="text-xl font-semibold text-zinc-100">
           {tag.name} porn videos{" "}
@@ -84,7 +92,7 @@ export default async function TagPage({
         </h1>
         <Filters />
       </div>
-      <VideoGrid videos={videos} />
+      <VideoGridWithNativeAd videos={videos} site={site} />
       <Pagination page={dp.page} totalPages={totalPages} />
     </div>
   );

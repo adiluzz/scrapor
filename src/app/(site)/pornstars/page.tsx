@@ -2,23 +2,38 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import InPageSearch from "@/components/site/InPageSearch";
 import PornstarAvatar from "@/components/site/PornstarAvatar";
+import JsonLd from "@/components/site/JsonLd";
 import { prisma } from "@/lib/db";
-import { getCurrentSite, getCurrentSiteId } from "@/lib/site";
+import { getCurrentSite } from "@/lib/site";
 import { pornstarHasVideosOnSite } from "@/lib/pornstar-sites";
-import { keywordsMeta, siteHomeDescription } from "@/lib/seo";
+import {
+  buildOpenGraph,
+  getSiteBaseUrl,
+  itemListJsonLd,
+  keywordsMeta,
+  pornstarsIndexDescription,
+  pornstarsIndexTitle,
+} from "@/lib/seo";
 
 export const dynamic = "force-dynamic";
 type SearchParams = Record<string, string | string[] | undefined>;
 
 export async function generateMetadata(): Promise<Metadata> {
   const site = await getCurrentSite();
+  const title = pornstarsIndexTitle(site);
+  const description = pornstarsIndexDescription(site);
   return {
-    title: "Pornstars",
-    description:
-      `Browse pornstars on ${site.name}. ` +
-      siteHomeDescription(site).split(".")[0] + ".",
+    title,
+    description,
     keywords: keywordsMeta(site, ["pornstars", "models"]),
     alternates: { canonical: "/pornstars" },
+    openGraph: buildOpenGraph({
+      title,
+      description,
+      url: "/pornstars",
+      siteName: site.name,
+      image: site.ogImagePath,
+    }),
   };
 }
 
@@ -27,10 +42,14 @@ export default async function PornstarsPage({
 }: {
   searchParams: Promise<SearchParams>;
 }) {
-  const siteId = await getCurrentSiteId();
+  const site = await getCurrentSite();
+  const siteId = site.id;
+  const base = await getSiteBaseUrl();
   const sp = await searchParams;
   const qRaw = sp.q;
   const q = (Array.isArray(qRaw) ? qRaw[0] : qRaw || "").trim();
+  const title = pornstarsIndexTitle(site);
+  const description = pornstarsIndexDescription(site);
 
   const onSite = pornstarHasVideosOnSite(siteId);
   const starsRaw = await prisma.pornstar.findMany({
@@ -57,7 +76,6 @@ export default async function PornstarsPage({
     take: 800,
   });
 
-  // Same person may exist as multiple per-site rows; keep one entry per slug.
   const bySlug = new Map<string, (typeof starsRaw)[number]>();
   for (const s of starsRaw) {
     const existing = bySlug.get(s.slug);
@@ -76,10 +94,24 @@ export default async function PornstarsPage({
 
   return (
     <>
-      <h1 className="mb-2 text-xl font-semibold text-zinc-100">Pornstars</h1>
-      <p className="mb-5 max-w-2xl text-sm text-zinc-500">
-        Browse models with videos on this site, sorted by video count.
-      </p>
+      <JsonLd
+        data={{
+          "@context": "https://schema.org",
+          "@type": "CollectionPage",
+          name: title,
+          description,
+          url: `${base}/pornstars`,
+          numberOfItems: stars.length,
+        }}
+      />
+      <JsonLd
+        data={itemListJsonLd({
+          name: title,
+          urls: stars.slice(0, 50).map((s) => `${base}/pornstars/${s.slug}`),
+        })}
+      />
+      <h1 className="mb-2 text-xl font-semibold text-zinc-100">{title}</h1>
+      <p className="mb-5 max-w-2xl text-sm text-zinc-500">{description}</p>
       <div className="mb-6">
         <InPageSearch placeholder="Search pornstars…" />
       </div>

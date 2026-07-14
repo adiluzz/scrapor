@@ -1,16 +1,34 @@
 import Link from "next/link";
 import CookieSettings from "@/components/site/CookieSettings";
+import PopularLinksStrip from "@/components/site/PopularLinksStrip";
+import type { PopularLink } from "@/lib/popular-links";
 
 export default function Footer({
   siteName,
   isStudio = false,
+  popularTags = [],
+  popularPornstars = [],
 }: {
   siteName: string;
   isStudio?: boolean;
+  popularTags?: PopularLink[];
+  popularPornstars?: PopularLink[];
 }) {
+  const showHubs = !isStudio && (popularTags.length > 0 || popularPornstars.length > 0);
+
   return (
     <footer className="mt-16 border-t border-zinc-800 bg-zinc-950">
       <div className="mx-auto max-w-7xl px-4 py-8 text-sm text-zinc-500">
+        {showHubs && (
+          <div className="mb-8 grid gap-6 sm:grid-cols-2">
+            <PopularLinksStrip title="Popular tags" links={popularTags} hrefPrefix="/tags" />
+            <PopularLinksStrip
+              title="Popular pornstars"
+              links={popularPornstars}
+              hrefPrefix="/pornstars"
+            />
+          </div>
+        )}
         <div className="flex flex-wrap gap-x-6 gap-y-2">
           <Link href="/" className="hover:text-zinc-300">
             Home

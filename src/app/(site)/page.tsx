@@ -2,7 +2,9 @@ import AdZone from "@/components/ads/AdZone";
 import JuicyAdZone from "@/components/ads/JuicyAdZone";
 import VideoGridWithNativeAd from "@/components/ads/VideoGridWithNativeAd";
 import JsonLd from "@/components/site/JsonLd";
+import PopularLinksStrip from "@/components/site/PopularLinksStrip";
 import SiteSeoIntro from "@/components/site/SiteSeoIntro";
+import { listPopularTags } from "@/lib/popular-links";
 import { listVideos, parseDiscoveryParams } from "@/lib/queries";
 import { getCurrentSite, getCurrentSiteId } from "@/lib/site";
 import {
@@ -145,8 +147,11 @@ export default async function HomePage({
     return <StudioHome site={site} base={base} />;
   }
 
-  const { videos, totalPages } = await listVideos(siteId, params);
   const isSearch = Boolean(params.q);
+  const [{ videos, totalPages }, popularTags] = await Promise.all([
+    listVideos(siteId, params),
+    isSearch ? Promise.resolve([]) : listPopularTags(siteId, 24),
+  ]);
 
   return (
     <>
@@ -177,6 +182,14 @@ export default async function HomePage({
             </h1>
             <Filters />
           </div>
+          {!isSearch && (
+            <PopularLinksStrip
+              title="Popular tags"
+              links={popularTags}
+              hrefPrefix="/tags"
+              className="mb-5"
+            />
+          )}
           <VideoGridWithNativeAd videos={videos} site={site} />
           <Pagination page={params.page} totalPages={totalPages} />
           {!isSearch && <SiteSeoIntro site={site} />}

@@ -17,6 +17,7 @@ import CookieConsent from "@/components/site/CookieConsent";
 import GoogleAnalytics from "@/components/site/GoogleAnalytics";
 import BrandStyle from "@/components/brand/BrandStyle";
 import MobileStickyAd from "@/components/ads/MobileStickyAd";
+import { listPopularPornstars, listPopularTags } from "@/lib/popular-links";
 
 export async function generateMetadata(): Promise<Metadata> {
   const site = await getCurrentSite();
@@ -56,6 +57,9 @@ export default async function SiteLayout({ children }: { children: React.ReactNo
     process.env.NEXT_PUBLIC_GA_MEASUREMENT_ID?.trim() ||
     "";
   const isStudio = site.kind === "STUDIO";
+  const [popularTags, popularPornstars] = isStudio
+    ? [[], []]
+    : await Promise.all([listPopularTags(site.id, 20), listPopularPornstars(site.id, 16)]);
 
   return (
     <div className="min-h-screen overflow-x-hidden bg-zinc-950 text-zinc-100">
@@ -67,9 +71,19 @@ export default async function SiteLayout({ children }: { children: React.ReactNo
       ) : null}
       <Header site={site} />
       <main className="mx-auto w-full max-w-7xl px-3 py-4 sm:px-4 sm:py-6">{children}</main>
-      <Footer siteName={site.name} isStudio={isStudio} />
+      <Footer
+        siteName={site.name}
+        isStudio={isStudio}
+        popularTags={popularTags}
+        popularPornstars={popularPornstars}
+      />
       {!isStudio && (
-        <MobileStickyAd zoneId={site.exoZoneMobileSticky} insClass={site.exoInsClass} />
+        <MobileStickyAd
+          zoneId={site.exoZoneMobileSticky}
+          insClass={site.exoInsClass}
+          juicyZoneId={site.juicyAdsZoneBanner}
+          juicyEnabled={site.adsJuicyEnabled}
+        />
       )}
       {!ageVerified && <AgeGate siteName={site.name} />}
       <CookieConsent siteName={site.name} />

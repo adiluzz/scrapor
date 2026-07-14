@@ -46,7 +46,12 @@ export default function AdZone({
         <ins
           className={resolvedClass}
           data-zoneid={zoneId}
-          style={minHeight ? { display: "block", minHeight, maxWidth: "100%" } : { display: "block", maxWidth: "100%" }}
+          style={{
+            display: "block",
+            width: "100%",
+            maxWidth: "100%",
+            minHeight: minHeight ?? 90,
+          }}
         />
       </div>
     </div>

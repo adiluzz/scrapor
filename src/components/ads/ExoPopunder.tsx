@@ -1,12 +1,13 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { EXO_INS_CLASS, serveExoAds } from "@/lib/exo-click";
 
 const SESSION_KEY = "exo_popunder_fired";
 
 /**
- * ExoClick popunder — fires once per session when mounted (video page / first play context).
+ * ExoClick popunder — once per session on video pages.
+ * Keeps the zone tag until session is marked after first serve attempt.
  */
 export default function ExoPopunder({
   zoneId,
@@ -18,25 +19,29 @@ export default function ExoPopunder({
   insClass?: string | null;
 }) {
   const resolvedClass = insClass || EXO_INS_CLASS;
+  const [active, setActive] = useState(false);
 
   useEffect(() => {
     if (!enabled || !zoneId) return;
     try {
-      if (sessionStorage.getItem(SESSION_KEY) === "1") return;
+      if (sessionStorage.getItem(SESSION_KEY) === "1") {
+        setActive(false);
+        return;
+      }
       sessionStorage.setItem(SESSION_KEY, "1");
     } catch {
       /* continue */
     }
+    setActive(true);
     serveExoAds();
   }, [enabled, zoneId]);
 
-  if (!enabled || !zoneId) return null;
+  if (!enabled || !zoneId || !active) return null;
 
   return (
     <ins
       className={resolvedClass}
       data-zoneid={zoneId}
-      data-keywords="popunder"
       aria-hidden="true"
       style={{
         position: "absolute",

@@ -2,12 +2,15 @@
 
 import { useEffect, useState } from "react";
 import { EXO_INS_CLASS, serveExoAds } from "@/lib/exo-click";
-import AdZone from "@/components/ads/AdZone";
 
 const SESSION_KEY = "exo_fullscreen_shown";
 
 /**
- * ExoClick fullpage interstitial — at most once per browser session.
+ * ExoClick Desktop Fullpage Interstitial.
+ *
+ * Exo triggers this format on click (per zone Frequency / Trigger settings),
+ * not on bare page load. We only mark the session after Exo fires
+ * `creativeDisplayed-{zoneId}` so empty fills can retry.
  */
 export default function ExoFullscreenOverlay({
   zoneId,
@@ -17,25 +20,35 @@ export default function ExoFullscreenOverlay({
   insClass?: string | null;
 }) {
   const resolvedClass = insClass || EXO_INS_CLASS;
-  const [allow, setAllow] = useState(false);
+  const [enabled, setEnabled] = useState(false);
 
   useEffect(() => {
     if (!zoneId) return;
     try {
-      if (sessionStorage.getItem(SESSION_KEY) === "1") return;
-      sessionStorage.setItem(SESSION_KEY, "1");
-      setAllow(true);
+      if (sessionStorage.getItem(SESSION_KEY) === "1") {
+        setEnabled(false);
+        return;
+      }
     } catch {
-      setAllow(true);
+      /* ignore */
     }
+    setEnabled(true);
+
+    const eventName = `creativeDisplayed-${zoneId}`;
+    const onShown = () => {
+      try {
+        sessionStorage.setItem(SESSION_KEY, "1");
+      } catch {
+        /* ignore */
+      }
+      setEnabled(false);
+    };
+    document.addEventListener(eventName, onShown);
+    serveExoAds();
+    return () => document.removeEventListener(eventName, onShown);
   }, [zoneId]);
 
-  useEffect(() => {
-    if (!allow || !zoneId) return;
-    serveExoAds();
-  }, [allow, zoneId]);
-
-  if (!zoneId || !allow) return null;
+  if (!zoneId || !enabled) return null;
 
   return (
     <ins
@@ -56,6 +69,3 @@ export default function ExoFullscreenOverlay({
     />
   );
 }
-
-/** Re-export for convenience when composing listing pages. */
-export { AdZone };

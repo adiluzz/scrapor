@@ -19,13 +19,14 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
 
   const site = await getCurrentSite();
   const vastTagUrl = site.vastTagUrl || "";
-  const adRequired = Boolean(vastTagUrl);
+  const vastTagUrlBackup = site.vastTagUrlBackup || "";
+  const adRequired = Boolean(vastTagUrl || vastTagUrlBackup);
   const session = await openAdSession(video.id, site.id, adRequired);
 
   return NextResponse.json({
     adSessionId: session.id,
     adRequired,
-    vastTagUrl: vastTagUrl || null,
+    vastTagUrl: vastTagUrl || vastTagUrlBackup || null,
     skipSeconds: site.adSkipSeconds,
     minViewSeconds: site.adMinViewSeconds,
     timeoutMs: site.adTimeoutMs,

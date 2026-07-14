@@ -597,6 +597,45 @@
   text-align: center;
 }
 
+/* In-grid tiles must mirror video cards — never flex-center the creative. */
+.ad-slot-tile {
+  display: block;
+  width: 100%;
+  max-width: 100%;
+  overflow: hidden;
+  text-align: left;
+}
+
+.ad-slot-tile iframe,
+.ad-slot-tile ins,
+.ad-slot-tile > * {
+  z-index: auto !important;
+  margin-left: 0 !important;
+  margin-right: 0 !important;
+}
+
+.ad-slot-tile-media {
+  position: relative;
+  aspect-ratio: 16 / 9;
+  overflow: hidden;
+  background: #27272a;
+}
+
+.ad-slot-tile-scale {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform-origin: center center;
+  pointer-events: auto;
+}
+
+.ad-slot-tile-scale ins,
+.ad-slot-tile-scale iframe {
+  display: block !important;
+  max-width: none !important;
+  margin: 0 !important;
+}
+
 .ad-slot-fill {
   display: flex;
   width: 100%;

@@ -189,15 +189,33 @@ export default async function VideoPage({
             visible to the public.
           </div>
         )}
-        <VideoPlayer
-          videoId={video.id}
-          poster={poster}
-          storyboard={storyboard}
-          heatmap={heatmap}
-          invideoZoneId={site.adsJuicyEnabled && !adminPreview ? site.juicyAdsZoneInvideo : null}
-        />
 
-        <div className="w-full">
+        {/* Desktop: banners beside player. Mobile: player first, banners under. Single slot each (Juicy IDs must be unique). */}
+        <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-center lg:gap-5">
+          <aside className="order-2 mx-auto w-full max-w-[300px] shrink-0 lg:order-1 lg:mx-0 lg:w-[300px]">
+            <div className="ad-slot lg:sticky lg:top-20">
+              <AdZone zoneId={site.exoZoneUnderPlayer} insClass={site.exoInsClass} />
+            </div>
+          </aside>
+
+          <div className="order-1 mx-auto min-w-0 w-full max-w-4xl flex-1 lg:order-2">
+            <VideoPlayer
+              videoId={video.id}
+              poster={poster}
+              storyboard={storyboard}
+              heatmap={heatmap}
+              invideoZoneId={site.adsJuicyEnabled && !adminPreview ? site.juicyAdsZoneInvideo : null}
+            />
+          </div>
+
+          <aside className="order-3 mx-auto w-full max-w-[300px] shrink-0 lg:mx-0 lg:w-[300px]">
+            <div className="ad-slot lg:sticky lg:top-20">
+              {site.adsJuicyEnabled && <JuicyAdZone zoneId={site.juicyAdsZoneBanner} enabled />}
+            </div>
+          </aside>
+        </div>
+
+        <div className="mx-auto w-full max-w-4xl">
           <h1 className="text-lg font-bold break-words text-zinc-100 sm:text-xl">{video.title}</h1>
           <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-zinc-500">
             <span>{video.viewCount.toLocaleString()} views</span>
@@ -252,11 +270,6 @@ export default async function VideoPage({
             </p>
           )}
 
-          {/* Double banner: side-by-side on desktop, stacked on mobile. */}
-          <div className="mt-6 flex flex-col items-center gap-4 lg:flex-row lg:items-start lg:justify-center">
-            <AdZone zoneId={site.exoZoneUnderPlayer} insClass={site.exoInsClass} />
-            {site.adsJuicyEnabled && <JuicyAdZone zoneId={site.juicyAdsZoneBanner} enabled />}
-          </div>
           {site.kind !== "STUDIO" && site.adsCamWidgetEnabled && (
             <div className="mt-6">
               <StripchatWidget

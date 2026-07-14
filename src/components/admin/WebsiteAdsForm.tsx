@@ -238,11 +238,14 @@ export default function WebsiteAdsForm({
           />
         </label>
         <label className="block space-y-1.5">
-          <span className="text-sm text-zinc-400">JuicyAds native zone ID</span>
+          <span className="text-sm text-zinc-400">
+            JuicyAds in-grid zone ID (create a <strong className="font-medium text-zinc-300">300×250 Banner</strong>, not Native text)
+          </span>
           <input
             value={form.juicyAdsZoneNative}
             onChange={(e) => set("juicyAdsZoneNative", e.target.value)}
             className={inputClass}
+            placeholder="Paste zone ID from a 300×250 Banner spot"
           />
         </label>
         <label className="block space-y-1.5">

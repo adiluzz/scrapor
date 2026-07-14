@@ -23,8 +23,8 @@ Admin field names must match exactly:
 | `vastTagUrlBackup` | TrafficStars | Backup VAST tag (waterfall when primary has no fill) |
 | `adsPopunderEnabled` | — | Toggle popunder |
 | `juicyAdsSiteId` | JuicyAds | Publisher site ID |
-| `juicyAdsZoneBanner` | JuicyAds | Banner zone (sidebar / under-player / sticky fallback) |
-| `juicyAdsZoneNative` | JuicyAds | Native mid-list zone |
+| `juicyAdsZoneBanner` | JuicyAds | Banner zone (under-player / sticky fallback) |
+| `juicyAdsZoneNative` | JuicyAds | **In-grid card** — use a **300×250 Banner** zone (not Native text) |
 | `juicyAdsZoneVidfloat` | JuicyAds | 300×250 floating corner (desktop video pages) |
 | `juicyAdsZoneInvideo` | JuicyAds | In-video overlay inside the player |
 | `adsJuicyEnabled` | — | Toggle Juicy fill |
@@ -46,9 +46,10 @@ Admin field names must match exactly:
 1. Publisher signup → add both domains (each site gets its own verification token).
 2. Paste the meta **content** into Admin → SEO → **JuicyAds site verification** per site
    (emitted as `<meta name="juicyads-site-verification" content="…">`).
-3. Per site create banner + native + **vidfloat** (`300x250:vidfloat`) + **invideo** zones →
+3. Per site create banner + **in-grid 300×250 Banner** + **vidfloat** (`300x250:vidfloat`) + **invideo** zones →
    paste into `juicyAdsZoneBanner` / `juicyAdsZoneNative` / `juicyAdsZoneVidfloat` /
-   `juicyAdsZoneInvideo`.
+   `juicyAdsZoneInvideo`. Do **not** use Juicy “Native text” for the grid — it renders as a
+   small centered widget. Create a separate Banner spot sized **300×250** for in-grid.
 4. Paste site ID into `juicyAdsSiteId`; enable `adsJuicyEnabled`.
 5. Embed uses Juicy v3 (`poweredby.jads.co/js/jads.js` + `<ins id="{zone}">`).
 
@@ -57,6 +58,10 @@ Admin field names must match exactly:
 1. Register as a publisher; create one In-Stream (VAST) spot per tube domain.
 2. Paste each tag URL into Admin → Ads → **VAST backup tag**.
 3. Pre-roll waterfall: primary Exo → backup TrafficStars → one Exo retry.
+   TrafficStars is fetched **server-side** inside `/api/videos/{id}/vast` (the
+   browser only sees that API call, not `tsyndicate.com`). If the VAST URL
+   returns `Undefined or not active spot`, activate/approve the spot in
+   TrafficStars — our code cannot invent fill for a dead spot.
 
 ## D) Stripchat affiliate (StripCash)
 
@@ -81,7 +86,7 @@ Admin field names must match exactly:
    Native). Wrong format still fills but looks broken / misaligned on mobile.
    If Exo leaves the sticky empty, the Juicy banner zone is used as fallback.
 7. Home desktop: full-width video grid (min card width 220px); Exo sticky
-   right sidebar; Juicy sits in the grid as a card-sized tile (same as Exo
-   native tiles). Mobile: Exo banner above the grid.
+   right sidebar; Juicy sits in the grid as a card-sized tile (cover-scaled
+   300×250 Banner). Mobile: Exo banner above the grid.
 8. Video desktop: Exo + Juicy side-by-side under the player; floating corner +
    in-video overlay activate when their Juicy zone IDs are set.

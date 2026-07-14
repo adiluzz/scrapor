@@ -28,8 +28,9 @@ export default function VideoGridWithNativeAd({
   const first = videos.slice(0, splitAt);
   const rest = videos.slice(splitAt);
   const juicyOn = site.adsJuicyEnabled !== false;
-  // Prefer native for in-grid card footprint; banner zone works as fill fallback.
-  const juicyTileZone = site.juicyAdsZoneNative || site.juicyAdsZoneBanner;
+  // Dedicated in-grid Juicy zone only (300×250 banner). Do not reuse the
+  // sidebar/sticky banner ID — Juicy zone IDs must be unique on the page.
+  const juicyTileZone = site.juicyAdsZoneNative;
 
   // Card-sized ad tiles at overall positions ~4 (Exo) and ~6 (Juicy).
   const tileZone = site.exoZoneGridNative;

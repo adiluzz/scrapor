@@ -35,17 +35,18 @@ export default function AdTile({
   if (!zoneId || noFill) return null;
 
   return (
-    <div className="ad-slot block min-w-[220px] overflow-hidden rounded-xl border border-zinc-800 bg-zinc-900">
-      <div className="relative aspect-video overflow-hidden bg-zinc-800">
+    <div className="ad-slot-tile group block min-w-[220px] overflow-hidden rounded-xl border border-zinc-800 bg-zinc-900 transition-colors hover:border-zinc-600">
+      <div className="ad-slot-tile-media">
         <ins
           ref={insRef}
           className={resolvedClass}
           data-zoneid={zoneId}
-          style={{ display: "block", width: "100%", height: "100%" }}
+          style={{ display: "block", width: "100%", height: "100%", position: "absolute", inset: 0 }}
         />
       </div>
       <div className="p-2.5">
-        <p className="text-[10px] uppercase tracking-wide text-zinc-600">Advertisement</p>
+        <p className="line-clamp-2 text-sm text-zinc-200">Advertisement</p>
+        <p className="mt-1 text-[11px] text-zinc-500">Sponsored</p>
       </div>
     </div>
   );

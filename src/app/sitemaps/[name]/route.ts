@@ -35,7 +35,8 @@ async function staticSitemap(base: string, site: Site): Promise<NextResponse> {
     select: { slug: true },
   });
   const urls = [
-    `${base}/`,
+    // Slash-free homepage to match the rendered canonical (Next strips the trailing slash).
+    base,
     `${base}/tags`,
     `${base}/pornstars`,
     `${base}/creators`,

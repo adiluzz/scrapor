@@ -15,6 +15,7 @@ import {
   buildOpenGraph,
   getSiteBaseUrl,
   keywordsMeta,
+  pageTitleMeta,
   videoObjectJsonLd,
   videoPageDescription,
   videoPageTitle,
@@ -23,6 +24,7 @@ import { publicVideoContentUrl, publicVideoThumbnailUrl } from "@/lib/video-site
 import AdZone from "@/components/ads/AdZone";
 import ExoFullscreenOverlay from "@/components/ads/ExoFullscreenOverlay";
 import ExoPopunder from "@/components/ads/ExoPopunder";
+import FloatingCornerAd from "@/components/ads/FloatingCornerAd";
 import JuicyAdZone from "@/components/ads/JuicyAdZone";
 import StripchatWidget from "@/components/ads/StripchatWidget";
 import TagBadge from "@/components/site/TagBadge";
@@ -75,7 +77,7 @@ export async function generateMetadata({
   const base = await getSiteBaseUrl();
   const poster = publicVideoThumbnailUrl(base, video.id);
   return {
-    title,
+    title: pageTitleMeta(title, site.name),
     description,
     keywords: keywordsMeta(site, [...categoryNames, ...tagNames, video.title]),
     alternates: { canonical: `/videos/${video.slug}` },
@@ -150,6 +152,10 @@ export default async function VideoPage({
             enabled={site.adsPopunderEnabled}
             insClass={site.exoInsClass}
           />
+          <FloatingCornerAd
+            zoneId={site.juicyAdsZoneVidfloat}
+            enabled={site.adsJuicyEnabled}
+          />
         </>
       )}
       <JsonLd
@@ -188,6 +194,7 @@ export default async function VideoPage({
           poster={poster}
           storyboard={storyboard}
           heatmap={heatmap}
+          invideoZoneId={site.adsJuicyEnabled && !adminPreview ? site.juicyAdsZoneInvideo : null}
         />
 
         <div className="w-full">
@@ -245,14 +252,11 @@ export default async function VideoPage({
             </p>
           )}
 
-          <AdZone
-            zoneId={site.exoZoneUnderPlayer}
-            insClass={site.exoInsClass}
-            className="mt-6"
-          />
-          {site.adsJuicyEnabled && (
-            <JuicyAdZone zoneId={site.juicyAdsZoneBanner} enabled className="mt-4" />
-          )}
+          {/* Double banner: side-by-side on desktop, stacked on mobile. */}
+          <div className="mt-6 flex flex-col items-center gap-4 lg:flex-row lg:items-start lg:justify-center">
+            <AdZone zoneId={site.exoZoneUnderPlayer} insClass={site.exoInsClass} />
+            {site.adsJuicyEnabled && <JuicyAdZone zoneId={site.juicyAdsZoneBanner} enabled />}
+          </div>
           {site.kind !== "STUDIO" && site.adsCamWidgetEnabled && (
             <div className="mt-6">
               <StripchatWidget

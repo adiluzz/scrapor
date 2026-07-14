@@ -2,20 +2,17 @@ import { NextResponse } from "next/server";
 import { headers } from "next/headers";
 import { prisma } from "@/lib/db";
 import { getSiteByDomain, normalizeHost } from "@/lib/site";
-import { pornstarHasVideosOnSite } from "@/lib/pornstar-sites";
-import { videoPageDescription } from "@/lib/seo";
-import {
-  publicVideoContentUrl,
-  publicVideoThumbnailUrl,
-  renderSitemapXml,
-  renderUrlOnlySitemapEntry,
-  renderVideoSitemapUrl,
-  sitemapVideoDescription,
-  sitemapVideoTitle,
-} from "@/lib/video-sitemap";
+import { renderSitemapIndexXml, SITEMAP_VIDEO_CHUNK_SIZE } from "@/lib/video-sitemap";
 
 export const dynamic = "force-dynamic";
 
+const CACHE_HEADER = "public, max-age=3600, s-maxage=21600, stale-while-revalidate=86400";
+
+/**
+ * Sitemap index — points at small per-content-type sitemaps under /sitemaps/
+ * instead of one giant file. Videos are chunked (1,000/URLs each, stable
+ * chunk membership: ordered by createdAt ascending so old chunks never move).
+ */
 export async function GET() {
   const h = await headers();
   const host = normalizeHost(h.get("x-forwarded-host") || h.get("host"));
@@ -23,73 +20,34 @@ export async function GET() {
   const base = `${proto}://${host}`;
   const site = await getSiteByDomain(host);
 
-  const [videos, pornstars, creators, tags] = await Promise.all([
-    prisma.video.findMany({
+  const [videoCount, latestVideo] = await Promise.all([
+    prisma.video.count({
       where: { sites: { some: { siteId: site.id } }, isDeleted: false, status: "READY" },
-      select: {
-        id: true,
-        slug: true,
-        title: true,
-        description: true,
-        durationSec: true,
-        sourceUploadDate: true,
-        createdAt: true,
-        updatedAt: true,
-        viewCount: true,
-        tags: { include: { tag: { select: { name: true } } } },
-      },
+    }),
+    prisma.video.findFirst({
+      where: { sites: { some: { siteId: site.id } }, isDeleted: false, status: "READY" },
       orderBy: { createdAt: "desc" },
+      select: { createdAt: true },
     }),
-    prisma.pornstar.findMany({
-      where: pornstarHasVideosOnSite(site.id),
-      select: { slug: true },
-      distinct: ["slug"],
-    }),
-    prisma.creatorProfile.findMany({ where: { siteId: site.id }, select: { slug: true } }),
-    prisma.tag.findMany({ where: { siteId: site.id }, select: { slug: true } }),
   ]);
 
-  const staticUrls = [
-    `${base}/`,
-    `${base}/tags`,
-    `${base}/pornstars`,
-    `${base}/creators`,
-    `${base}/our-network`,
-    `${base}/privacy`,
-    `${base}/dmca`,
-    `${base}/2257`,
-    ...(site.kind === "STUDIO" ? [`${base}/contact`] : []),
+  const videoChunks = Math.max(1, Math.ceil(videoCount / SITEMAP_VIDEO_CHUNK_SIZE));
+  const sitemaps: { loc: string; lastModified?: Date | null }[] = [
+    { loc: `${base}/sitemaps/static.xml` },
+    ...Array.from({ length: videoChunks }, (_, i) => ({
+      loc: `${base}/sitemaps/videos-${i + 1}.xml`,
+      // Only the newest chunk actually changes, but latest createdAt is a
+      // stable "content changed" signal (unlike updatedAt row churn).
+      lastModified: i + 1 === videoChunks ? latestVideo?.createdAt : null,
+    })),
+    { loc: `${base}/sitemaps/tags.xml` },
+    { loc: `${base}/sitemaps/pornstars.xml` },
   ];
 
-  const chunks: string[] = [
-    ...staticUrls.map((url) => renderUrlOnlySitemapEntry(url)),
-    ...videos.map((video) => {
-      const pageUrl = `${base}/videos/${video.slug}`;
-      const fallbackDescription = videoPageDescription(video.title, site, video.description);
-      return renderVideoSitemapUrl({
-        pageUrl,
-        thumbnailUrl: publicVideoThumbnailUrl(base, video.id),
-        contentUrl: publicVideoContentUrl(base, video.id),
-        title: sitemapVideoTitle(video.title),
-        description: sitemapVideoDescription(video.description || "", fallbackDescription),
-        durationSec: video.durationSec,
-        publicationDate: video.sourceUploadDate || video.createdAt,
-        viewCount: video.viewCount,
-        tags: video.tags.map((t) => t.tag.name),
-        lastModified: video.updatedAt,
-      });
-    }),
-    ...pornstars.map((p) => renderUrlOnlySitemapEntry(`${base}/pornstars/${p.slug}`)),
-    ...creators.map((c) => renderUrlOnlySitemapEntry(`${base}/creators/${c.slug}`)),
-    ...tags.map((t) => renderUrlOnlySitemapEntry(`${base}/tags/${t.slug}`)),
-  ];
-
-  const xml = renderSitemapXml(chunks.join("\n"));
-
-  return new NextResponse(xml, {
+  return new NextResponse(renderSitemapIndexXml(sitemaps), {
     headers: {
       "Content-Type": "application/xml; charset=utf-8",
-      "Cache-Control": "public, max-age=3600",
+      "Cache-Control": CACHE_HEADER,
     },
   });
 }

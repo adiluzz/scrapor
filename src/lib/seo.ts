@@ -28,6 +28,22 @@ export type SeoSite = Pick<
   | "seoCreatorsIndexDesc"
 >;
 
+/**
+ * Title for `metadata.title` under the site layout's `%s · SiteName` template.
+ * When the rendered title already mentions the site name (e.g. a DB template
+ * ending in "| Pisster"), return it as absolute so the layout template does
+ * not append the site name a second time ("… | Pisster · Pisster").
+ */
+export function pageTitleMeta(
+  title: string,
+  siteName: string
+): string | { absolute: string } {
+  if (title.toLowerCase().includes(siteName.toLowerCase())) {
+    return { absolute: title };
+  }
+  return title;
+}
+
 export function truncateMeta(text: string, max = 160): string {
   const t = text.replace(/\s+/g, " ").trim();
   if (t.length <= max) return t;

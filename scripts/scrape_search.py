@@ -64,6 +64,7 @@ def _public_video(v: dict, source: str, in_catalog: bool) -> dict:
         "sourceSite": source,
         "inCatalog": in_catalog,
         "description": v.get("description") or "",
+        "uploadDate": v.get("upload_date") or v.get("uploadDate") or "",
         "tags": v.get("tags") or [],
         "pornstars": v.get("pornstars") or [],
         "categories": v.get("categories") or [],
@@ -123,6 +124,7 @@ def _yt_dlp_metadata(url: str) -> dict:
         "thumbnail": info.get("thumbnail") or "",
         "duration_sec": int(info["duration"]) if info.get("duration") else None,
         "description": info.get("description") or "",
+        "upload_date": info.get("upload_date") or "",  # YYYYMMDD from yt-dlp
         "tags": info.get("tags") or [],
         "categories": info.get("categories") or [],
         "pornstars": [str(c) for c in cast if c],

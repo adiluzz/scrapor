@@ -28,14 +28,22 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
   }
 
   const site = await getCurrentSite();
-  const tagUrl = site.vastTagUrl || "";
-  if (!tagUrl) return NextResponse.json({ ad: null });
+  const primary = site.vastTagUrl || "";
+  const backup = site.vastTagUrlBackup || "";
+  if (!primary && !backup) return NextResponse.json({ ad: null });
 
   const [clientIp, h] = await Promise.all([getClientIp(), headers()]);
   const referer = `https://${site.domain}/videos/`;
   const userAgent = h.get("user-agent") || undefined;
   const timeoutMs = site.adTimeoutMs;
+  const opts = { clientIp, referer, userAgent, timeoutMs };
 
-  const ad = await resolveVastAd(tagUrl, { clientIp, referer, userAgent, timeoutMs });
+  // Supplier waterfall: primary → backup → one primary retry (transient no-fills).
+  const attempts = [primary, backup, primary].filter(Boolean);
+  let ad = null;
+  for (const tagUrl of attempts) {
+    ad = await resolveVastAd(tagUrl, opts);
+    if (ad) break;
+  }
   return NextResponse.json({ ad });
 }

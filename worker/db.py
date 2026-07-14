@@ -8,6 +8,8 @@ from urllib.parse import urlencode, urlsplit, urlunsplit, parse_qsl
 
 import psycopg
 
+from seo_text import clean_description, parse_upload_date
+
 
 def _cuid() -> str:
     # Any unique string works for a Prisma String @id.
@@ -206,7 +208,8 @@ def upsert_category(conn, site_id: str, name: str) -> str:
 def create_video(conn, *, site_id, source_url, title, description, duration_sec,
                  source_site, scrape_run_id, s3_video_key, s3_thumb_key,
                  s3_preview_key, s3_storyboard_key, s3_storyboard_vtt_key,
-                 tags, pornstars, categories=None, target_site_ids=None):
+                 tags, pornstars, categories=None, target_site_ids=None,
+                 source_upload_date=None):
     """
     Insert a Video under site_id (storage/origin for S3 paths), then publish it
     to each target site via VideoSite. Taxonomy (tags/pornstars/categories) is
@@ -221,15 +224,19 @@ def create_video(conn, *, site_id, source_url, title, description, duration_sec,
         sid for sid in (target_site_ids or [site_id]) if sid
     )) or [site_id]
     new_pornstar_ids: list[str] = []
+    # Never store descriptions that leak source-site names/URLs.
+    description = clean_description(description)
+    upload_date = parse_upload_date(source_upload_date)
     with conn.cursor() as cur:
         cur.execute(
             'INSERT INTO "Video" '
             '(id,slug,"siteId",title,"sourceUrl","dedupeKey","sourceSite",description,"durationSec",'
+            '"sourceUploadDate",'
             '"s3VideoKey","s3ThumbKey","s3PreviewKey","s3StoryboardKey","s3StoryboardVttKey",'
             '"scrapeRunId","viewCount","isDeleted","createdAt","updatedAt") '
-            'VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,0,false,now(),now())',
+            'VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,0,false,now(),now())',
             (vid, slug, site_id, title[:400], source_url, dedupe_key, source_site, description or None,
-             duration_sec, s3_video_key, s3_thumb_key, s3_preview_key,
+             duration_sec, upload_date, s3_video_key, s3_thumb_key, s3_preview_key,
              s3_storyboard_key, s3_storyboard_vtt_key, scrape_run_id),
         )
         for publish_site_id in publish_ids:

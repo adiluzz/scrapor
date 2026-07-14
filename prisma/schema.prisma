@@ -61,6 +61,8 @@ model Site {
 
   // Ads (per-site network config)
   vastTagUrl              String?
+  /// Second VAST supplier (e.g. TrafficStars) tried when the primary tag has no fill.
+  vastTagUrlBackup        String?
   adSkipSeconds           Int      @default(5)
   adMinViewSeconds        Int      @default(5)
   adTimeoutMs             Int      @default(12000)
@@ -75,6 +77,10 @@ model Site {
   juicyAdsSiteId          String?
   juicyAdsZoneBanner      String?
   juicyAdsZoneNative      String?
+  /// Juicy 300x250 zone rendered in the dismissible floating corner container (video pages, desktop).
+  juicyAdsZoneVidfloat    String?
+  /// Juicy zone rendered as the dismissible in-video overlay banner inside the player.
+  juicyAdsZoneInvideo     String?
   stripchatWidgetId       String?
   stripchatAffiliateUrl   String?
   adsPopunderEnabled      Boolean  @default(true)

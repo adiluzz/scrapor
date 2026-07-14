@@ -41,7 +41,8 @@ export type VideoSitemapEntry = {
   /** Direct link to raw video bytes (preview clip). Required by Google; must differ from pageUrl. */
   contentUrl: string;
   durationSec?: number | null;
-  publicationDate: Date;
+  /** Real source upload date; omitted from the XML when unknown (never fake it with scrape time). */
+  publicationDate?: Date | null;
   viewCount?: number;
   tags?: string[];
   lastModified?: Date;
@@ -67,7 +68,9 @@ export function renderVideoSitemapUrl(entry: VideoSitemapEntry): string {
     lines.push(`      <video:duration>${Math.floor(entry.durationSec)}</video:duration>`);
   }
 
-  lines.push(`      <video:publication_date>${iso8601(entry.publicationDate)}</video:publication_date>`);
+  if (entry.publicationDate) {
+    lines.push(`      <video:publication_date>${iso8601(entry.publicationDate)}</video:publication_date>`);
+  }
 
   if (entry.viewCount != null && entry.viewCount >= 0) {
     lines.push(`      <video:view_count>${entry.viewCount}</video:view_count>`);
@@ -103,3 +106,25 @@ export function renderSitemapXml(body: string): string {
     "</urlset>",
   ].join("\n");
 }
+
+export function renderSitemapIndexXml(
+  sitemaps: { loc: string; lastModified?: Date | null }[]
+): string {
+  const body = sitemaps
+    .map((s) => {
+      const lines = ["  <sitemap>", `    <loc>${escapeXml(s.loc)}</loc>`];
+      if (s.lastModified) lines.push(`    <lastmod>${iso8601(s.lastModified)}</lastmod>`);
+      lines.push("  </sitemap>");
+      return lines.join("\n");
+    })
+    .join("\n");
+  return [
+    '<?xml version="1.0" encoding="UTF-8"?>',
+    '<sitemapindex xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">',
+    body,
+    "</sitemapindex>",
+  ].join("\n");
+}
+
+/** Videos per chunked video sitemap (`/sitemaps/videos-{n}.xml`). */
+export const SITEMAP_VIDEO_CHUNK_SIZE = 1000;

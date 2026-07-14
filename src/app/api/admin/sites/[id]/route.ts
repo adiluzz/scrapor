@@ -63,6 +63,7 @@ const patchSchema = z.object({
   seoCreatorsIndexTitle: z.string().max(500).nullable().optional(),
   seoCreatorsIndexDesc: z.string().max(2000).nullable().optional(),
   vastTagUrl: z.string().max(2000).nullable().optional(),
+  vastTagUrlBackup: z.string().max(2000).nullable().optional(),
   adSkipSeconds: z.number().int().min(0).max(120).optional(),
   adMinViewSeconds: z.number().int().min(0).max(120).optional(),
   adTimeoutMs: z.number().int().min(0).max(120000).optional(),
@@ -77,6 +78,8 @@ const patchSchema = z.object({
   juicyAdsSiteId: z.string().max(120).nullable().optional(),
   juicyAdsZoneBanner: z.string().max(120).nullable().optional(),
   juicyAdsZoneNative: z.string().max(120).nullable().optional(),
+  juicyAdsZoneVidfloat: z.string().max(120).nullable().optional(),
+  juicyAdsZoneInvideo: z.string().max(120).nullable().optional(),
   stripchatWidgetId: z.string().max(200).nullable().optional(),
   stripchatAffiliateUrl: z.string().max(2000).nullable().optional(),
   adsPopunderEnabled: z.boolean().optional(),
@@ -181,6 +184,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
       seoCreatorsIndexDesc:
         d.seoCreatorsIndexDesc === undefined ? undefined : d.seoCreatorsIndexDesc,
       vastTagUrl: d.vastTagUrl === undefined ? undefined : d.vastTagUrl,
+      vastTagUrlBackup: d.vastTagUrlBackup === undefined ? undefined : d.vastTagUrlBackup,
       adSkipSeconds: d.adSkipSeconds,
       adMinViewSeconds: d.adMinViewSeconds,
       adTimeoutMs: d.adTimeoutMs,
@@ -196,6 +200,10 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
       juicyAdsSiteId: d.juicyAdsSiteId === undefined ? undefined : d.juicyAdsSiteId,
       juicyAdsZoneBanner: d.juicyAdsZoneBanner === undefined ? undefined : d.juicyAdsZoneBanner,
       juicyAdsZoneNative: d.juicyAdsZoneNative === undefined ? undefined : d.juicyAdsZoneNative,
+      juicyAdsZoneVidfloat:
+        d.juicyAdsZoneVidfloat === undefined ? undefined : d.juicyAdsZoneVidfloat,
+      juicyAdsZoneInvideo:
+        d.juicyAdsZoneInvideo === undefined ? undefined : d.juicyAdsZoneInvideo,
       stripchatWidgetId: d.stripchatWidgetId === undefined ? undefined : d.stripchatWidgetId,
       stripchatAffiliateUrl:
         d.stripchatAffiliateUrl === undefined ? undefined : d.stripchatAffiliateUrl,

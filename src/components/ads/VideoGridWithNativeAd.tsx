@@ -28,16 +28,33 @@ export default function VideoGridWithNativeAd({
   const rest = videos.slice(splitAt);
   const juicyOn = site.adsJuicyEnabled !== false;
 
+  // Card-sized ad tiles at overall positions ~4 and ~12 (split across the two grids).
+  const tileZone = site.exoZoneGridNative;
+  const firstTilePositions = [4].filter((p) => p <= first.length);
+  const secondTilePositions = [12 - splitAt].filter((p) => p >= 1 && p <= rest.length);
+
   return (
     <>
-      <VideoGrid videos={first} />
+      <VideoGrid
+        videos={first}
+        adTileZoneId={tileZone}
+        adTileInsClass={site.exoInsClass}
+        adTilePositions={firstTilePositions}
+      />
       {showMid && (
         <div className="ad-slot my-5 space-y-3">
           <AdZone zoneId={midZone} insClass={site.exoInsClass} minHeight={90} />
           {juicyOn && <JuicyAdZone zoneId={site.juicyAdsZoneNative} enabled />}
         </div>
       )}
-      {rest.length > 0 && <VideoGrid videos={rest} />}
+      {rest.length > 0 && (
+        <VideoGrid
+          videos={rest}
+          adTileZoneId={tileZone}
+          adTileInsClass={site.exoInsClass}
+          adTilePositions={secondTilePositions}
+        />
+      )}
       {!showMid && site.exoZoneGridNative && videos.length > 0 && (
         <div className="ad-slot mt-5">
           <AdZone zoneId={site.exoZoneGridNative} insClass={site.exoInsClass} minHeight={90} />

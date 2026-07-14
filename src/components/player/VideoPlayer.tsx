@@ -5,6 +5,7 @@ import videojs from "video.js";
 import "video.js/dist/video-js.css";
 import type Player from "video.js/dist/types/player";
 import Heatmap from "@/components/player/Heatmap";
+import InVideoAd from "@/components/ads/InVideoAd";
 import { fireImpressions, type VastAd } from "@/lib/vast";
 import type { StoryboardCue } from "@/lib/storyboard";
 
@@ -12,6 +13,7 @@ type Storyboard = { sprite: string; cues: StoryboardCue[] } | null;
 
 const BUCKET_SEC = 5;
 const SKIP_SEC = 7;
+const INVIDEO_AD_DELAY_MS = 10_000;
 const DOUBLE_TAP_MS = 280;
 const SKIP_FLASH_MS = 700;
 
@@ -269,6 +271,7 @@ export default forwardRef(function VideoPlayer(
     onDuration,
     muted = false,
     autoStart = false,
+    invideoZoneId,
   }: {
     videoId: string;
     poster: string;
@@ -284,6 +287,8 @@ export default forwardRef(function VideoPlayer(
     muted?: boolean;
     /** Admin: start playback automatically on mount. */
     autoStart?: boolean;
+    /** Juicy in-video overlay zone — shows ~10s into playback, once per video. */
+    invideoZoneId?: string | null;
   },
   ref
 ) {
@@ -325,6 +330,8 @@ export default forwardRef(function VideoPlayer(
   const lastSideTapRef = useRef<{ side: "left" | "right"; t: number } | null>(null);
   const singleTapTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const skipFlashTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [invideoVisible, setInvideoVisible] = useState(false);
+  const invideoDoneRef = useRef(false);
   const clipLoopRef = useRef(clipLoop);
   const onTimeUpdateRef = useRef(onTimeUpdate);
   const onDurationRef = useRef(onDuration);
@@ -925,6 +932,17 @@ export default forwardRef(function VideoPlayer(
     if (!controlsVisible) setPreview(null);
   }, [controlsVisible]);
 
+  // In-video overlay: appears once per video, ~10s after content playback starts.
+  useEffect(() => {
+    if (adminPreview || !invideoZoneId) return;
+    if (status !== "playing" || invideoDoneRef.current) return;
+    const timer = setTimeout(() => {
+      invideoDoneRef.current = true;
+      setInvideoVisible(true);
+    }, INVIDEO_AD_DELAY_MS);
+    return () => clearTimeout(timer);
+  }, [status, adminPreview, invideoZoneId]);
+
   useEffect(() => {
     if (adminPreview) return;
     const onUnload = () => flushWatch(true);
@@ -1207,6 +1225,15 @@ export default forwardRef(function VideoPlayer(
             </span>
           )}
         </button>
+      )}
+
+      {status === "playing" && invideoVisible && invideoZoneId && (
+        <div
+          className="absolute inset-x-0 z-30 flex justify-center"
+          style={{ bottom: "calc(var(--player-bar-height, 48px) + 8px)" }}
+        >
+          <InVideoAd zoneId={invideoZoneId} onDismiss={() => setInvideoVisible(false)} />
+        </div>
       )}
 
       {preview && storyboard && (

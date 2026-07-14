@@ -8,6 +8,7 @@ const inputClass =
 
 type AdsFields = {
   vastTagUrl: string | null;
+  vastTagUrlBackup: string | null;
   adSkipSeconds: number;
   adMinViewSeconds: number;
   adTimeoutMs: number;
@@ -22,6 +23,8 @@ type AdsFields = {
   juicyAdsSiteId: string | null;
   juicyAdsZoneBanner: string | null;
   juicyAdsZoneNative: string | null;
+  juicyAdsZoneVidfloat: string | null;
+  juicyAdsZoneInvideo: string | null;
   stripchatWidgetId: string | null;
   stripchatAffiliateUrl: string | null;
   adsPopunderEnabled: boolean;
@@ -39,6 +42,7 @@ export default function WebsiteAdsForm({
   const router = useRouter();
   const [form, setForm] = useState({
     vastTagUrl: initial.vastTagUrl || "",
+    vastTagUrlBackup: initial.vastTagUrlBackup || "",
     adSkipSeconds: initial.adSkipSeconds,
     adMinViewSeconds: initial.adMinViewSeconds,
     adTimeoutMs: initial.adTimeoutMs,
@@ -53,6 +57,8 @@ export default function WebsiteAdsForm({
     juicyAdsSiteId: initial.juicyAdsSiteId || "",
     juicyAdsZoneBanner: initial.juicyAdsZoneBanner || "",
     juicyAdsZoneNative: initial.juicyAdsZoneNative || "",
+    juicyAdsZoneVidfloat: initial.juicyAdsZoneVidfloat || "",
+    juicyAdsZoneInvideo: initial.juicyAdsZoneInvideo || "",
     stripchatWidgetId: initial.stripchatWidgetId || "",
     stripchatAffiliateUrl: initial.stripchatAffiliateUrl || "",
     adsPopunderEnabled: initial.adsPopunderEnabled,
@@ -79,6 +85,7 @@ export default function WebsiteAdsForm({
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
           vastTagUrl: empty(form.vastTagUrl),
+          vastTagUrlBackup: empty(form.vastTagUrlBackup),
           adSkipSeconds: form.adSkipSeconds,
           adMinViewSeconds: form.adMinViewSeconds,
           adTimeoutMs: form.adTimeoutMs,
@@ -93,6 +100,8 @@ export default function WebsiteAdsForm({
           juicyAdsSiteId: empty(form.juicyAdsSiteId),
           juicyAdsZoneBanner: empty(form.juicyAdsZoneBanner),
           juicyAdsZoneNative: empty(form.juicyAdsZoneNative),
+          juicyAdsZoneVidfloat: empty(form.juicyAdsZoneVidfloat),
+          juicyAdsZoneInvideo: empty(form.juicyAdsZoneInvideo),
           stripchatWidgetId: empty(form.stripchatWidgetId),
           stripchatAffiliateUrl: empty(form.stripchatAffiliateUrl),
           adsPopunderEnabled: form.adsPopunderEnabled,
@@ -129,6 +138,14 @@ export default function WebsiteAdsForm({
         <label className="block space-y-1.5">
           <span className="text-sm text-zinc-400">VAST tag URL</span>
           <input value={form.vastTagUrl} onChange={(e) => set("vastTagUrl", e.target.value)} className={inputClass} />
+        </label>
+        <label className="block space-y-1.5">
+          <span className="text-sm text-zinc-400">VAST backup tag (2nd supplier, tried when the primary has no fill)</span>
+          <input
+            value={form.vastTagUrlBackup}
+            onChange={(e) => set("vastTagUrlBackup", e.target.value)}
+            className={inputClass}
+          />
         </label>
         <div className="grid gap-4 sm:grid-cols-3">
           <label className="block space-y-1.5">
@@ -225,6 +242,22 @@ export default function WebsiteAdsForm({
           <input
             value={form.juicyAdsZoneNative}
             onChange={(e) => set("juicyAdsZoneNative", e.target.value)}
+            className={inputClass}
+          />
+        </label>
+        <label className="block space-y-1.5">
+          <span className="text-sm text-zinc-400">JuicyAds floating corner zone ID (300x250 vidfloat)</span>
+          <input
+            value={form.juicyAdsZoneVidfloat}
+            onChange={(e) => set("juicyAdsZoneVidfloat", e.target.value)}
+            className={inputClass}
+          />
+        </label>
+        <label className="block space-y-1.5">
+          <span className="text-sm text-zinc-400">JuicyAds in-video zone ID (overlay inside the player)</span>
+          <input
+            value={form.juicyAdsZoneInvideo}
+            onChange={(e) => set("juicyAdsZoneInvideo", e.target.value)}
             className={inputClass}
           />
         </label>

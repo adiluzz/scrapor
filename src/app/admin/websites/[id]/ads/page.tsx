@@ -28,6 +28,7 @@ export default async function WebsiteAdsPage({ params }: { params: Promise<{ id:
         siteId={site.id}
         initial={{
           vastTagUrl: site.vastTagUrl,
+          vastTagUrlBackup: site.vastTagUrlBackup,
           adSkipSeconds: site.adSkipSeconds,
           adMinViewSeconds: site.adMinViewSeconds,
           adTimeoutMs: site.adTimeoutMs,
@@ -42,6 +43,8 @@ export default async function WebsiteAdsPage({ params }: { params: Promise<{ id:
           juicyAdsSiteId: site.juicyAdsSiteId,
           juicyAdsZoneBanner: site.juicyAdsZoneBanner,
           juicyAdsZoneNative: site.juicyAdsZoneNative,
+          juicyAdsZoneVidfloat: site.juicyAdsZoneVidfloat,
+          juicyAdsZoneInvideo: site.juicyAdsZoneInvideo,
           stripchatWidgetId: site.stripchatWidgetId,
           stripchatAffiliateUrl: site.stripchatAffiliateUrl,
           adsPopunderEnabled: site.adsPopunderEnabled,

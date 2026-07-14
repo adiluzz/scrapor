@@ -1,9 +1,10 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useRef, useState } from "react";
+import { Fragment, useEffect, useRef, useState } from "react";
 import type { VideoCardData } from "@/lib/queries";
 import VideoCardPreview from "@/components/site/VideoCardPreview";
+import AdTile from "@/components/ads/AdTile";
 
 function timeAgo(date: Date | string) {
   const d = new Date(date);
@@ -87,10 +88,18 @@ function Card({
 export default function VideoGrid({
   videos,
   hrefPrefix = "/videos",
+  adTileZoneId,
+  adTileInsClass,
+  adTilePositions = [],
 }: {
   videos: VideoCardData[];
   /** Link prefix before `/${slug}` (default: public `/videos`). Must be a string — not a function — so Server Components can pass it. */
   hrefPrefix?: string;
+  /** Exo native zone for card-sized in-grid ad tiles (hidden on no-fill). */
+  adTileZoneId?: string | null;
+  adTileInsClass?: string | null;
+  /** 1-based card positions where an ad tile is inserted (e.g. [4, 12]). */
+  adTilePositions?: number[];
 }) {
   const [playingId, setPlayingId] = useState<string | null>(null);
   const [isTouch, setIsTouch] = useState(false);
@@ -126,23 +135,29 @@ export default function VideoGrid({
     return <p className="py-20 text-center text-zinc-500">No videos found.</p>;
   }
 
+  const tilePositions = adTileZoneId ? adTilePositions : [];
+
   return (
     <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
-      {videos.map((v) => (
-        <Card
-          key={v.id}
-          v={v}
-          href={`${hrefPrefix}/${v.slug}`}
-          playing={playingId === v.id}
-          onEnter={() => !isTouch && setPlayingId(v.id)}
-          onLeave={() => !isTouch && setPlayingId((p) => (p === v.id ? null : p))}
-          register={(el) => {
-            if (el) {
-              el.dataset.vid = v.id;
-              els.current.set(v.id, el);
-            } else els.current.delete(v.id);
-          }}
-        />
+      {videos.map((v, i) => (
+        <Fragment key={v.id}>
+          {tilePositions.includes(i + 1) && (
+            <AdTile zoneId={adTileZoneId} insClass={adTileInsClass} />
+          )}
+          <Card
+            v={v}
+            href={`${hrefPrefix}/${v.slug}`}
+            playing={playingId === v.id}
+            onEnter={() => !isTouch && setPlayingId(v.id)}
+            onLeave={() => !isTouch && setPlayingId((p) => (p === v.id ? null : p))}
+            register={(el) => {
+              if (el) {
+                el.dataset.vid = v.id;
+                els.current.set(v.id, el);
+              } else els.current.delete(v.id);
+            }}
+          />
+        </Fragment>
       ))}
     </div>
   );

@@ -154,23 +154,32 @@ export default async function HomePage({
           <JsonLd data={organizationJsonLd(base, site)} />
         </>
       )}
-      <AdZone zoneId={site.exoZoneHome ?? undefined} insClass={site.exoInsClass} className="mb-5" />
-      {site.adsJuicyEnabled && (
-        <JuicyAdZone zoneId={site.juicyAdsZoneBanner} enabled className="mb-5" />
-      )}
-      <div className="mb-5 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <h1 className="min-w-0 text-lg font-semibold break-words text-zinc-100 sm:text-xl">
-          {isSearch ? (
-            <>Results for &ldquo;{params.q}&rdquo;</>
-          ) : (
-            site.homeH1 || site.name
-          )}
-        </h1>
-        <Filters />
+      {/* Mobile: banners stacked on top. Desktop (lg): sticky 300px right sidebar. */}
+      <div className="flex flex-col gap-5 lg:flex-row lg:items-start lg:gap-6">
+        <aside className="lg:order-2 lg:w-[300px] lg:shrink-0">
+          <div className="space-y-5 lg:sticky lg:top-20">
+            <AdZone zoneId={site.exoZoneHome ?? undefined} insClass={site.exoInsClass} />
+            {site.adsJuicyEnabled && (
+              <JuicyAdZone zoneId={site.juicyAdsZoneBanner} enabled />
+            )}
+          </div>
+        </aside>
+        <div className="min-w-0 flex-1 lg:order-1">
+          <div className="mb-5 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <h1 className="min-w-0 text-lg font-semibold break-words text-zinc-100 sm:text-xl">
+              {isSearch ? (
+                <>Results for &ldquo;{params.q}&rdquo;</>
+              ) : (
+                site.homeH1 || site.name
+              )}
+            </h1>
+            <Filters />
+          </div>
+          <VideoGridWithNativeAd videos={videos} site={site} />
+          <Pagination page={params.page} totalPages={totalPages} />
+          {!isSearch && <SiteSeoIntro site={site} />}
+        </div>
       </div>
-      <VideoGridWithNativeAd videos={videos} site={site} />
-      <Pagination page={params.page} totalPages={totalPages} />
-      {!isSearch && <SiteSeoIntro site={site} />}
     </>
   );
 }

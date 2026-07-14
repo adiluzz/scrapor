@@ -613,6 +613,7 @@ def _process_one(run, source_site, video) -> ProcessOutcome:
                 tags=video.get("tags"), pornstars=video.get("pornstars"),
                 categories=video.get("categories"),
                 target_site_ids=run.get("targetSiteIds") or [site_id],
+                source_upload_date=video.get("upload_date"),
             )
             _enqueue_pornstar_tpdb(new_pornstar_ids)
 
@@ -955,6 +956,7 @@ def _normalize_candidate(c: dict) -> dict:
         "url": c.get("url") or "",
         "title": c.get("title") or "Unknown",
         "description": c.get("description") or "",
+        "upload_date": c.get("upload_date") or c.get("uploadDate") or "",
         "tags": c.get("tags") or [],
         "pornstars": c.get("pornstars") or [],
         "categories": c.get("categories") or [],

@@ -1,4 +1,7 @@
+"use client";
+
 import AdZone from "@/components/ads/AdZone";
+import JuicyAdZone from "@/components/ads/JuicyAdZone";
 import VideoGrid from "@/components/site/VideoGrid";
 import type { VideoCardData } from "@/lib/queries";
 
@@ -12,8 +15,52 @@ type SiteAds = {
 };
 
 /**
- * Video grid with in-feed Exo mid banner + card-sized Exo/Juicy tiles mixed
- * among video previews.
+ * Mid-feed strip: three side-by-side banners (Exo mid / Exo grid / Juicy banner
+ * when available; otherwise the mid zone is reused so the row stays full).
+ */
+function MidBannerRow({
+  midZone,
+  secondaryExo,
+  juicyBanner,
+  juicyOn,
+  insClass,
+}: {
+  midZone: string;
+  secondaryExo?: string | null;
+  juicyBanner?: string | null;
+  juicyOn: boolean;
+  insClass?: string | null;
+}) {
+  const exoB = secondaryExo && secondaryExo !== midZone ? secondaryExo : midZone;
+  const useJuicy = Boolean(juicyOn && juicyBanner);
+
+  return (
+    <div className="my-1 w-full">
+      <p className="mb-2 text-center text-[10px] uppercase tracking-wide text-zinc-600">
+        Advertisement
+      </p>
+      <div className="grid grid-cols-1 items-start justify-items-center gap-3 sm:grid-cols-3">
+        <AdZone zoneId={midZone} insClass={insClass} minHeight={90} label={false} />
+        <AdZone zoneId={exoB} insClass={insClass} minHeight={90} label={false} />
+        {useJuicy ? (
+          <JuicyAdZone
+            zoneId={juicyBanner}
+            enabled={juicyOn}
+            label={false}
+            width={300}
+            height={250}
+          />
+        ) : (
+          <AdZone zoneId={midZone} insClass={insClass} minHeight={90} label={false} />
+        )}
+      </div>
+    </div>
+  );
+}
+
+/**
+ * Video grid with in-feed 3-banner mid row + card-sized Exo/Juicy tiles.
+ * Mid banners insert only after a complete video row (measured client-side).
  */
 export default function VideoGridWithNativeAd({
   videos,
@@ -24,56 +71,38 @@ export default function VideoGridWithNativeAd({
 }) {
   const midZone = site.exoZoneMidList || site.exoZoneGridNative;
   const showMid = Boolean(midZone) && videos.length >= 6;
-  const splitAt = showMid ? Math.min(8, Math.floor(videos.length / 2)) : videos.length;
-  const first = videos.slice(0, splitAt);
-  const rest = videos.slice(splitAt);
   const juicyOn = site.adsJuicyEnabled !== false;
   // Dedicated in-grid Juicy zone only (300×250 banner). Do not reuse the
   // sidebar/sticky banner ID — Juicy zone IDs must be unique on the page.
   const juicyTileZone = site.juicyAdsZoneNative;
-
-  // Card-sized ad tiles at overall positions ~4 (Exo) and ~6 (Juicy).
   const tileZone = site.exoZoneGridNative;
-  const firstTilePositions = [4].filter((p) => p <= first.length);
-  const secondTilePositions = [12 - splitAt].filter((p) => p >= 1 && p <= rest.length);
-  const firstJuicyPositions = juicyOn && juicyTileZone ? [6].filter((p) => p <= first.length) : [];
-  const secondJuicyPositions =
-    juicyOn && juicyTileZone && firstJuicyPositions.length === 0
-      ? [Math.min(2, rest.length)].filter((p) => p >= 1)
-      : [];
+
+  const midBanner =
+    showMid && midZone ? (
+      <MidBannerRow
+        midZone={midZone}
+        secondaryExo={
+          site.exoZoneMidList && site.exoZoneGridNative
+            ? site.exoZoneGridNative
+            : null
+        }
+        juicyBanner={site.juicyAdsZoneBanner}
+        juicyOn={juicyOn}
+        insClass={site.exoInsClass}
+      />
+    ) : null;
 
   return (
-    <>
-      <VideoGrid
-        videos={first}
-        adTileZoneId={tileZone}
-        adTileInsClass={site.exoInsClass}
-        adTilePositions={firstTilePositions}
-        juicyTileZoneId={juicyTileZone}
-        juicyTileEnabled={juicyOn}
-        juicyTilePositions={firstJuicyPositions}
-      />
-      {showMid && (
-        <div className="ad-slot my-5">
-          <AdZone zoneId={midZone} insClass={site.exoInsClass} minHeight={90} />
-        </div>
-      )}
-      {rest.length > 0 && (
-        <VideoGrid
-          videos={rest}
-          adTileZoneId={tileZone}
-          adTileInsClass={site.exoInsClass}
-          adTilePositions={secondTilePositions}
-          juicyTileZoneId={juicyTileZone}
-          juicyTileEnabled={juicyOn && firstJuicyPositions.length === 0}
-          juicyTilePositions={secondJuicyPositions}
-        />
-      )}
-      {!showMid && site.exoZoneGridNative && videos.length > 0 && (
-        <div className="ad-slot mt-5">
-          <AdZone zoneId={site.exoZoneGridNative} insClass={site.exoInsClass} minHeight={90} />
-        </div>
-      )}
-    </>
+    <VideoGrid
+      videos={videos}
+      adTileZoneId={tileZone}
+      adTileInsClass={site.exoInsClass}
+      adTilePositions={tileZone ? [4] : []}
+      juicyTileZoneId={juicyTileZone}
+      juicyTileEnabled={juicyOn}
+      juicyTilePositions={juicyOn && juicyTileZone ? [6] : []}
+      midBanner={midBanner}
+      midAfterRows={2}
+    />
   );
 }

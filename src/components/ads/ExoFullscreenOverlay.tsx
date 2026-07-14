@@ -1,7 +1,11 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { EXO_INS_CLASS, serveExoAds } from "@/lib/exo-click";
+import {
+  EXO_ZONE_TYPE,
+  exoInsClassFor,
+  serveExoAds,
+} from "@/lib/exo-click";
 
 const SESSION_KEY = "exo_fullscreen_shown";
 
@@ -11,15 +15,21 @@ const SESSION_KEY = "exo_fullscreen_shown";
  * Exo triggers this format on click (per zone Frequency / Trigger settings),
  * not on bare page load. We only mark the session after Exo fires
  * `creativeDisplayed-{zoneId}` so empty fills can retry.
+ *
+ * The `<ins>` class must end with zone type 35 (not the banner `…2`), and
+ * `a.orbsrv.com/ad-provider.js` must be loaded — magsrv does not serve FPI.
  */
 export default function ExoFullscreenOverlay({
   zoneId,
-  insClass = EXO_INS_CLASS,
+  insClass,
 }: {
   zoneId?: string | null;
   insClass?: string | null;
 }) {
-  const resolvedClass = insClass || EXO_INS_CLASS;
+  const resolvedClass = exoInsClassFor(
+    EXO_ZONE_TYPE.DESKTOP_FULLPAGE,
+    insClass
+  );
   const [enabled, setEnabled] = useState(false);
 
   useEffect(() => {
@@ -50,15 +60,12 @@ export default function ExoFullscreenOverlay({
 
   if (!zoneId || !enabled) return null;
 
-  // Exo expects a normal <ins> tag (see ad-provider docs). Zero-size clip/absolute
-  // wrappers can prevent Desktop/Mobile Fullpage Interstitial from binding click
-  // triggers. Keep the slot in-DOM but visually inert until Exo opens its overlay.
+  // No extra data-* attrs: AdProvider forwards every data-* into custom_targeting.
   return (
     <ins
-      className={resolvedClass}
+      className={`${resolvedClass} exo-click-trigger`}
       data-zoneid={zoneId}
       aria-hidden="true"
-      data-ad-format="fullscreen"
     />
   );
 }

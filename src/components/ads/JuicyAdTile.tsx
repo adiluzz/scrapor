@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import InGridAdShell from "@/components/ads/InGridAdShell";
 
 const JADS_SRC = "https://poweredby.jads.co/js/jads.js";
 
@@ -11,7 +12,7 @@ declare global {
 }
 
 /**
- * In-grid Juicy ad matching a video thumbnail (16:9 only — no title footer).
+ * In-grid Juicy ad matching a video card (16:9 media + fixed meta strip).
  * Cover-scales the fixed creative into the media box.
  */
 export default function JuicyAdTile({
@@ -72,8 +73,8 @@ export default function JuicyAdTile({
   if (!enabled || !zoneId) return null;
 
   return (
-    <div className="ad-slot-tile group block w-full min-w-[220px] self-start overflow-hidden rounded-xl border border-zinc-800 bg-zinc-900 transition-colors hover:border-zinc-600">
-      <div ref={mediaRef} className="ad-slot-tile-media relative aspect-video overflow-hidden bg-zinc-800">
+    <InGridAdShell>
+      <div ref={mediaRef} className="absolute inset-0 overflow-hidden">
         <div
           className="ad-slot-tile-scale"
           style={{
@@ -89,10 +90,7 @@ export default function JuicyAdTile({
             style={{ display: "block", width, height }}
           />
         </div>
-        <span className="pointer-events-none absolute bottom-1.5 left-1.5 z-[1] rounded bg-black/80 px-1.5 py-0.5 text-[11px] text-zinc-300">
-          Ad
-        </span>
       </div>
-    </div>
+    </InGridAdShell>
   );
 }

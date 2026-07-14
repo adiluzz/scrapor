@@ -66,8 +66,14 @@ export default async function SiteLayout({ children }: { children: React.ReactNo
       <BrandStyle primaryColor={site.primaryColor} />
       <ConsentModeDefault />
       {gaId ? <GoogleAnalytics measurementId={gaId} /> : null}
+      {/* magsrv: banners/native; orbsrv: desktop/mobile FPI; pemsrv: popunder.
+          Exo merges CDNs via handleCurrentDomain — one script alone cannot serve all formats. */}
       {!isStudio && site.exoInsClass ? (
-        <Script src="https://a.magsrv.com/ad-provider.js" strategy="afterInteractive" />
+        <>
+          <Script src="https://a.magsrv.com/ad-provider.js" strategy="afterInteractive" />
+          <Script src="https://a.orbsrv.com/ad-provider.js" strategy="afterInteractive" />
+          <Script src="https://a.pemsrv.com/ad-provider.js" strategy="afterInteractive" />
+        </>
       ) : null}
       <Header site={site} />
       <main className="mx-auto w-full px-3 py-4 sm:px-4 sm:py-6 lg:px-6">{children}</main>

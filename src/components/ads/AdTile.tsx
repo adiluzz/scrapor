@@ -1,22 +1,29 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import InGridAdShell from "@/components/ads/InGridAdShell";
 import { EXO_INS_CLASS, serveExoAds } from "@/lib/exo-click";
 
 /**
- * In-grid Exo ad matching a video thumbnail (16:9 only — no title footer).
- * Removes itself on no-fill so the grid never shows an empty card.
+ * In-grid Exo ad matching a video card (16:9 media + fixed meta strip).
+ * Cover-scales a 300×250 slot into the thumb; removes itself on no-fill.
  */
 export default function AdTile({
   zoneId,
   insClass = EXO_INS_CLASS,
+  width = 300,
+  height = 250,
 }: {
   zoneId?: string | null;
   insClass?: string | null;
+  width?: number;
+  height?: number;
 }) {
   const resolvedClass = insClass || EXO_INS_CLASS;
+  const mediaRef = useRef<HTMLDivElement>(null);
   const insRef = useRef<HTMLModElement>(null);
   const [noFill, setNoFill] = useState(false);
+  const [scale, setScale] = useState(1);
 
   useEffect(() => {
     if (!zoneId) return;
@@ -30,21 +37,51 @@ export default function AdTile({
     return () => clearTimeout(timer);
   }, [zoneId]);
 
+  useLayoutEffect(() => {
+    const el = mediaRef.current;
+    if (!el || !zoneId) return;
+
+    const update = () => {
+      const { width: w, height: h } = el.getBoundingClientRect();
+      if (w <= 0 || h <= 0) return;
+      setScale(Math.max(w / width, h / height));
+    };
+
+    update();
+    const ro = new ResizeObserver(update);
+    ro.observe(el);
+    const t1 = window.setTimeout(update, 400);
+    const t2 = window.setTimeout(update, 1500);
+    const t3 = window.setTimeout(update, 4000);
+    return () => {
+      ro.disconnect();
+      window.clearTimeout(t1);
+      window.clearTimeout(t2);
+      window.clearTimeout(t3);
+    };
+  }, [zoneId, width, height]);
+
   if (!zoneId || noFill) return null;
 
   return (
-    <div className="ad-slot-tile group block w-full min-w-[220px] self-start overflow-hidden rounded-xl border border-zinc-800 bg-zinc-900 transition-colors hover:border-zinc-600">
-      <div className="ad-slot-tile-media relative aspect-video overflow-hidden bg-zinc-800">
-        <ins
-          ref={insRef}
-          className={resolvedClass}
-          data-zoneid={zoneId}
-          style={{ display: "block", width: "100%", height: "100%", position: "absolute", inset: 0 }}
-        />
-        <span className="pointer-events-none absolute bottom-1.5 left-1.5 rounded bg-black/80 px-1.5 py-0.5 text-[11px] text-zinc-300">
-          Ad
-        </span>
+    <InGridAdShell>
+      <div ref={mediaRef} className="absolute inset-0 overflow-hidden">
+        <div
+          className="ad-slot-tile-scale"
+          style={{
+            width,
+            height,
+            transform: `translate(-50%, -50%) scale(${scale})`,
+          }}
+        >
+          <ins
+            ref={insRef}
+            className={resolvedClass}
+            data-zoneid={zoneId}
+            style={{ display: "block", width, height }}
+          />
+        </div>
       </div>
-    </div>
+    </InGridAdShell>
   );
 }

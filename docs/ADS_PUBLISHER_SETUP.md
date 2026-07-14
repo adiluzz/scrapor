@@ -81,11 +81,14 @@ Admin field names must match exactly:
 5. **Desktop Fullpage Interstitial** only fires after a real user click (Exo
    zone Trigger Method). Mobile Fullpage Interstitial is a separate Exo format —
    if mobile fullscreen is needed, create that zone and paste its ID into
-   `exoZoneVideoFullscreen` (or keep desktop-only).
+   `exoZoneVideoFullscreen` (or keep desktop-only). Our embed uses the Exo
+   zone-type class suffix (`…35` for desktop FPI, `…3` for popunder) and loads
+   `magsrv` + `orbsrv` + `pemsrv` ad-provider scripts. Using only `magsrv` with
+   the banner class (`…2`) makes FPI/popunder return `allowed_domains` errors.
 6. **Mobile sticky** zones should be Exo format **Mobile Banner 320x50** (not
    Native). Wrong format still fills but looks broken / misaligned on mobile.
    If Exo leaves the sticky empty, the Juicy banner zone is used as fallback.
-7. Home desktop: full-width video grid (min card width 220px); Exo sticky
+7. Home desktop: full-width video grid (min card width 250px); Exo sticky
    right sidebar; Juicy sits in the grid as a card-sized tile (cover-scaled
    300×250 Banner). Mobile: Exo banner above the grid.
 8. Video desktop: Exo + Juicy side-by-side under the player; floating corner +

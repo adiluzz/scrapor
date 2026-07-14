@@ -1,7 +1,11 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { EXO_INS_CLASS, serveExoAds } from "@/lib/exo-click";
+import {
+  EXO_ZONE_TYPE,
+  exoInsClassFor,
+  serveExoAds,
+} from "@/lib/exo-click";
 
 const SESSION_KEY = "exo_popunder_fired";
 
@@ -9,17 +13,20 @@ const SESSION_KEY = "exo_popunder_fired";
  * ExoClick popunder — once per session on video pages.
  * The session is only marked after Exo confirms a serve via
  * `creativeDisplayed-{zoneId}`, so no-fill attempts retry on later pages.
+ *
+ * Class must end with zone type 3; needs `a.pemsrv.com/ad-provider.js`
+ * (magsrv rejects popunder IDs requested as banners).
  */
 export default function ExoPopunder({
   zoneId,
   enabled = true,
-  insClass = EXO_INS_CLASS,
+  insClass,
 }: {
   zoneId?: string | null;
   enabled?: boolean;
   insClass?: string | null;
 }) {
-  const resolvedClass = insClass || EXO_INS_CLASS;
+  const resolvedClass = exoInsClassFor(EXO_ZONE_TYPE.POPUNDER, insClass);
   const [active, setActive] = useState(false);
 
   useEffect(() => {
@@ -49,13 +56,11 @@ export default function ExoPopunder({
 
   if (!enabled || !zoneId || !active) return null;
 
-  // Popunder uses the same async <ins> pattern as banners; do not clip it away.
   return (
     <ins
-      className={resolvedClass}
+      className={`${resolvedClass} exo-click-trigger`}
       data-zoneid={zoneId}
       aria-hidden="true"
-      data-ad-format="popunder"
     />
   );
 }

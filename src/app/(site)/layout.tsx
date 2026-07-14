@@ -32,6 +32,10 @@ export async function generateMetadata(): Promise<Metadata> {
   if (site.juicyAdsSiteVerification) {
     other["juicyads-site-verification"] = site.juicyAdsSiteVerification;
   }
+  if (site.hilltopAdsSiteVerification) {
+    // HilltopAds uses the same string for meta name and content.
+    other[site.hilltopAdsSiteVerification] = site.hilltopAdsSiteVerification;
+  }
   return {
     title: { default: title, template: `%s · ${site.name}` },
     description,

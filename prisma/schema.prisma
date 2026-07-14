@@ -36,8 +36,10 @@ model Site {
   seoKeywords    String? // JSON string[]
   ogImagePath    String?
   exoSiteVerification String?
-  /// JuicyAds ownership meta content (`name="juicy-ads-site-verification"`).
+  /// JuicyAds ownership meta content (`name="juicyads-site-verification"`).
   juicyAdsSiteVerification String?
+  /// HilltopAds ownership token (emitted as meta name=content=token).
+  hilltopAdsSiteVerification String?
   homeH1         String?
   homeIntroHtml  String?
   /// GA4 measurement id for this host (e.g. G-XXXXXXXX).

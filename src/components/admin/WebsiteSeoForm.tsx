@@ -13,6 +13,7 @@ type SeoFields = {
   ogImagePath: string | null;
   exoSiteVerification: string | null;
   juicyAdsSiteVerification: string | null;
+  hilltopAdsSiteVerification: string | null;
   homeH1: string | null;
   homeIntroHtml: string | null;
   gaMeasurementId: string | null;
@@ -50,6 +51,7 @@ export default function WebsiteSeoForm({
     ogImagePath: initial.ogImagePath || "",
     exoSiteVerification: initial.exoSiteVerification || "",
     juicyAdsSiteVerification: initial.juicyAdsSiteVerification || "",
+    hilltopAdsSiteVerification: initial.hilltopAdsSiteVerification || "",
     homeH1: initial.homeH1 || "",
     homeIntroHtml: initial.homeIntroHtml || "",
     gaMeasurementId: initial.gaMeasurementId || "",
@@ -97,6 +99,7 @@ export default function WebsiteSeoForm({
           ogImagePath: nullIfEmpty(form.ogImagePath),
           exoSiteVerification: nullIfEmpty(form.exoSiteVerification),
           juicyAdsSiteVerification: nullIfEmpty(form.juicyAdsSiteVerification),
+          hilltopAdsSiteVerification: nullIfEmpty(form.hilltopAdsSiteVerification),
           homeH1: nullIfEmpty(form.homeH1),
           homeIntroHtml: nullIfEmpty(form.homeIntroHtml),
           gaMeasurementId: form.gaMeasurementId.trim() || null,
@@ -204,6 +207,20 @@ export default function WebsiteSeoForm({
           <span className="text-xs text-zinc-500">
             Paste only the content value from JuicyAds. Emitted site-wide as meta name
             juicyads-site-verification.
+          </span>
+        </label>
+
+        <label className="block space-y-1.5">
+          <span className="text-sm text-zinc-400">HilltopAds site verification</span>
+          <input
+            value={form.hilltopAdsSiteVerification}
+            onChange={(e) => set("hilltopAdsSiteVerification", e.target.value)}
+            className={inputClass}
+            placeholder="Token used as both meta name and content"
+          />
+          <span className="text-xs text-zinc-500">
+            Paste the HilltopAds meta token (name and content are the same). Emitted
+            site-wide as that meta tag.
           </span>
         </label>
 

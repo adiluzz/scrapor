@@ -30,6 +30,7 @@ export default async function WebsiteSeoPage({ params }: { params: Promise<{ id:
           ogImagePath: site.ogImagePath,
           exoSiteVerification: site.exoSiteVerification,
           juicyAdsSiteVerification: site.juicyAdsSiteVerification,
+          hilltopAdsSiteVerification: site.hilltopAdsSiteVerification,
           homeH1: site.homeH1,
           homeIntroHtml: site.homeIntroHtml,
           gaMeasurementId: site.gaMeasurementId,

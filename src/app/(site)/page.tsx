@@ -41,6 +41,9 @@ export async function generateMetadata({
   if (site.juicyAdsSiteVerification) {
     other["juicyads-site-verification"] = site.juicyAdsSiteVerification;
   }
+  if (site.hilltopAdsSiteVerification) {
+    other[site.hilltopAdsSiteVerification] = site.hilltopAdsSiteVerification;
+  }
 
   if (q && site.kind !== "STUDIO") {
     const title = searchPageTitle(q, site);

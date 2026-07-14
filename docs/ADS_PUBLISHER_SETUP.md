@@ -12,6 +12,7 @@ Admin field names must match exactly:
 | `exoInsClass` | ExoClick | Account `<ins>` class (e.g. `eas6a97888e2`) |
 | `exoSiteVerification` | ExoClick | Site verification meta (SEO form) |
 | `juicyAdsSiteVerification` | JuicyAds | Site verification meta content (SEO form) |
+| `hilltopAdsSiteVerification` | HilltopAds | Site verification token (SEO form; name=content) |
 | `exoZoneHome` | ExoClick | Banner or Native — home (desktop sidebar + mobile top) |
 | `exoZoneUnderPlayer` | ExoClick | Banner — under player (desktop beside Juicy) |
 | `exoZoneVideoFullscreen` | ExoClick | Fullpage Interstitial (1/session in code) |

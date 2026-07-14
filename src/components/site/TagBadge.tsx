@@ -19,32 +19,33 @@ export default function TagBadge({ name, slug, icon, href, className = "" }: Tag
     isVerifiedBadgeTag({ slug, icon }) || slug === PISS_SWALLOW_VERIFIED_SLUG;
   const showDrop = verified || icon === GOLDEN_DROP_ICON;
 
-  const inner = verified ? (
-    <span
-      className={`inline-flex items-center gap-2 rounded-full border border-brand-500/45 bg-gradient-to-r from-brand-950/90 via-zinc-900/90 to-brand-950/70 px-3 py-1.5 text-xs font-semibold tracking-wide text-brand-100 shadow-[0_0_14px_rgb(var(--brand-rgb)/0.12)] ${className}`}
-      title="Verified: contains piss swallow"
-    >
-      {showDrop && <GoldenDrop className="h-4 w-4 shrink-0" id={`tag-${slug}`} />}
+  const baseClass = verified
+    ? `inline-flex cursor-pointer items-center gap-2 rounded-full border border-brand-500/45 bg-gradient-to-r from-brand-950/90 via-zinc-900/90 to-brand-950/70 px-3 py-1.5 text-xs font-semibold tracking-wide text-brand-100 shadow-[0_0_14px_rgb(var(--brand-rgb)/0.12)] transition hover:border-brand-400/70 hover:shadow-[0_0_18px_rgb(var(--brand-rgb)/0.2)] ${className}`
+    : `inline-flex cursor-pointer items-center gap-1.5 rounded-full border border-transparent bg-zinc-800 px-3 py-1 text-xs font-medium text-zinc-300 transition hover:border-brand-500/40 hover:bg-zinc-700 hover:text-brand-300 ${className}`;
+
+  const content = (
+    <>
+      {showDrop && (
+        <GoldenDrop
+          className={verified ? "h-4 w-4 shrink-0" : "h-3.5 w-3.5 shrink-0"}
+          id={`tag-${slug}`}
+        />
+      )}
       <span>{name}</span>
-    </span>
-  ) : (
-    <span
-      className={`inline-flex items-center gap-1.5 rounded-full bg-zinc-800 px-3 py-1 text-xs font-medium text-zinc-300 ${className}`}
-    >
-      {showDrop && <GoldenDrop className="h-3.5 w-3.5 shrink-0" id={`tag-${slug}`} />}
-      {name}
-    </span>
+    </>
   );
 
   if (href) {
     return (
-      <Link
-        href={href}
-        className={`rounded-full transition-opacity hover:opacity-90 ${verified ? "hover:shadow-[0_0_18px_rgb(var(--brand-rgb)/0.2)]" : ""}`}
-      >
-        {inner}
+      <Link href={href} className={baseClass} title={verified ? "Verified: contains piss swallow" : undefined}>
+        {content}
       </Link>
     );
   }
-  return inner;
+
+  return (
+    <span className={baseClass.replace("cursor-pointer ", "")} title={verified ? "Verified: contains piss swallow" : undefined}>
+      {content}
+    </span>
+  );
 }

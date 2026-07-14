@@ -28,7 +28,6 @@ import FloatingCornerAd from "@/components/ads/FloatingCornerAd";
 import JuicyAdZone from "@/components/ads/JuicyAdZone";
 import StripchatWidget from "@/components/ads/StripchatWidget";
 import TagBadge from "@/components/site/TagBadge";
-import { isVerifiedBadgeTag } from "@/lib/verified-tags";
 
 export const dynamic = "force-dynamic";
 
@@ -223,20 +222,21 @@ export default async function VideoPage({
               )}
 
               {video.categories.length > 0 && (
-                <div className="mt-3 flex flex-wrap gap-2">
+                <div className="relative z-10 mt-3 flex flex-wrap gap-2">
                   {video.categories.map((c) => (
-                    <span
+                    <Link
                       key={c.categoryId}
-                      className="rounded-full bg-zinc-800 px-3 py-1 text-sm text-zinc-300"
+                      href={`/?q=${encodeURIComponent(c.category.name)}`}
+                      className="inline-flex cursor-pointer rounded-full border border-transparent bg-zinc-800 px-3 py-1 text-sm text-zinc-300 transition hover:border-brand-500/40 hover:bg-zinc-700 hover:text-brand-300"
                     >
                       {c.category.name}
-                    </span>
+                    </Link>
                   ))}
                 </div>
               )}
 
               {video.tags.length > 0 && (
-                <div className="mt-3 flex flex-wrap gap-2">
+                <div className="relative z-10 mt-3 flex flex-wrap gap-2">
                   {video.tags.map((t) => (
                     <TagBadge
                       key={t.tagId}
@@ -244,7 +244,6 @@ export default async function VideoPage({
                       slug={t.tag.slug}
                       icon={t.tag.icon}
                       href={`/tags/${t.tag.slug}`}
-                      className={isVerifiedBadgeTag(t.tag) ? "" : "hover:bg-zinc-700"}
                     />
                   ))}
                 </div>

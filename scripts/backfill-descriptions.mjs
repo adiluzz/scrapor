@@ -43,6 +43,9 @@ const BOILERPLATE_RES = [
 const SOURCE_RE = new RegExp(`(?:${SOURCES})`, "gi");
 const URL_RE = /https?:\/\/\S+|www\.\S+/gi;
 const LEAK_TEST = new RegExp(`(?:${SOURCES})|https?:\\/\\/|www\\.`, "i");
+// Cleaned residue that isn't worth keeping (promo begging, generic stubs).
+const JUNK_TEST = /onlyfans|ko-?fi|paypal|buy me (?:a )?coffee|telegram|discord/i;
+const MIN_CLEANED_LEN = 60;
 
 function cleanDescription(text) {
   if (!text) return null;
@@ -106,7 +109,10 @@ async function main() {
     let next = null;
     if (v.description && LEAK_TEST.test(v.description)) {
       next = cleanDescription(v.description);
-      if (!next) next = generateDescription(v, v.site.name);
+      // Cleaning often leaves a useless stub ("Enjoy watching!") — regenerate.
+      if (!next || next.length < MIN_CLEANED_LEN || JUNK_TEST.test(next)) {
+        next = generateDescription(v, v.site.name);
+      }
       cleaned++;
     } else if (!v.description || !v.description.trim()) {
       next = generateDescription(v, v.site.name);

@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { getCurrentSiteId, getSiteIdForAuth } from "@/lib/site";
 import { pornstarHasVideosOnSite } from "@/lib/pornstar-sites";
+import { tagHasVideosOnSite } from "@/lib/tag-sites";
 import { topSearches } from "@/lib/search";
 import { redis } from "@/lib/redis";
 import { guardApiRoute } from "@/lib/admin-guard";
@@ -48,8 +49,12 @@ export async function GET(request: Request) {
       take: 4,
     }),
     prisma.tag.findMany({
-      where: { siteId, name: { contains: q, mode: "insensitive" } },
+      where: {
+        ...tagHasVideosOnSite(siteId),
+        name: { contains: q, mode: "insensitive" },
+      },
       select: { name: true, slug: true },
+      distinct: ["slug"],
       take: 4,
     }),
     getTopSearches(siteId),

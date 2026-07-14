@@ -98,11 +98,24 @@ async function videosSitemap(base: string, site: Site, chunk: number): Promise<N
 }
 
 async function tagsSitemap(base: string, site: Site): Promise<NextResponse> {
-  const tags = await prisma.tag.findMany({ where: { siteId: site.id }, select: { slug: true } });
+  const grouped = await prisma.videoTag.groupBy({
+    by: ["tagId"],
+    where: {
+      video: {
+        isDeleted: false,
+        status: "READY",
+        sites: { some: { siteId: site.id } },
+      },
+    },
+  });
+  if (grouped.length === 0) return xmlResponse(renderSitemapXml(""));
+  const tags = await prisma.tag.findMany({
+    where: { id: { in: grouped.map((g) => g.tagId) } },
+    select: { slug: true },
+  });
+  const slugs = [...new Set(tags.map((t) => t.slug))];
   return xmlResponse(
-    renderSitemapXml(
-      tags.map((t) => renderUrlOnlySitemapEntry(`${base}/tags/${t.slug}`)).join("\n")
-    )
+    renderSitemapXml(slugs.map((slug) => renderUrlOnlySitemapEntry(`${base}/tags/${slug}`)).join("\n"))
   );
 }
 

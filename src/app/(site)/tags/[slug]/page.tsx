@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
-import { prisma } from "@/lib/db";
 import { getCurrentSite } from "@/lib/site";
+import { resolveTagForSite } from "@/lib/tag-sites";
 import { listVideos, parseDiscoveryParams } from "@/lib/queries";
 import {
   buildOpenGraph,
@@ -19,10 +19,6 @@ import JsonLd from "@/components/site/JsonLd";
 export const dynamic = "force-dynamic";
 type SearchParams = Record<string, string | string[] | undefined>;
 
-async function getTag(siteId: string, slug: string) {
-  return prisma.tag.findUnique({ where: { siteId_slug: { siteId, slug } } });
-}
-
 export async function generateMetadata({
   params,
 }: {
@@ -30,7 +26,7 @@ export async function generateMetadata({
 }): Promise<Metadata> {
   const { slug } = await params;
   const site = await getCurrentSite();
-  const tag = await getTag(site.id, slug);
+  const tag = await resolveTagForSite(site.id, slug);
   if (!tag) return { title: "Not found" };
   const title = tagPageTitle(tag.name, site);
   const description = tagPageDescription(tag.name, site);
@@ -58,12 +54,13 @@ export default async function TagPage({
 }) {
   const { slug } = await params;
   const site = await getCurrentSite();
-  const tag = await getTag(site.id, slug);
+  const tag = await resolveTagForSite(site.id, slug);
   if (!tag) notFound();
 
   const dp = parseDiscoveryParams(await searchParams);
+  // Match by slug so shared multi-tenant Tag rows still surface all site videos.
   const { videos, total, totalPages } = await listVideos(site.id, dp, {
-    tags: { some: { tagId: tag.id } },
+    tags: { some: { tag: { slug } } },
   });
   const base = await getSiteBaseUrl();
 

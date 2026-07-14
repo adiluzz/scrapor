@@ -38,7 +38,7 @@ export async function generateMetadata({
     other["6a97888e-site-verification"] = site.exoSiteVerification;
   }
   if (site.juicyAdsSiteVerification) {
-    other["juicy-ads-site-verification"] = site.juicyAdsSiteVerification;
+    other["juicyads-site-verification"] = site.juicyAdsSiteVerification;
   }
 
   if (q && site.kind !== "STUDIO") {

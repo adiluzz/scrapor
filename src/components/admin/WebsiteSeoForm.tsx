@@ -203,7 +203,7 @@ export default function WebsiteSeoForm({
           />
           <span className="text-xs text-zinc-500">
             Paste only the content value from JuicyAds. Emitted site-wide as meta name
-            juicy-ads-site-verification.
+            juicyads-site-verification.
           </span>
         </label>
 

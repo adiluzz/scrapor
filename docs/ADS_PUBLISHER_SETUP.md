@@ -41,7 +41,7 @@ Admin field names must match exactly:
 
 1. Publisher signup → add both domains (each site gets its own verification token).
 2. Paste the meta **content** into Admin → SEO → **JuicyAds site verification** per site
-   (emitted as `<meta name="juicy-ads-site-verification" content="…">`).
+   (emitted as `<meta name="juicyads-site-verification" content="…">`).
 3. Per site: banner zone + native zone → paste into `juicyAdsZoneBanner` / `juicyAdsZoneNative`.
 4. Paste site ID into `juicyAdsSiteId`; enable `adsJuicyEnabled`.
 

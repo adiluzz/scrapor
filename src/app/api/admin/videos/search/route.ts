@@ -8,6 +8,7 @@ export async function GET(request: Request) {
 
   const url = new URL(request.url);
   const q = (url.searchParams.get("q") || "").trim();
+  const siteId = (url.searchParams.get("siteId") || "").trim() || undefined;
   const limit = Math.min(30, Math.max(1, parseInt(url.searchParams.get("limit") || "20", 10)));
 
   if (q.length < 2) {
@@ -17,6 +18,10 @@ export async function GET(request: Request) {
   const videos = await prisma.video.findMany({
     where: {
       title: { contains: q, mode: "insensitive" },
+      isDeleted: false,
+      ...(siteId
+        ? { OR: [{ siteId }, { sites: { some: { siteId } } }] }
+        : {}),
     },
     orderBy: { viewCount: "desc" },
     take: limit,

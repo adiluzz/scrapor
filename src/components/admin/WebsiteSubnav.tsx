@@ -4,6 +4,7 @@ const tabs = [
   { key: "identity", label: "Identity", href: (id: string) => `/admin/websites/${id}` },
   { key: "seo", label: "SEO", href: (id: string) => `/admin/websites/${id}/seo` },
   { key: "ads", label: "Ads", href: (id: string) => `/admin/websites/${id}/ads` },
+  { key: "reddit", label: "Reddit", href: (id: string) => `/admin/websites/${id}/reddit` },
 ] as const;
 
 export default function WebsiteSubnav({
@@ -11,7 +12,7 @@ export default function WebsiteSubnav({
   active,
 }: {
   siteId: string;
-  active: "identity" | "seo" | "ads";
+  active: "identity" | "seo" | "ads" | "reddit";
 }) {
   return (
     <nav className="mt-4 mb-6 flex flex-wrap gap-2">

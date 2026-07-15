@@ -103,6 +103,27 @@ model Site {
   searches         SearchQuery[]
   applications     CreatorApplication[]
   apiKeys          ApiKey[]
+  reddit           SiteRedditCredentials?
+}
+
+/// Reddit API / Devvit app credentials for outbound posting (not exposed on public Site pages).
+model SiteRedditCredentials {
+  siteId       String   @id
+  site         Site     @relation(fields: [siteId], references: [id], onDelete: Cascade)
+  /// App client id from developers.reddit.com / Devvit.
+  clientId     String?
+  /// App client secret.
+  clientSecret String?
+  /// Long-lived OAuth refresh token (e.g. from oauth helper / CLI).
+  refreshToken String?
+  /// Reddit username the token belongs to (also used in User-Agent).
+  username     String?
+  /// Optional password for script-type apps (password grant fallback).
+  password     String?
+  /// Optional custom User-Agent; defaults to platform:app:version (by /u/username).
+  userAgent    String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
 }
 
 // Published membership: a video can appear on multiple sites.

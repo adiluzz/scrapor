@@ -185,6 +185,24 @@ export default function WebsiteAdsForm({
       </fieldset>
 
       <fieldset className="space-y-4 border-t border-zinc-800 pt-4">
+        <legend className="text-sm font-medium text-zinc-200">HilltopAds</legend>
+        <label className="block space-y-1.5">
+          <span className="text-sm text-zinc-400">Site verification token</span>
+          <input
+            value={form.hilltopAdsSiteVerification}
+            onChange={(e) => set("hilltopAdsSiteVerification", e.target.value)}
+            className={inputClass}
+            placeholder="Paste token from HilltopAds Verify Website meta tag"
+          />
+          <span className="text-xs text-zinc-500">
+            From Hilltop → Manage Site & Zones → Verify Website. Paste the meta token
+            (name and content are the same). Emitted site-wide after save. Also save
+            under SEO. Put VAST tag URLs in the VAST backup field above.
+          </span>
+        </label>
+      </fieldset>
+
+      <fieldset className="space-y-4 border-t border-zinc-800 pt-4">
         <legend className="text-sm font-medium text-zinc-200">ExoClick zones</legend>
         <label className="block space-y-1.5">
           <span className="text-sm text-zinc-400">Exo ins class</span>

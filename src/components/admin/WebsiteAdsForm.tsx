@@ -9,6 +9,7 @@ const inputClass =
 type AdsFields = {
   vastTagUrl: string | null;
   vastTagUrlBackup: string | null;
+  hilltopAdsSiteVerification: string | null;
   adSkipSeconds: number;
   adMinViewSeconds: number;
   adTimeoutMs: number;
@@ -43,6 +44,7 @@ export default function WebsiteAdsForm({
   const [form, setForm] = useState({
     vastTagUrl: initial.vastTagUrl || "",
     vastTagUrlBackup: initial.vastTagUrlBackup || "",
+    hilltopAdsSiteVerification: initial.hilltopAdsSiteVerification || "",
     adSkipSeconds: initial.adSkipSeconds,
     adMinViewSeconds: initial.adMinViewSeconds,
     adTimeoutMs: initial.adTimeoutMs,
@@ -86,6 +88,7 @@ export default function WebsiteAdsForm({
         body: JSON.stringify({
           vastTagUrl: empty(form.vastTagUrl),
           vastTagUrlBackup: empty(form.vastTagUrlBackup),
+          hilltopAdsSiteVerification: empty(form.hilltopAdsSiteVerification),
           adSkipSeconds: form.adSkipSeconds,
           adMinViewSeconds: form.adMinViewSeconds,
           adTimeoutMs: form.adTimeoutMs,

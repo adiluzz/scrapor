@@ -29,6 +29,7 @@ export default async function WebsiteAdsPage({ params }: { params: Promise<{ id:
         initial={{
           vastTagUrl: site.vastTagUrl,
           vastTagUrlBackup: site.vastTagUrlBackup,
+          hilltopAdsSiteVerification: site.hilltopAdsSiteVerification,
           adSkipSeconds: site.adSkipSeconds,
           adMinViewSeconds: site.adMinViewSeconds,
           adTimeoutMs: site.adTimeoutMs,

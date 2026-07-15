@@ -6,7 +6,8 @@ import { EXO_INS_CLASS, serveExoAds } from "@/lib/exo-click";
 
 /**
  * In-grid Exo ad matching a video card (16:9 media + fixed meta strip).
- * Cover-scales a 300×250 slot into the thumb; removes itself on no-fill.
+ * Cover-scales a 300×250 slot into the thumb. Keeps the card shell on
+ * no-fill so the grid row does not collapse short.
  */
 export default function AdTile({
   zoneId,
@@ -22,7 +23,7 @@ export default function AdTile({
   const resolvedClass = insClass || EXO_INS_CLASS;
   const mediaRef = useRef<HTMLDivElement>(null);
   const insRef = useRef<HTMLModElement>(null);
-  const [noFill, setNoFill] = useState(false);
+  const [empty, setEmpty] = useState(false);
   const [scale, setScale] = useState(1);
 
   useEffect(() => {
@@ -31,7 +32,7 @@ export default function AdTile({
     const check = () => {
       const el = insRef.current;
       if (!el) return;
-      if (el.childElementCount === 0 || el.offsetHeight === 0) setNoFill(true);
+      if (el.childElementCount === 0 || el.offsetHeight === 0) setEmpty(true);
     };
     const timer = setTimeout(check, 8000);
     return () => clearTimeout(timer);
@@ -61,11 +62,14 @@ export default function AdTile({
     };
   }, [zoneId, width, height]);
 
-  if (!zoneId || noFill) return null;
+  if (!zoneId) return null;
 
   return (
     <InGridAdShell>
-      <div ref={mediaRef} className="absolute inset-0 overflow-hidden">
+      <div
+        ref={mediaRef}
+        className={`absolute inset-0 overflow-hidden ${empty ? "opacity-40" : ""}`}
+      >
         <div
           className="ad-slot-tile-scale"
           style={{

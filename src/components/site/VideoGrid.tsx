@@ -2,7 +2,6 @@
 
 import Link from "next/link";
 import {
-  Fragment,
   useEffect,
   useLayoutEffect,
   useRef,
@@ -93,28 +92,101 @@ function Card({
   );
 }
 
-type Cell =
+type Item =
   | { kind: "video"; v: VideoCardData }
   | { kind: "exo" }
-  | { kind: "juicy" };
+  | { kind: "juicy" }
+  | { kind: "mid" };
+
+/**
+ * Pack videos into complete rows. In-grid ads take the last slot of a row so
+ * the mid banner never lands under a short row. Mid break is based on video
+ * rows only (never on ad tiles that may later no-fill).
+ */
+function buildItems({
+  videos,
+  cols,
+  midBanner,
+  midAfterRows,
+  wantExo,
+  wantJuicy,
+}: {
+  videos: VideoCardData[];
+  cols: number | null;
+  midBanner: ReactNode;
+  midAfterRows: number;
+  wantExo: boolean;
+  wantJuicy: boolean;
+}): Item[] {
+  // Until column count is measured, render videos only (no mid/ads).
+  if (!cols || cols < 1) {
+    return videos.map((v) => ({ kind: "video" as const, v }));
+  }
+
+  const items: Item[] = [];
+  let vi = 0;
+  const pushVideos = (n: number) => {
+    for (let k = 0; k < n && vi < videos.length; k++) {
+      items.push({ kind: "video", v: videos[vi++]! });
+    }
+  };
+
+  const rowsBeforeMid = Math.max(1, midAfterRows);
+  // Prefer Juicy for the pre-mid in-grid slot (usually fills); Exo after mid.
+  const preMidAd: "juicy" | "exo" | null = wantJuicy
+    ? "juicy"
+    : wantExo
+      ? "exo"
+      : null;
+  const postMidAd: "juicy" | "exo" | null =
+    preMidAd === "juicy" && wantExo
+      ? "exo"
+      : preMidAd === "exo" && wantJuicy
+        ? "juicy"
+        : preMidAd === null && wantExo
+          ? "exo"
+          : preMidAd === null && wantJuicy
+            ? "juicy"
+            : null;
+
+  for (let row = 0; row < rowsBeforeMid && vi < videos.length; row++) {
+    const putAd = row === 0 && preMidAd && videos.length >= cols;
+    if (putAd) {
+      pushVideos(cols - 1);
+      items.push({ kind: preMidAd });
+    } else {
+      pushVideos(cols);
+    }
+  }
+
+  if (midBanner && vi > 0 && vi < videos.length) {
+    items.push({ kind: "mid" });
+  }
+
+  if (postMidAd && vi + (cols - 1) <= videos.length) {
+    pushVideos(cols - 1);
+    items.push({ kind: postMidAd });
+  }
+
+  while (vi < videos.length) {
+    pushVideos(videos.length - vi);
+  }
+
+  return items;
+}
 
 /**
  * Responsive grid. Desktop: hover swaps in muted looping preview clip.
  * Mobile (no hover): an IntersectionObserver plays the single most in-view
  * card's preview at a time.
- *
- * Optional mid banner row spans full width and is inserted only after a
- * complete grid row so the row above it is never short.
  */
 export default function VideoGrid({
   videos,
   hrefPrefix = "/videos",
   adTileZoneId,
   adTileInsClass,
-  adTilePositions = [],
   juicyTileZoneId,
   juicyTileEnabled = true,
-  juicyTilePositions = [],
   midBanner = null,
   midAfterRows = 2,
 }: {
@@ -122,18 +194,18 @@ export default function VideoGrid({
   hrefPrefix?: string;
   adTileZoneId?: string | null;
   adTileInsClass?: string | null;
+  /** @deprecated ignored — placement is column-aligned */
   adTilePositions?: number[];
   juicyTileZoneId?: string | null;
   juicyTileEnabled?: boolean;
+  /** @deprecated ignored — placement is column-aligned */
   juicyTilePositions?: number[];
-  /** Full-width row between video rows (e.g. 3 mid banners). */
   midBanner?: ReactNode;
-  /** Prefer inserting mid banner after this many complete rows (default 2). */
   midAfterRows?: number;
 }) {
   const [playingId, setPlayingId] = useState<string | null>(null);
   const [isTouch, setIsTouch] = useState(false);
-  const [cols, setCols] = useState(1);
+  const [cols, setCols] = useState<number | null>(null);
   const gridRef = useRef<HTMLDivElement>(null);
   const els = useRef<Map<string, HTMLElement>>(new Map());
   const ratios = useRef<Map<string, number>>(new Map());
@@ -184,75 +256,68 @@ export default function VideoGrid({
     return <p className="py-20 text-center text-zinc-500">No videos found.</p>;
   }
 
-  const tilePositions = adTileZoneId ? adTilePositions : [];
-  const juicyPositions =
-    juicyTileEnabled && juicyTileZoneId ? juicyTilePositions : [];
-
-  const cells: Cell[] = [];
-  for (let i = 0; i < videos.length; i++) {
-    if (tilePositions.includes(i + 1)) cells.push({ kind: "exo" });
-    if (juicyPositions.includes(i + 1)) cells.push({ kind: "juicy" });
-    cells.push({ kind: "video", v: videos[i]! });
-  }
-
-  // Insert mid banner only after a full row of cells.
-  let midAt = -1;
-  if (midBanner && cells.length > cols) {
-    const preferred = cols * Math.max(1, midAfterRows);
-    midAt = Math.min(preferred, Math.floor(cells.length / cols) * cols);
-    // Keep at least one full row after the mid banners when possible.
-    if (cells.length - midAt < cols && midAt > cols) {
-      midAt = midAt - cols;
-    }
-    if (midAt < cols) midAt = cols;
-    if (midAt >= cells.length) midAt = -1;
-  }
-
-  const renderCell = (cell: Cell, key: string) => {
-    if (cell.kind === "exo") {
-      return <AdTile key={key} zoneId={adTileZoneId} insClass={adTileInsClass} />;
-    }
-    if (cell.kind === "juicy") {
-      return (
-        <JuicyAdTile
-          key={key}
-          zoneId={juicyTileZoneId}
-          enabled={juicyTileEnabled}
-        />
-      );
-    }
-    const v = cell.v;
-    return (
-      <Card
-        key={key}
-        v={v}
-        href={`${hrefPrefix}/${v.slug}`}
-        playing={playingId === v.id}
-        onEnter={() => !isTouch && setPlayingId(v.id)}
-        onLeave={() => !isTouch && setPlayingId((p) => (p === v.id ? null : p))}
-        register={(el) => {
-          if (el) {
-            el.dataset.vid = v.id;
-            els.current.set(v.id, el);
-          } else els.current.delete(v.id);
-        }}
-      />
-    );
-  };
+  const wantExo = Boolean(adTileZoneId);
+  const wantJuicy = Boolean(juicyTileEnabled && juicyTileZoneId);
+  const items = buildItems({
+    videos,
+    cols,
+    midBanner,
+    midAfterRows,
+    wantExo,
+    wantJuicy,
+  });
 
   return (
     <div
       ref={gridRef}
       className="grid grid-cols-[repeat(auto-fill,minmax(250px,1fr))] items-stretch gap-3"
     >
-      {cells.map((cell, i) => (
-        <Fragment key={cell.kind === "video" ? cell.v.id : `${cell.kind}-${i}`}>
-          {midAt === i && midBanner ? (
-            <div className="col-span-full">{midBanner}</div>
-          ) : null}
-          {renderCell(cell, cell.kind === "video" ? cell.v.id : `${cell.kind}-${i}`)}
-        </Fragment>
-      ))}
+      {items.map((item, i) => {
+        if (item.kind === "mid") {
+          return (
+            <div key={`mid-${i}`} className="col-span-full">
+              {midBanner}
+            </div>
+          );
+        }
+        if (item.kind === "exo") {
+          return (
+            <AdTile
+              key={`exo-${i}`}
+              zoneId={adTileZoneId}
+              insClass={adTileInsClass}
+            />
+          );
+        }
+        if (item.kind === "juicy") {
+          return (
+            <JuicyAdTile
+              key={`juicy-${i}`}
+              zoneId={juicyTileZoneId}
+              enabled={juicyTileEnabled}
+            />
+          );
+        }
+        const v = item.v;
+        return (
+          <Card
+            key={v.id}
+            v={v}
+            href={`${hrefPrefix}/${v.slug}`}
+            playing={playingId === v.id}
+            onEnter={() => !isTouch && setPlayingId(v.id)}
+            onLeave={() =>
+              !isTouch && setPlayingId((p) => (p === v.id ? null : p))
+            }
+            register={(el) => {
+              if (el) {
+                el.dataset.vid = v.id;
+                els.current.set(v.id, el);
+              } else els.current.delete(v.id);
+            }}
+          />
+        );
+      })}
     </div>
   );
 }

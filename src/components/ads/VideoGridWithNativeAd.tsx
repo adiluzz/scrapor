@@ -60,7 +60,7 @@ function MidBannerRow({
 
 /**
  * Video grid with in-feed 3-banner mid row + card-sized Exo/Juicy tiles.
- * Mid banners insert only after a complete video row (measured client-side).
+ * Mid banners and in-grid tiles are placed on complete rows only.
  */
 export default function VideoGridWithNativeAd({
   videos,
@@ -72,8 +72,6 @@ export default function VideoGridWithNativeAd({
   const midZone = site.exoZoneMidList || site.exoZoneGridNative;
   const showMid = Boolean(midZone) && videos.length >= 6;
   const juicyOn = site.adsJuicyEnabled !== false;
-  // Dedicated in-grid Juicy zone only (300×250 banner). Do not reuse the
-  // sidebar/sticky banner ID — Juicy zone IDs must be unique on the page.
   const juicyTileZone = site.juicyAdsZoneNative;
   const tileZone = site.exoZoneGridNative;
 
@@ -97,10 +95,8 @@ export default function VideoGridWithNativeAd({
       videos={videos}
       adTileZoneId={tileZone}
       adTileInsClass={site.exoInsClass}
-      adTilePositions={tileZone ? [4] : []}
       juicyTileZoneId={juicyTileZone}
       juicyTileEnabled={juicyOn}
-      juicyTilePositions={juicyOn && juicyTileZone ? [6] : []}
       midBanner={midBanner}
       midAfterRows={2}
     />

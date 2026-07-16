@@ -420,25 +420,27 @@
   }
 }
 
-/* Desktop: cap player height so video + controls fit a normal viewport (ultrawide / tall 16:9). */
+/* Desktop: cap player height so video + controls fit a normal viewport.
+   Keep selectors simple — Lightning CSS drops rules that use :not(:-webkit-full-screen). */
 @media (min-width: 1024px) {
-  .video-player-root:not(.video-player-immersive):not(:fullscreen):not(:-webkit-full-screen) {
+  .video-player-root {
     --player-viewport-max-height: calc(100dvh - 14rem);
+  }
+
+  .video-player-root:not(.video-player-immersive):not(:fullscreen) {
     width: min(100%, calc(var(--player-viewport-max-height) * 16 / 9));
     max-height: var(--player-viewport-max-height);
     margin-left: auto;
     margin-right: auto;
   }
 
-  .video-player-root:not(.video-player-immersive):not(:fullscreen):not(:-webkit-full-screen)
-    [data-vjs-player] {
+  .video-player-root:not(.video-player-immersive):not(:fullscreen) [data-vjs-player] {
     width: 100%;
     max-height: var(--player-viewport-max-height);
     aspect-ratio: 16 / 9;
   }
 
-  .video-player-root:not(.video-player-immersive):not(:fullscreen):not(:-webkit-full-screen)
-    .video-js.vjs-fluid {
+  .video-player-root:not(.video-player-immersive):not(:fullscreen) .video-js.vjs-fluid {
     width: 100% !important;
     height: 100% !important;
     max-height: var(--player-viewport-max-height);

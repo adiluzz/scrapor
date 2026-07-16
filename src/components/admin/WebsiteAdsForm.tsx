@@ -299,7 +299,7 @@ export default function WebsiteAdsForm({
           Enable Stripchat widget on video pages
         </label>
         <label className="block space-y-1.5">
-          <span className="text-sm text-zinc-400">Stripchat widget ID</span>
+          <span className="text-sm text-zinc-400">Stripchat widget ID or full widget URL</span>
           <input
             value={form.stripchatWidgetId}
             onChange={(e) => set("stripchatWidgetId", e.target.value)}

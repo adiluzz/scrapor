@@ -1,5 +1,23 @@
 "use client";
 
+function resolveStripchatWidgetSrc(raw: string | null | undefined): string | null {
+  const value = raw?.trim();
+  if (!value) return null;
+  if (value.startsWith("https://") || value.startsWith("http://")) return value;
+  return `https://go.mavrck.co/widget/${encodeURIComponent(value)}`;
+}
+
+function isStripchatWidgetUrl(url: string): boolean {
+  try {
+    const { hostname, pathname } = new URL(url);
+    if (hostname === "go.mavrck.co" && pathname.startsWith("/widget/")) return true;
+    if (hostname.endsWith("whitetrafsa.com") && pathname.includes("/widgets/")) return true;
+    return false;
+  } catch {
+    return false;
+  }
+}
+
 /**
  * Stripchat cam affiliate — widget iframe when widget id/url is set, else sponsored link.
  */
@@ -13,18 +31,11 @@ export default function StripchatWidget({
   enabled?: boolean;
 }) {
   if (!enabled) return null;
-  const rawWidget = widgetId?.trim();
   const url = affiliateUrl?.trim();
-  if (!rawWidget && !url) return null;
-
-  let widgetSrc: string | null = null;
-  if (rawWidget) {
-    if (rawWidget.startsWith("https://") || rawWidget.startsWith("http://")) {
-      widgetSrc = rawWidget;
-    } else {
-      widgetSrc = `https://go.mavrck.co/widget/${encodeURIComponent(rawWidget)}`;
-    }
-  }
+  const widgetSrc =
+    resolveStripchatWidgetSrc(widgetId) ??
+    (url && isStripchatWidgetUrl(url) ? url : null);
+  if (!widgetSrc && !url) return null;
 
   return (
     <aside className="rounded-xl border border-zinc-800 bg-zinc-900/60 p-4">

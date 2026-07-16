@@ -307,7 +307,9 @@ export default function WebsiteAdsForm({
           />
         </label>
         <label className="block space-y-1.5">
-          <span className="text-sm text-zinc-400">Stripchat affiliate URL (fallback if no widget ID)</span>
+          <span className="text-sm text-zinc-400">
+            Stripchat affiliate URL (plain tracking link fallback; widget URLs here also embed)
+          </span>
           <input
             value={form.stripchatAffiliateUrl}
             onChange={(e) => set("stripchatAffiliateUrl", e.target.value)}

@@ -422,7 +422,12 @@ export default forwardRef(function VideoPlayer(
       if (!player.isFullscreen()) autoLandscapeFullscreen.current = false;
     });
 
+    const onResize = () => player.trigger("resize");
+    window.addEventListener("resize", onResize);
+    window.requestAnimationFrame(onResize);
+
     return () => {
+      window.removeEventListener("resize", onResize);
       scrubCleanupRef.current?.();
       progressSeekCleanupRef.current?.();
       trackingAttachedRef.current = false;

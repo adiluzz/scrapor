@@ -423,7 +423,7 @@
 /* Desktop: cap player height so video + controls fit a normal viewport (ultrawide / tall 16:9). */
 @media (min-width: 1024px) {
   .video-player-root:not(.video-player-immersive):not(:fullscreen):not(:-webkit-full-screen) {
-    --player-viewport-max-height: calc(100dvh - 12rem);
+    --player-viewport-max-height: calc(100dvh - 14rem);
     width: min(100%, calc(var(--player-viewport-max-height) * 16 / 9));
     max-height: var(--player-viewport-max-height);
     margin-left: auto;

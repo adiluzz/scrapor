@@ -66,8 +66,9 @@ def compose_promo_ad(
         body_duration += seg_dur
 
         src = work / f"src_{video_id}.mp4"
+        storage_site = clip.get("storageSiteId") or site_id
         if not src.exists():
-            if not download_video(site_id, video_id, src):
+            if not download_video(storage_site, video_id, src):
                 raise FileNotFoundError(f"Cannot download video {video_id}")
 
         crop_norm = None

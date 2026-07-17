@@ -81,7 +81,8 @@ def process_iteration(conn, iteration_id: str) -> None:
             src = work_dir / f"ref_{clip['videoId']}.mp4"
             from media import download_video
 
-            if download_video(site_id, clip["videoId"], src):
+            storage_site = clip.get("storageSiteId") or site_id
+            if download_video(storage_site, clip["videoId"], src):
                 ref_image = work_dir / "ref_frame.jpg"
                 extract_frame(src, ref_image, float(clip["startSec"]) + 0.5)
 

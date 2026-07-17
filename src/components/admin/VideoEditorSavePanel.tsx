@@ -1,45 +1,74 @@
 "use client";
 
 import { useState } from "react";
-import type { OpenReelImportItem } from "@/components/admin/openreel/OpenReelFrame";
+import type { EditorClip } from "@/lib/video-editor-types";
+import { segmentsFromClips } from "@/lib/video-editor-types";
 
 /**
- * Upload an OpenReel-exported MP4 into the library via the video-editor upload API.
- * Optional server FFmpeg fallback when browser export is too heavy.
+ * Export timeline to library via server FFmpeg compose (S3 sources → CDN-ready publish).
  */
 export default function VideoEditorSavePanel({
   siteId,
   jobId,
   defaultTitle,
-  segments,
+  clips = [],
 }: {
   siteId: string;
   jobId?: string | null;
   defaultTitle?: string;
-  /** When AI/import items include in/out points, offer server render. */
-  segments?: OpenReelImportItem[];
+  clips?: EditorClip[];
 }) {
   const [title, setTitle] = useState(defaultTitle || "Edited video");
-  const [file, setFile] = useState<File | null>(null);
+  const [logoPosition, setLogoPosition] = useState<
+    "top-left" | "top-right" | "bottom-left" | "bottom-right"
+  >("bottom-right");
   const [status, setStatus] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [uploading, setUploading] = useState(false);
   const [rendering, setRendering] = useState(false);
+  const [uploading, setUploading] = useState(false);
+  const [file, setFile] = useState<File | null>(null);
 
-  const serverSegments = (segments || []).filter(
-    (s) =>
-      s.kind !== "image" &&
-      s.sourceVideoId &&
-      s.startSec != null &&
-      s.endSec != null &&
-      s.endSec > s.startSec
-  );
+  const validClips = clips.filter((c) => c.endSec > c.startSec);
 
-  async function upload() {
+  async function serverRender() {
+    if (validClips.length === 0) return;
+    setRendering(true);
+    setError(null);
+    setStatus("Queueing FFmpeg compose on server…");
+    try {
+      const res = await fetch("/api/admin/video-editor/auto-render", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          siteId,
+          title: title.trim() || "Edited video",
+          jobId: jobId || undefined,
+          logoPosition,
+          segments: segmentsFromClips(validClips),
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setError(data.error || "Render failed");
+        setStatus(null);
+        return;
+      }
+      setStatus(
+        `Render queued (promo ad ${data.promoAdId || "…"}). Check Admin → Ads when complete, or link to library in a future update.`
+      );
+    } catch {
+      setError("Render request failed");
+      setStatus(null);
+    } finally {
+      setRendering(false);
+    }
+  }
+
+  async function uploadFile() {
     if (!file || !siteId) return;
     setUploading(true);
     setError(null);
-    setStatus("Uploading…");
+    setStatus("Uploading to library (S3 + CDN)…");
     try {
       const qs = new URLSearchParams({
         siteId,
@@ -57,7 +86,7 @@ export default function VideoEditorSavePanel({
         setStatus(null);
         return;
       }
-      setStatus(`Saved as “${data.video?.title}” (${data.video?.slug})`);
+      setStatus(`Saved to library: “${data.video?.title}” (${data.video?.slug})`);
       setFile(null);
     } catch {
       setError("Upload failed");
@@ -67,48 +96,13 @@ export default function VideoEditorSavePanel({
     }
   }
 
-  async function serverRender() {
-    setRendering(true);
-    setError(null);
-    setStatus("Queueing FFmpeg compose…");
-    try {
-      const res = await fetch("/api/admin/video-editor/auto-render", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({
-          siteId,
-          title: title.trim() || "Edited video",
-          jobId: jobId || undefined,
-          segments: serverSegments.map((s) => ({
-            videoId: s.sourceVideoId,
-            title: s.title,
-            startSec: s.startSec,
-            endSec: s.endSec,
-          })),
-        }),
-      });
-      const data = await res.json();
-      if (!res.ok) {
-        setError(data.error || "Auto-render failed");
-        setStatus(null);
-        return;
-      }
-      setStatus(`Server render started (promo ad ${data.promoAdId || data.ad?.id || "queued"})`);
-    } catch {
-      setError("Auto-render request failed");
-      setStatus(null);
-    } finally {
-      setRendering(false);
-    }
-  }
-
   return (
     <div className="space-y-3 rounded-xl border border-zinc-800 bg-zinc-900/50 p-5">
       <div>
-        <h2 className="text-sm font-medium text-zinc-200">Save to library</h2>
+        <h2 className="text-sm font-medium text-zinc-200">Export</h2>
         <p className="mt-1 text-xs text-zinc-500">
-          Export MP4 from OpenReel, then upload it here. For long sources, prefer AI Auto-render
-          (server FFmpeg) if browser export fails.
+          Primary path: server FFmpeg from timeline clips (reads source MP4s from S3, applies logo
+          + crossfades). Optional: upload an external MP4 directly to the library.
         </p>
       </div>
 
@@ -122,13 +116,17 @@ export default function VideoEditorSavePanel({
       </label>
 
       <label className="block space-y-1.5">
-        <span className="text-sm text-zinc-400">Exported MP4</span>
-        <input
-          type="file"
-          accept="video/mp4,video/*"
-          onChange={(e) => setFile(e.target.files?.[0] || null)}
-          className="block w-full text-sm text-zinc-400 file:mr-3 file:rounded-lg file:border-0 file:bg-zinc-800 file:px-3 file:py-2 file:text-sm file:text-white"
-        />
+        <span className="text-sm text-zinc-400">Logo position</span>
+        <select
+          value={logoPosition}
+          onChange={(e) => setLogoPosition(e.target.value as typeof logoPosition)}
+          className="w-full rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm text-white"
+        >
+          <option value="bottom-right">Bottom right</option>
+          <option value="bottom-left">Bottom left</option>
+          <option value="top-right">Top right</option>
+          <option value="top-left">Top left</option>
+        </select>
       </label>
 
       {(error || status) && (
@@ -138,23 +136,35 @@ export default function VideoEditorSavePanel({
       <div className="flex flex-wrap gap-2">
         <button
           type="button"
-          disabled={!file || !siteId || uploading}
-          onClick={() => void upload()}
-          className="rounded-lg bg-zinc-100 px-4 py-2 text-sm font-medium text-zinc-900 hover:bg-white disabled:opacity-50"
+          disabled={validClips.length === 0 || !siteId || rendering}
+          onClick={() => void serverRender()}
+          className="rounded-lg bg-brand-600 px-4 py-2 text-sm font-medium text-white hover:bg-brand-500 disabled:opacity-50"
         >
-          {uploading ? "Uploading…" : "Upload to library"}
+          {rendering ? "Queuing…" : `Render ${validClips.length} clip(s) on server`}
         </button>
-        {serverSegments.length > 0 && (
+      </div>
+
+      <details className="text-xs text-zinc-500">
+        <summary className="cursor-pointer text-zinc-400 hover:text-zinc-300">
+          Upload external MP4 instead
+        </summary>
+        <div className="mt-3 space-y-2">
+          <input
+            type="file"
+            accept="video/mp4,video/*"
+            onChange={(e) => setFile(e.target.files?.[0] || null)}
+            className="block w-full text-sm text-zinc-400 file:mr-3 file:rounded-lg file:border-0 file:bg-zinc-800 file:px-3 file:py-2 file:text-sm file:text-white"
+          />
           <button
             type="button"
-            disabled={!siteId || rendering}
-            onClick={() => void serverRender()}
+            disabled={!file || !siteId || uploading}
+            onClick={() => void uploadFile()}
             className="rounded-lg border border-zinc-600 px-4 py-2 text-sm text-zinc-200 hover:bg-zinc-800 disabled:opacity-50"
           >
-            {rendering ? "Queuing…" : "Render on server"}
+            {uploading ? "Uploading…" : "Upload to library"}
           </button>
-        )}
-      </div>
+        </div>
+      </details>
     </div>
   );
 }

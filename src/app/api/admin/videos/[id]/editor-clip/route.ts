@@ -12,7 +12,7 @@ export const maxDuration = 600;
 const DEFAULT_END = 30;
 
 /**
- * Server-extracted short clip for OpenReel. Avoids loading full tube files in the browser.
+ * Server-extracted short clip for timeline preview. Avoids loading full tube files in the browser.
  * Query: startSec, endSec (max window MAX_EDITOR_CLIP_DURATION_SEC).
  */
 export async function GET(

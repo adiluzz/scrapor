@@ -19,20 +19,6 @@ const nextConfig = {
       },
     ];
   },
-  async headers() {
-    // OpenReel needs SharedArrayBuffer / WebCodecs (cross-origin isolation).
-    const isolation = [
-      { key: "Cross-Origin-Opener-Policy", value: "same-origin" },
-      { key: "Cross-Origin-Embedder-Policy", value: "require-corp" },
-      { key: "Cross-Origin-Resource-Policy", value: "same-origin" },
-    ];
-    return [
-      { source: "/admin/video-editor", headers: isolation },
-      { source: "/admin/video-editor/:path*", headers: isolation },
-      { source: "/openreel", headers: isolation },
-      { source: "/openreel/:path*", headers: isolation },
-    ];
-  },
 };
 
 module.exports = nextConfig;

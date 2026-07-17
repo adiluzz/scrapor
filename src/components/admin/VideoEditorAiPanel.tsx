@@ -148,8 +148,8 @@ export default function VideoEditorAiPanel({
       <div>
         <h2 className="text-sm font-medium text-zinc-200">AI highlight (Bedrock)</h2>
         <p className="mt-1 text-xs text-zinc-500">
-          Uses the videos you checked in Library (server-side from S3). No OpenReel import required
-          before analyze. When done, segments are loaded into the editor automatically.
+          Uses the videos you checked in Library (server-side from S3). Segments are added to the
+          timeline when analysis completes.
         </p>
       </div>
 
@@ -200,7 +200,7 @@ export default function VideoEditorAiPanel({
             checked={mode === "ANALYZE_OPEN"}
             onChange={() => setMode("ANALYZE_OPEN")}
           />
-          Analyze → open in OpenReel
+          Analyze → add to timeline
         </label>
         <label className="flex items-center gap-2">
           <input
@@ -241,7 +241,7 @@ export default function VideoEditorAiPanel({
         onClick={() => void start()}
         className="rounded-lg bg-brand-600 px-5 py-2.5 text-sm font-medium text-white hover:bg-brand-500 disabled:opacity-50"
       >
-        {loading ? "Running…" : mode === "AUTO_RENDER" ? "Analyze & auto-render" : "Analyze & open"}
+        {loading ? "Running…" : mode === "AUTO_RENDER" ? "Analyze & auto-render" : "Analyze & add clips"}
       </button>
     </div>
   );

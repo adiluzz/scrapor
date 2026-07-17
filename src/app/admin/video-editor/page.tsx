@@ -1,34 +1,28 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import LibraryMediaProvider from "@/components/admin/openreel/LibraryMediaProvider";
-import OpenReelFrame, {
-  editorClipUrl,
-  type OpenReelImportItem,
-} from "@/components/admin/openreel/OpenReelFrame";
+import LibraryMediaProvider from "@/components/admin/video-editor/LibraryMediaProvider";
+import ScraporVideoEditor from "@/components/admin/video-editor/ScraporVideoEditor";
 import VideoEditorAiPanel from "@/components/admin/VideoEditorAiPanel";
-import VideoEditorSavePanel from "@/components/admin/VideoEditorSavePanel";
+import { type EditorClip, newClipId } from "@/lib/video-editor-types";
 
 type Tab = "editor" | "ai";
 
 function VideoEditorWorkspace({
   siteId,
-  logoUrl,
   videoIds,
-  importItems,
-  setSegmentItems,
+  clips,
+  setClips,
   searchUi,
 }: {
   siteId: string;
-  logoUrl: string | null;
   videoIds: string[];
-  importItems: OpenReelImportItem[];
-  setSegmentItems: (items: OpenReelImportItem[]) => void;
+  clips: EditorClip[];
+  setClips: (clips: EditorClip[]) => void;
   searchUi: React.ReactNode;
 }) {
   const [tab, setTab] = useState<Tab>("editor");
   const [jobId, setJobId] = useState<string | null>(null);
-  const [editorKey, setEditorKey] = useState(0);
   const [controlsOpen, setControlsOpen] = useState(true);
 
   const onSegmentsReady = useCallback(
@@ -42,40 +36,35 @@ function VideoEditorWorkspace({
       id: string
     ) => {
       setJobId(id);
-      const items: OpenReelImportItem[] = segments.map((s, i) => ({
-        id: `${s.videoId}-${i}-${s.startSec}`,
-        title: `${s.title} (${s.startSec.toFixed(1)}–${s.endSec.toFixed(1)}s)`,
-        url: editorClipUrl(s.videoId, s.startSec, s.endSec),
-        kind: "video",
-        sourceVideoId: s.videoId,
+      const next: EditorClip[] = segments.map((s) => ({
+        id: newClipId(s.videoId),
+        videoId: s.videoId,
+        title: s.title,
         startSec: s.startSec,
         endSec: s.endSec,
-        pretrimmed: true,
       }));
-      setSegmentItems(items);
-      setEditorKey((k) => k + 1);
+      setClips(next);
       setTab("editor");
       setControlsOpen(false);
     },
-    [setSegmentItems]
+    [setClips]
   );
 
   return (
     <div className="flex min-h-screen flex-col">
-      {/* Top toolbar + collapsible controls */}
       <div className="shrink-0 border-b border-zinc-800 bg-zinc-950">
         <div className="flex flex-wrap items-center justify-between gap-3 px-4 py-3 sm:px-6">
           <div className="min-w-0">
             <h1 className="text-lg font-semibold text-white sm:text-xl">Video editor</h1>
             <p className="hidden text-xs text-zinc-500 sm:block">
-              Library & AI controls on top · OpenReel full width below
+              Multi-clip timeline · server FFmpeg export · CDN-ready library publish
             </p>
           </div>
           <div className="flex flex-wrap items-center gap-2">
             <div className="flex rounded-lg border border-zinc-800 p-0.5">
               {(
                 [
-                  ["editor", "OpenReel"],
+                  ["editor", "Timeline"],
                   ["ai", "AI highlight"],
                 ] as const
               ).map(([id, label]) => (
@@ -118,21 +107,28 @@ function VideoEditorWorkspace({
                   onSegmentsReady={onSegmentsReady}
                 />
               ) : (
-                <VideoEditorSavePanel siteId={siteId} jobId={jobId} segments={importItems} />
+                <div className="rounded-xl border border-zinc-800 bg-zinc-900/50 p-5 text-sm text-zinc-400">
+                  <h2 className="text-sm font-medium text-zinc-200">Quick start</h2>
+                  <ul className="mt-2 list-inside list-disc space-y-1 text-xs text-zinc-500">
+                    <li>Search the library and add videos to the timeline</li>
+                    <li>Select each clip to set in/out points with the player</li>
+                    <li>Reorder clips on the timeline strip</li>
+                    <li>Render on server — FFmpeg composes with site logo and crossfades</li>
+                    <li>Or use AI highlight to auto-find best moments</li>
+                  </ul>
+                </div>
               )}
             </div>
           </div>
         )}
       </div>
 
-      {/* Full-width editor */}
-      <div className="flex min-h-0 flex-1 flex-col px-2 pb-2 pt-2 sm:px-4 sm:pb-4">
-        <OpenReelFrame
-          key={editorKey}
-          items={importItems}
-          logoUrl={logoUrl}
-          tall
-          className="h-full w-full"
+      <div className="flex min-h-0 flex-1 flex-col px-2 pb-4 pt-3 sm:px-6">
+        <ScraporVideoEditor
+          siteId={siteId}
+          clips={clips}
+          onClipsChange={setClips}
+          jobId={jobId}
         />
       </div>
     </div>
@@ -146,7 +142,15 @@ export default function AdminVideoEditorPage() {
 
   return (
     <LibraryMediaProvider>
-      {(ctx) => <VideoEditorWorkspace {...ctx} />}
+      {(ctx) => (
+        <VideoEditorWorkspace
+          siteId={ctx.siteId}
+          videoIds={ctx.videoIds}
+          clips={ctx.clips}
+          setClips={ctx.setClips}
+          searchUi={ctx.searchUi}
+        />
+      )}
     </LibraryMediaProvider>
   );
 }

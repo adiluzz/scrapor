@@ -30,8 +30,7 @@
     "ollama:docker": "bash scripts/start-ollama-docker.sh",
     "dev:video-assistant": "bash scripts/start-video-assistant.sh",
     "mcp:browser": "node mcp/browser-automation-server/server.mjs",
-    "openapi:validate": "swagger-cli validate openapi/openapi.yaml",
-    "build:openreel": "bash scripts/build-openreel.sh"
+    "openapi:validate": "swagger-cli validate openapi/openapi.yaml"
   },
   "dependencies": {
     "@ai-sdk/amazon-bedrock": "^3.0.105",

@@ -75,13 +75,3 @@ coverage/
 # ── OS junk ───────────────────────────────────────────────────────────
 .DS_Store
 Thumbs.db
-vendor/openreel/node_modules
-
-# OpenReel vendor: keep source, drop build/IDE junk
-vendor/openreel/**/node_modules/
-vendor/openreel/**/dist/
-vendor/openreel/.superpowers/
-vendor/openreel/**/xcuserdata/
-vendor/openreel/**/*.xcuserstate
-vendor/openreel/**/local.properties
-vendor/openreel/**/.DS_Store

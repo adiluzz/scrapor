@@ -24,7 +24,7 @@ const schema = z.object({
 });
 
 /**
- * Server FFmpeg compose from explicit segments (OpenReel fallback / AI auto-render).
+ * Server FFmpeg compose from explicit timeline segments / AI auto-render.
  * Creates manual detections + CLIP_COMPOSE promo ad iteration.
  */
 export async function POST(request: Request) {

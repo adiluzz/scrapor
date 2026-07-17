@@ -52,7 +52,7 @@ async function resolveSourcePath(videoId: string, siteId: string): Promise<strin
 }
 
 /**
- * Extract a short MP4 segment for OpenReel (cached). Returns absolute path to the clip file.
+ * Extract a short MP4 segment for editor preview (cached). Returns absolute path to the clip file.
  */
 export async function ensureEditorClip(input: {
   videoId: string;
@@ -85,7 +85,7 @@ export async function ensureEditorClip(input: {
   const tmpOut = `${outPath}.partial.mp4`;
   await rm(tmpOut, { force: true }).catch(() => {});
 
-  // Keyframe-accurate-ish extract with re-encode so OpenReel gets a clean short file.
+  // Keyframe-accurate-ish extract with re-encode for a clean short preview file.
   // -ss after -i is slower but more accurate for highlight windows.
   const args = [
     "-y",

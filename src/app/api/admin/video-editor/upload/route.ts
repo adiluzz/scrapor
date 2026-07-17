@@ -30,7 +30,7 @@ function sizeGuard(max: number) {
 }
 
 /**
- * Upload an OpenReel (or other) export MP4 into the library as a READY video.
+ * Upload an exported MP4 into the library as a READY video.
  * Query: siteId, title, jobId?, durationSec?
  * Body: raw video/mp4 stream
  */
@@ -76,7 +76,7 @@ export async function POST(request: Request) {
       publishSiteIds: [siteId],
       sourceUrl: `editor://${siteId}/${uploadId}`,
       title,
-      description: "Created in admin Video editor (OpenReel)",
+      description: "Created in admin Video editor",
       durationSec,
       sourceSite: "VideoEditor",
       status: isS3Configured() ? "READY" : "PENDING",

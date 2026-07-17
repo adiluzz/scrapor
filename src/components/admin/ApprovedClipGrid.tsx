@@ -1,8 +1,13 @@
 "use client";
 
 import DetectionClipCard, { type DetectionClip } from "@/components/admin/DetectionClipCard";
+import { adClipDownloadFilename, adClipDownloadUrl } from "@/lib/ad-clip-download";
 
-export type ApprovedClip = DetectionClip & { runId?: string };
+export type ApprovedClip = DetectionClip & {
+  runId?: string;
+  siteId?: string;
+  siteName?: string;
+};
 
 export default function ApprovedClipGrid({
   clips,
@@ -18,7 +23,7 @@ export default function ApprovedClipGrid({
   if (clips.length === 0) {
     return (
       <p className="rounded-xl border border-dashed border-zinc-700 p-8 text-center text-sm text-zinc-500">
-        No clips yet. Save or render clips from the Video editor — they appear here automatically.
+        No clips yet. Use Export → <strong className="font-medium text-zinc-400">Compile &amp; add to Ad clips</strong> in the video editor.
       </p>
     );
   }
@@ -40,6 +45,11 @@ export default function ApprovedClipGrid({
                 Select
               </label>
             )}
+            {clip.siteName && (
+              <span className="absolute right-3 top-3 z-10 rounded-lg bg-black/70 px-2 py-1 text-[10px] text-zinc-300">
+                {clip.siteName}
+              </span>
+            )}
             <div
               className={
                 selected ? "ring-2 ring-brand-500 ring-offset-2 ring-offset-zinc-950 rounded-xl" : ""
@@ -49,6 +59,9 @@ export default function ApprovedClipGrid({
                 detection={clip}
                 onFeedback={async () => {}}
                 busy
+                showDownload
+                downloadHref={adClipDownloadUrl(clip)}
+                downloadFilename={adClipDownloadFilename(clip.videoTitle, clip.label)}
               />
             </div>
           </div>

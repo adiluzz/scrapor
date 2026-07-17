@@ -1,6 +1,7 @@
 import { createReadStream } from "node:fs";
 import { NextResponse } from "next/server";
 import { guardAdmin } from "@/lib/admin-guard";
+import { prisma } from "@/lib/db";
 import { ensureEditorClip } from "@/lib/video-editor-clip";
 import { MAX_EDITOR_CLIP_DURATION_SEC } from "@/lib/video-editor-limits";
 import { logger } from "@/lib/logger";
@@ -26,6 +27,7 @@ export async function GET(
   const url = new URL(request.url);
   const startSec = parseFloat(url.searchParams.get("startSec") || "0");
   const endSec = parseFloat(url.searchParams.get("endSec") || String(DEFAULT_END));
+  const download = url.searchParams.get("download") === "1";
   if (!Number.isFinite(startSec) || !Number.isFinite(endSec) || endSec <= startSec) {
     return NextResponse.json({ error: "Invalid startSec/endSec" }, { status: 400 });
   }
@@ -38,16 +40,23 @@ export async function GET(
 
   try {
     const clip = await ensureEditorClip({ videoId: id, startSec, endSec });
-    const stream = createReadStream(clip.path);
-    return new NextResponse(stream as unknown as ReadableStream, {
-      headers: {
-        "Content-Type": "video/mp4",
-        "Content-Length": String(clip.bytes),
-        "Cache-Control": "private, max-age=3600",
-        "X-Editor-Clip-Start": String(clip.startSec),
-        "X-Editor-Clip-End": String(clip.endSec),
-      },
+    const video = await prisma.video.findUnique({
+      where: { id },
+      select: { title: true },
     });
+    const stream = createReadStream(clip.path);
+    const headers: Record<string, string> = {
+      "Content-Type": "video/mp4",
+      "Content-Length": String(clip.bytes),
+      "Cache-Control": "private, max-age=3600",
+      "X-Editor-Clip-Start": String(clip.startSec),
+      "X-Editor-Clip-End": String(clip.endSec),
+    };
+    if (download) {
+      const base = (video?.title || "clip").replace(/[^\w\s.-]+/g, "").trim().replace(/\s+/g, "-");
+      headers["Content-Disposition"] = `attachment; filename="${base.slice(0, 100) || "clip"}.mp4"`;
+    }
+    return new NextResponse(stream as unknown as ReadableStream, { headers });
   } catch (err) {
     logger.error({ err, videoId: id }, "editor-clip failed");
     const msg = err instanceof Error ? err.message : "Clip extract failed";

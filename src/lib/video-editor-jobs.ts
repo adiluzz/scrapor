@@ -1,6 +1,7 @@
 import { prisma } from "@/lib/db";
 import { packSegmentsToDuration } from "@/lib/video-editor-cost";
 import { approveDetectionsForAdClips } from "@/lib/ad-clips";
+import { syncPromoAdCompileStatus } from "@/lib/ad-clips-compile";
 
 export type EditorSegment = {
   videoId: string;
@@ -94,9 +95,14 @@ export async function syncVideoEditorJob(jobId: string) {
       },
     });
     if (ad?.status === "DONE" && ad.iterations[0]?.s3Key) {
+      const compiled = await syncPromoAdCompileStatus(job.promoAdId, job.createdByUserId);
       return prisma.videoEditorJob.update({
         where: { id: jobId },
-        data: { status: "DONE" },
+        data: {
+          status: "DONE",
+          resultVideoId:
+            compiled?.status === "DONE" ? compiled.videoId : job.resultVideoId ?? undefined,
+        },
       });
     }
     if (ad?.status === "ERROR") {

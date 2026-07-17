@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { EditorClip, EditorCrop, LibraryVideo } from "@/lib/video-editor-types";
+import type { ClipRange } from "@/components/admin/ClipRangeSelector";
 import {
   MIN_CLIP_DURATION_SEC,
   clipDurationSec,
@@ -52,7 +53,7 @@ export default function ScraporVideoEditor({
     note: string | null;
   };
   clips: EditorClip[];
-  onClipsChange: (clips: EditorClip[]) => void;
+  onClipsChange: React.Dispatch<React.SetStateAction<EditorClip[]>>;
   jobId?: string | null;
   onJobId?: (id: string) => void;
   videoIds: string[];
@@ -91,8 +92,8 @@ export default function ScraporVideoEditor({
       id: string,
       patch: Partial<Pick<EditorClip, "startSec" | "endSec" | "title" | "crop">>
     ) => {
-      onClipsChange(
-        clips.map((c) => {
+      onClipsChange((prev) =>
+        prev.map((c) => {
           if (c.id !== id) return c;
           const next = { ...c, ...patch };
           if ("crop" in patch && patch.crop === undefined) {
@@ -102,7 +103,7 @@ export default function ScraporVideoEditor({
         })
       );
     },
-    [clips, onClipsChange]
+    [onClipsChange]
   );
 
   const moveClip = useCallback(
@@ -139,30 +140,45 @@ export default function ScraporVideoEditor({
     [clips, onClipsChange]
   );
 
-  const addAnotherClipFromSource = useCallback(() => {
+  const addAnotherClipFromSource = useCallback(
+    (savedRange: ClipRange) => {
+      if (!selectedId) return;
+      onClipsChange((prev) => {
+        const idx = prev.findIndex((c) => c.id === selectedId);
+        if (idx < 0) return prev;
+        const current = {
+          ...prev[idx],
+          startSec: savedRange.startSec,
+          endSec: savedRange.endSec,
+        };
+        const afterSec = Math.max(current.endSec, playheadSec);
+        const { startSec, endSec } = suggestNextClipRange(
+          sourceDurationSec,
+          afterSec,
+          DEFAULT_PROXY_DURATION_SEC
+        );
+        const index = prev.filter((c) => c.videoId === current.videoId).length + 1;
+        const newClip: EditorClip = {
+          id: newClipId(current.videoId),
+          videoId: current.videoId,
+          title: numberedClipTitle(current.title, index),
+          startSec,
+          endSec,
+        };
+        const next = prev.map((c, i) => (i === idx ? current : c));
+        return [...next, newClip];
+      });
+    },
+    [selectedId, playheadSec, sourceDurationSec, onClipsChange]
+  );
+
+  const addAnotherClipFromCurrent = useCallback(() => {
     if (!selected) return;
-    const afterSec = Math.max(selected.endSec, playheadSec);
-    const { startSec, endSec } = suggestNextClipRange(
-      sourceDurationSec,
-      afterSec,
-      DEFAULT_PROXY_DURATION_SEC
-    );
-    const index =
-      clips.filter((c) => c.videoId === selected.videoId).length + 1;
-    const newClip: EditorClip = {
-      id: newClipId(selected.videoId),
-      videoId: selected.videoId,
-      title: numberedClipTitle(selected.title, index),
-      startSec,
-      endSec,
-    };
-    const idx = clips.findIndex((c) => c.id === selected.id);
-    const copy = [...clips];
-    copy.splice(idx + 1, 0, newClip);
-    onClipsChange(copy);
-    setSelectedId(newClip.id);
-    setPlayheadSec(startSec);
-  }, [selected, playheadSec, sourceDurationSec, clips, onClipsChange]);
+    addAnotherClipFromSource({
+      startSec: selected.startSec,
+      endSec: selected.endSec,
+    });
+  }, [selected, addAnotherClipFromSource]);
 
   const onRippleTrim = useCallback(
     (id: string, side: "in" | "out", newSec: number) => {
@@ -240,15 +256,14 @@ export default function ScraporVideoEditor({
       id: string
     ) => {
       onJobId?.(id);
-      onClipsChange(
-        segments.map((s) => ({
-          id: newClipId(s.videoId),
-          videoId: s.videoId,
-          title: s.title,
-          startSec: s.startSec,
-          endSec: s.endSec,
-        }))
-      );
+      const incoming = segments.map((s) => ({
+        id: newClipId(s.videoId),
+        videoId: s.videoId,
+        title: s.title,
+        startSec: s.startSec,
+        endSec: s.endSec,
+      }));
+      onClipsChange((prev) => (prev.length === 0 ? incoming : [...prev, ...incoming]));
       setInspectorTab("clip");
     },
     [onClipsChange, onJobId]
@@ -273,7 +288,7 @@ export default function ScraporVideoEditor({
         <button
           type="button"
           disabled={!selected}
-          onClick={addAnotherClipFromSource}
+          onClick={addAnotherClipFromCurrent}
           className="rounded-md border border-brand-500/40 bg-brand-950/20 px-2.5 py-1.5 text-xs text-brand-200 hover:bg-brand-950/40 disabled:opacity-40"
           title="Add another segment from the same source video"
         >
@@ -363,6 +378,7 @@ export default function ScraporVideoEditor({
                 </div>
                 <ClipRangeSelector
                   key={selected.id}
+                  clipId={selected.id}
                   compact
                   videoId={selected.videoId}
                   initialRange={{ startSec: selected.startSec, endSec: selected.endSec }}
@@ -453,10 +469,10 @@ export default function ScraporVideoEditor({
                     </dl>
                     <button
                       type="button"
-                      onClick={addAnotherClipFromSource}
+                      onClick={addAnotherClipFromCurrent}
                       className="w-full rounded-md border border-brand-500/40 bg-brand-950/20 py-1.5 text-xs text-brand-200 hover:bg-brand-950/40"
                     >
-                      + Another clip from this video
+                      + Add to timeline
                     </button>
                     <p className="text-[11px] leading-snug text-zinc-600">
                       Trim In/Out for this segment, then add another clip to cut a different

@@ -148,7 +148,7 @@ export default function ManualClipExtractor({
           {searching && <p className="text-xs text-zinc-600">Searching…</p>}
 
           {videoId && (
-            <ClipRangeSelector videoId={videoId} onRangeChange={setRange} />
+            <ClipRangeSelector clipId={videoId} videoId={videoId} onRangeChange={setRange} />
           )}
 
           <div className="grid gap-3 sm:grid-cols-2">

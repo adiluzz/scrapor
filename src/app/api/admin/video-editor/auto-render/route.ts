@@ -5,7 +5,6 @@ import { prisma } from "@/lib/db";
 import { enqueuePromoAdIteration } from "@/lib/promo-ad-queue";
 import { defaultModelParams, stringifyModelParams } from "@/lib/promo-ad/params";
 import { ensureDefaultVideoAgent } from "@/lib/video-agent-agent";
-import { approveDetectionsForAdClips } from "@/lib/ad-clips";
 import { logger } from "@/lib/logger";
 
 const cropSchema = z
@@ -94,7 +93,7 @@ export async function POST(request: Request) {
           startSec: seg.startSec,
           endSec: seg.endSec,
           confidence: 1,
-          manual: true,
+          manual: false,
           screenX: crop?.x ?? null,
           screenY: crop?.y ?? null,
           screenW: crop?.w ?? null,
@@ -104,8 +103,6 @@ export async function POST(request: Request) {
       detectionIds.push(det.id);
       cropAspects.push(crop?.aspect || "16:9");
     }
-
-    await approveDetectionsForAdClips(detectionIds, userId);
 
     const bodySec =
       d.maxBodySeconds ??

@@ -43,6 +43,9 @@ export default function DetectionClipCard({
   onDelete,
   labelOptions = [],
   busy,
+  showDownload = false,
+  downloadHref,
+  downloadFilename,
 }: {
   detection: DetectionClip;
   onFeedback: (detectionId: string, approved: boolean) => Promise<void>;
@@ -53,6 +56,9 @@ export default function DetectionClipCard({
   onDelete?: (detectionId: string) => Promise<void>;
   labelOptions?: string[];
   busy?: boolean;
+  showDownload?: boolean;
+  downloadHref?: string;
+  downloadFilename?: string;
 }) {
   const [error, setError] = useState<string | null>(null);
   const [editing, setEditing] = useState(false);
@@ -149,7 +155,12 @@ export default function DetectionClipCard({
       <div className="space-y-2 p-3">
         <div className="flex items-start justify-between gap-2">
           <p className="line-clamp-2 text-sm font-medium text-white">{detection.videoTitle}</p>
-          {detection.manual && (
+          {detection.label === "compiled" && (
+            <span className="shrink-0 rounded bg-emerald-900/50 px-1.5 py-0.5 text-[10px] uppercase tracking-wide text-emerald-300">
+              Compiled
+            </span>
+          )}
+          {detection.manual && detection.label !== "compiled" && (
             <span className="shrink-0 rounded bg-violet-900/50 px-1.5 py-0.5 text-[10px] uppercase tracking-wide text-violet-300">
               Manual
             </span>
@@ -224,6 +235,15 @@ export default function DetectionClipCard({
 
         {!editing && (
           <div className="flex flex-wrap gap-2 pt-1">
+            {showDownload && downloadHref && (
+              <a
+                href={downloadHref}
+                download={downloadFilename}
+                className="rounded-lg bg-zinc-800 px-3 py-2 text-xs font-medium text-zinc-200 hover:bg-zinc-700"
+              >
+                Download
+              </a>
+            )}
             {onUpdate && (
               <button
                 type="button"

@@ -35,6 +35,7 @@ export type ClipRange = {
 };
 
 export default function ClipRangeSelector({
+  clipId,
   videoId,
   initialRange,
   onRangeChange,
@@ -47,6 +48,8 @@ export default function ClipRangeSelector({
   onSourceDuration,
   onAddAnotherClip,
 }: {
+  /** Timeline clip id — used to sync trim state without overwriting other clips. */
+  clipId: string;
   videoId: string;
   initialRange?: ClipRange;
   onRangeChange?: (range: ClipRange) => void;
@@ -57,10 +60,14 @@ export default function ClipRangeSelector({
   showCrop?: boolean;
   onCurrentTimeChange?: (sec: number) => void;
   onSourceDuration?: (sec: number) => void;
-  /** Insert another timeline clip from this same source (different in/out). */
-  onAddAnotherClip?: () => void;
+  /** Append another timeline clip (same or other source). Passes current In/Out. */
+  onAddAnotherClip?: (savedRange: ClipRange) => void;
 }) {
   const playerRef = useRef<VideoPlayerHandle>(null);
+  const onRangeChangeRef = useRef(onRangeChange);
+  onRangeChangeRef.current = onRangeChange;
+  const syncingFromParent = useRef(false);
+  const skipNextCommit = useRef(false);
   const [duration, setDuration] = useState(0);
   const [current, setCurrent] = useState(0);
   const [playing, setPlaying] = useState(false);
@@ -70,20 +77,46 @@ export default function ClipRangeSelector({
   const [endText, setEndText] = useState("");
   const [localCrop, setLocalCrop] = useState<EditorCrop>(crop ?? fullFrameCrop());
 
+  const commitRange = useCallback((start: number, end: number) => {
+    onRangeChangeRef.current?.({ startSec: start, endSec: end });
+  }, []);
+
+  const applyRange = useCallback(
+    (start: number, end: number) => {
+      setStartSec(start);
+      setEndSec(end);
+      setStartText(formatTime(start));
+      setEndText(formatTime(end));
+      commitRange(start, end);
+    },
+    [commitRange]
+  );
+
   useEffect(() => {
-    setStartSec(initialRange?.startSec ?? 0);
-    setEndSec(initialRange?.endSec ?? 0);
-  }, [videoId, initialRange?.startSec, initialRange?.endSec]);
+    syncingFromParent.current = true;
+    skipNextCommit.current = true;
+    const start = initialRange?.startSec ?? 0;
+    const end = initialRange?.endSec ?? 0;
+    setStartSec(start);
+    setEndSec(end);
+    setStartText(formatTime(start));
+    setEndText(formatTime(end));
+    syncingFromParent.current = false;
+  }, [clipId, initialRange?.startSec, initialRange?.endSec]);
 
   useEffect(() => {
     setLocalCrop(crop ?? fullFrameCrop());
   }, [crop]);
 
   useEffect(() => {
+    if (skipNextCommit.current) {
+      skipNextCommit.current = false;
+      return;
+    }
     setStartText(formatTime(startSec));
     setEndText(formatTime(endSec));
-    onRangeChange?.({ startSec, endSec });
-  }, [startSec, endSec, onRangeChange]);
+    commitRange(startSec, endSec);
+  }, [startSec, endSec, commitRange]);
 
   const handleDuration = useCallback(
     (d: number) => {
@@ -122,20 +155,24 @@ export default function ClipRangeSelector({
     if (!player) return;
     await player.ensurePlaying();
     const t = player.getCurrentTime();
-    setStartSec(Math.max(0, t));
+    const nextStart = Math.max(0, t);
+    let nextEnd = endSec;
+    if (endSec <= t) nextEnd = Math.min(duration || t + 5, t + MIN_CLIP_DURATION_SEC + 5);
+    applyRange(nextStart, nextEnd);
     setCurrent(t);
-    if (endSec <= t) setEndSec(Math.min(duration || t + 5, t + MIN_CLIP_DURATION_SEC + 5));
-  }, [duration, endSec]);
+  }, [duration, endSec, applyRange]);
 
   const markEnd = useCallback(async () => {
     const player = playerRef.current;
     if (!player) return;
     await player.ensurePlaying();
     const t = player.getCurrentTime();
-    setEndSec(Math.max(t, startSec + MIN_CLIP_DURATION_SEC));
+    let nextStart = startSec;
+    const nextEnd = Math.max(t, startSec + MIN_CLIP_DURATION_SEC);
+    if (startSec >= t) nextStart = Math.max(0, t - 5);
+    applyRange(nextStart, nextEnd);
     setCurrent(t);
-    if (startSec >= t) setStartSec(Math.max(0, t - 5));
-  }, [startSec]);
+  }, [startSec, applyRange]);
 
   const togglePlay = useCallback(async () => {
     const player = playerRef.current;
@@ -201,8 +238,10 @@ export default function ClipRangeSelector({
     <div className={compact ? "space-y-2" : "space-y-3"}>
       <div className="relative aspect-video overflow-hidden rounded-lg bg-black">
         <AdminClipPlayer
+          key={clipId}
           ref={playerRef}
           videoId={videoId}
+          initialPositionSec={initialRange?.startSec ?? 0}
           onTimeUpdate={handleTime}
           onDuration={handleDuration}
         />
@@ -227,10 +266,7 @@ export default function ClipRangeSelector({
           startSec={startSec}
           endSec={endSec}
           currentSec={current}
-          onRangeChange={(r) => {
-            setStartSec(r.startSec);
-            setEndSec(r.endSec);
-          }}
+          onRangeChange={(r) => applyRange(r.startSec, r.endSec)}
           onSeek={seek}
         />
       )}
@@ -289,13 +325,17 @@ export default function ClipRangeSelector({
         {onAddAnotherClip && (
           <button
             type="button"
-            onClick={onAddAnotherClip}
+            onClick={() => {
+              const saved = { startSec, endSec };
+              commitRange(saved.startSec, saved.endSec);
+              onAddAnotherClip(saved);
+            }}
             className={`rounded-md border border-brand-500/40 bg-brand-950/30 text-brand-200 hover:bg-brand-950/50 ${
               compact ? "px-2.5 py-1 text-[11px] font-medium" : "px-3 py-1.5 text-xs"
             }`}
-            title="Keep this clip's range and add another segment from the same video"
+            title="Save this trim and append another clip to the timeline"
           >
-            + Another clip
+            + Add to timeline
           </button>
         )}
         {compact && endSec > startSec && (
@@ -317,7 +357,7 @@ export default function ClipRangeSelector({
               onChange={(e) => setStartText(e.target.value)}
               onBlur={() => {
                 const v = parseTimeInput(startText);
-                if (v != null) setStartSec(Math.max(0, Math.min(v, duration || v)));
+                if (v != null) applyRange(Math.max(0, Math.min(v, duration || v)), endSec);
               }}
               className="mt-1 w-full rounded-md border border-zinc-700 bg-zinc-950 px-2 py-1.5 text-sm text-white"
             />
@@ -329,7 +369,7 @@ export default function ClipRangeSelector({
               onChange={(e) => setEndText(e.target.value)}
               onBlur={() => {
                 const v = parseTimeInput(endText);
-                if (v != null) setEndSec(Math.max(0, Math.min(v, duration || v)));
+                if (v != null) applyRange(startSec, Math.max(0, Math.min(v, duration || v)));
               }}
               className="mt-1 w-full rounded-md border border-zinc-700 bg-zinc-950 px-2 py-1.5 text-sm text-white"
             />

@@ -5,9 +5,13 @@ import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 import ApprovedClipGrid, { type ApprovedClip } from "@/components/admin/ApprovedClipGrid";
 
+type SiteRow = { id: string; name: string; kind: string };
+
 export default function AdClipsPage() {
   const router = useRouter();
   const [clips, setClips] = useState<ApprovedClip[]>([]);
+  const [sites, setSites] = useState<SiteRow[]>([]);
+  const [siteId, setSiteId] = useState("");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
@@ -16,11 +20,24 @@ export default function AdClipsPage() {
     document.title = "Ad clips · Admin";
   }, []);
 
+  useEffect(() => {
+    void (async () => {
+      const res = await fetch("/api/admin/sites");
+      const data = await res.json();
+      if (!res.ok) return;
+      const list = ((data.sites || []) as SiteRow[]).filter(
+        (s) => s.kind === "TUBE" || s.kind === "STUDIO"
+      );
+      setSites(list);
+    })();
+  }, []);
+
   const loadClips = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
-      const res = await fetch("/api/promo-ads/clips");
+      const qs = siteId ? `?siteId=${encodeURIComponent(siteId)}` : "";
+      const res = await fetch(`/api/promo-ads/clips${qs}`);
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Failed to load clips");
       setClips(data.clips ?? []);
@@ -29,7 +46,7 @@ export default function AdClipsPage() {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [siteId]);
 
   useEffect(() => {
     loadClips();
@@ -58,8 +75,8 @@ export default function AdClipsPage() {
         <div>
           <h1 className="text-2xl font-bold text-white">Ad clips</h1>
           <p className="mt-1 text-sm text-zinc-400">
-            All saved clips from the Video editor (AI highlight and manual trims). Select clips to
-            open them on the timeline.
+            Compiled videos and saved segments from the Video editor. Select clips to open them on
+            the timeline.
           </p>
         </div>
         <Link
@@ -69,6 +86,24 @@ export default function AdClipsPage() {
           Open video editor
         </Link>
       </div>
+
+      {sites.length > 0 && (
+        <label className="flex max-w-xs flex-col gap-1 text-sm">
+          <span className="text-zinc-500">Filter by site</span>
+          <select
+            value={siteId}
+            onChange={(e) => setSiteId(e.target.value)}
+            className="rounded-lg border border-zinc-700 bg-zinc-900 px-3 py-2 text-white"
+          >
+            <option value="">All sites</option>
+            {sites.map((s) => (
+              <option key={s.id} value={s.id}>
+                {s.name}
+              </option>
+            ))}
+          </select>
+        </label>
+      )}
 
       {error && (
         <p className="rounded-lg border border-red-900/50 bg-red-950/40 px-4 py-3 text-sm text-red-300">

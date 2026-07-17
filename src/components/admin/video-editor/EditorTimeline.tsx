@@ -233,6 +233,9 @@ export default function EditorTimeline({
                       <span className="absolute bottom-1.5 left-2 right-2 truncate text-xs font-medium text-white drop-shadow">
                         {clip.title}
                       </span>
+                      <span className="absolute bottom-7 left-2 text-[9px] tabular-nums text-white/70">
+                        {formatEditorTime(clip.startSec, 0)}–{formatEditorTime(clip.endSec, 0)}
+                      </span>
                       <span className="absolute right-2 top-1 text-[10px] tabular-nums text-white/80">
                         {formatEditorDuration(dur)}
                       </span>

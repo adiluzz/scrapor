@@ -4,7 +4,6 @@ import { prisma } from "@/lib/db";
 import { syncVideoEditorJob } from "@/lib/video-editor-jobs";
 import { enqueuePromoAdIteration } from "@/lib/promo-ad-queue";
 import { stringifyModelParams, defaultModelParams } from "@/lib/promo-ad/params";
-import { approveDetectionsForAdClips } from "@/lib/ad-clips";
 
 export async function GET(_request: Request, { params }: { params: Promise<{ id: string }> }) {
   const auth = await guardAdmin(_request, "GET");
@@ -62,12 +61,11 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
                 startSec: seg.startSec,
                 endSec: seg.endSec,
                 confidence: 1,
-                manual: true,
+                manual: false,
               },
             });
             detectionIds.push(det.id);
           }
-          await approveDetectionsForAdClips(detectionIds, job.createdByUserId);
         }
 
         const modelParams = stringifyModelParams(

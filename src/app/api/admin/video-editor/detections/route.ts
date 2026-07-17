@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { guardAdmin } from "@/lib/admin-guard";
+import { isSessionAuth } from "@/lib/api-access";
 import { prisma } from "@/lib/db";
 
 /** Load approved/manual detections by id for opening in the video editor. */
@@ -21,7 +22,9 @@ export async function GET(request: Request) {
   const detections = await prisma.videoAgentDetection.findMany({
     where: {
       id: { in: ids },
-      run: { siteId: auth.siteId },
+      ...(isSessionAuth(auth) && auth.role === "ADMIN"
+        ? {}
+        : { run: { siteId: auth.siteId } }),
     },
     orderBy: { createdAt: "asc" },
   });

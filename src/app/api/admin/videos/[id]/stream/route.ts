@@ -9,7 +9,25 @@ import { isS3Configured, s3, S3_BUCKET, s3Keys } from "@/lib/storage";
 
 const DOWNLOADS_DIR = join(process.cwd(), "downloads");
 
-function streamLocalFile(filePath: string, request: Request) {
+function attachmentFilename(name: string): string {
+  const safe = name.replace(/[^\w\s.-]+/g, "").trim().replace(/\s+/g, "-").slice(0, 120);
+  return safe.endsWith(".mp4") ? safe : `${safe || "video"}.mp4`;
+}
+
+function withDownloadHeaders(
+  headers: Record<string, string>,
+  request: Request,
+  filename: string
+): Record<string, string> {
+  const url = new URL(request.url);
+  if (url.searchParams.get("download") !== "1") return headers;
+  return {
+    ...headers,
+    "Content-Disposition": `attachment; filename="${attachmentFilename(filename)}"`,
+  };
+}
+
+function streamLocalFile(filePath: string, request: Request, filename: string) {
   const stat = statSync(filePath);
   const range = request.headers.get("range");
 
@@ -20,25 +38,33 @@ function streamLocalFile(filePath: string, request: Request) {
     const chunkSize = end - start + 1;
     return new NextResponse(createReadStream(filePath, { start, end }) as unknown as ReadableStream, {
       status: 206,
-      headers: {
-        "Content-Range": `bytes ${start}-${end}/${stat.size}`,
-        "Accept-Ranges": "bytes",
-        "Content-Length": String(chunkSize),
-        "Content-Type": "video/mp4",
-      },
+      headers: withDownloadHeaders(
+        {
+          "Content-Range": `bytes ${start}-${end}/${stat.size}`,
+          "Accept-Ranges": "bytes",
+          "Content-Length": String(chunkSize),
+          "Content-Type": "video/mp4",
+        },
+        request,
+        filename
+      ),
     });
   }
 
   return new NextResponse(createReadStream(filePath) as unknown as ReadableStream, {
-    headers: {
-      "Content-Length": String(stat.size),
-      "Content-Type": "video/mp4",
-      "Accept-Ranges": "bytes",
-    },
+    headers: withDownloadHeaders(
+      {
+        "Content-Length": String(stat.size),
+        "Content-Type": "video/mp4",
+        "Accept-Ranges": "bytes",
+      },
+      request,
+      filename
+    ),
   });
 }
 
-async function streamS3File(key: string, request: Request) {
+async function streamS3File(key: string, request: Request, filename: string) {
   const head = await s3.send(new HeadObjectCommand({ Bucket: S3_BUCKET, Key: key }));
   const total = head.ContentLength ?? 0;
   const range = request.headers.get("range");
@@ -57,23 +83,31 @@ async function streamS3File(key: string, request: Request) {
     if (!obj.Body) return NextResponse.json({ error: "Empty object" }, { status: 404 });
     return new NextResponse(Readable.toWeb(obj.Body as Readable) as ReadableStream, {
       status: 206,
-      headers: {
-        "Content-Range": `bytes ${start}-${end}/${total}`,
-        "Accept-Ranges": "bytes",
-        "Content-Length": String(end - start + 1),
-        "Content-Type": "video/mp4",
-      },
+      headers: withDownloadHeaders(
+        {
+          "Content-Range": `bytes ${start}-${end}/${total}`,
+          "Accept-Ranges": "bytes",
+          "Content-Length": String(end - start + 1),
+          "Content-Type": "video/mp4",
+        },
+        request,
+        filename
+      ),
     });
   }
 
   const obj = await s3.send(new GetObjectCommand({ Bucket: S3_BUCKET, Key: key }));
   if (!obj.Body) return NextResponse.json({ error: "Empty object" }, { status: 404 });
   return new NextResponse(Readable.toWeb(obj.Body as Readable) as ReadableStream, {
-    headers: {
-      "Content-Length": String(total),
-      "Content-Type": "video/mp4",
-      "Accept-Ranges": "bytes",
-    },
+    headers: withDownloadHeaders(
+      {
+        "Content-Length": String(total),
+        "Content-Type": "video/mp4",
+        "Accept-Ranges": "bytes",
+      },
+      request,
+      filename
+    ),
   });
 }
 
@@ -89,9 +123,11 @@ export async function GET(
   const video = await prisma.video.findUnique({ where: { id } });
   if (!video) return NextResponse.json({ error: "Not found" }, { status: 404 });
 
+  const filename = video.title || "video";
+
   if (isS3Configured()) {
     try {
-      return await streamS3File(s3Keys.video(video.siteId, video.id), request);
+      return await streamS3File(s3Keys.video(video.siteId, video.id), request, filename);
     } catch {
       return NextResponse.json({ error: "Video missing" }, { status: 404 });
     }
@@ -99,7 +135,7 @@ export async function GET(
 
   for (const name of ["video.mp4", "preview.mp4"]) {
     const path = join(DOWNLOADS_DIR, video.id, name);
-    if (existsSync(path)) return streamLocalFile(path, request);
+    if (existsSync(path)) return streamLocalFile(path, request, filename);
   }
 
   return NextResponse.json({ error: "Video missing" }, { status: 404 });

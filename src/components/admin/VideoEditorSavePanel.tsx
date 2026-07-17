@@ -1,11 +1,12 @@
 "use client";
 
-import { useState } from "react";
+import Link from "next/link";
+import { useEffect, useRef, useState } from "react";
 import type { EditorClip } from "@/lib/video-editor-types";
 import { segmentsFromClips } from "@/lib/video-editor-types";
 
 /**
- * Export timeline to library via server FFmpeg compose (S3 sources → CDN-ready publish).
+ * Export timeline: compile all clips into one video and add it to Ad clips.
  */
 export default function VideoEditorSavePanel({
   siteId,
@@ -26,18 +27,117 @@ export default function VideoEditorSavePanel({
   >("bottom-right");
   const [status, setStatus] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [rendering, setRendering] = useState(false);
+  const [compiling, setCompiling] = useState(false);
   const [savingClips, setSavingClips] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [file, setFile] = useState<File | null>(null);
+  const [compiledDetectionId, setCompiledDetectionId] = useState<string | null>(null);
+  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const validClips = clips.filter((c) => c.endSec > c.startSec);
 
-  async function saveToAdClips() {
+  useEffect(() => {
+    return () => {
+      if (pollRef.current) clearInterval(pollRef.current);
+    };
+  }, []);
+
+  function stopPolling() {
+    if (pollRef.current) {
+      clearInterval(pollRef.current);
+      pollRef.current = null;
+    }
+  }
+
+  function startCompilePoll(promoAdId: string) {
+    stopPolling();
+    pollRef.current = setInterval(() => {
+      void (async () => {
+        try {
+          const res = await fetch(`/api/admin/video-editor/compile/${promoAdId}`);
+          const data = await res.json();
+          if (!res.ok) {
+            stopPolling();
+            setCompiling(false);
+            setError(data.error || "Compile status failed");
+            setStatus(null);
+            return;
+          }
+          if (data.status === "DONE") {
+            stopPolling();
+            setCompiling(false);
+            setCompiledDetectionId(data.detectionId ?? null);
+            setStatus(`Compiled video added to Ad clips: “${data.title}”.`);
+            return;
+          }
+          if (data.status === "ERROR") {
+            stopPolling();
+            setCompiling(false);
+            setError(data.error || "Compile failed");
+            setStatus(null);
+            return;
+          }
+          setStatus(
+            data.status === "GENERATING"
+              ? "Compiling on server (FFmpeg)…"
+              : "Queued for compile…"
+          );
+        } catch {
+          stopPolling();
+          setCompiling(false);
+          setError("Lost connection while waiting for compile");
+          setStatus(null);
+        }
+      })();
+    }, 3000);
+  }
+
+  async function compileToAdClips() {
+    if (validClips.length === 0 || !siteId) return;
+    setCompiling(true);
+    setError(null);
+    setCompiledDetectionId(null);
+    setStatus("Queueing compile…");
+    try {
+      const res = await fetch("/api/admin/video-editor/auto-render", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          siteId,
+          title: title.trim() || "Edited video",
+          jobId: jobId || undefined,
+          logoPosition,
+          segments: segmentsFromClips(validClips),
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setError(data.error || "Compile failed");
+        setStatus(null);
+        setCompiling(false);
+        return;
+      }
+      if (!data.promoAdId) {
+        setError("No compile job id returned");
+        setStatus(null);
+        setCompiling(false);
+        return;
+      }
+      setStatus("Compiling on server (FFmpeg)…");
+      startCompilePoll(data.promoAdId);
+      void fetch(`/api/admin/video-editor/compile/${data.promoAdId}`);
+    } catch {
+      setError("Compile request failed");
+      setStatus(null);
+      setCompiling(false);
+    }
+  }
+
+  async function saveSegmentsToAdClips() {
     if (validClips.length === 0 || !siteId) return;
     setSavingClips(true);
     setError(null);
-    setStatus("Saving clips to Ad clips…");
+    setStatus("Saving timeline segments to Ad clips…");
     try {
       const res = await fetch("/api/admin/video-editor/save-clips", {
         method: "POST",
@@ -54,46 +154,12 @@ export default function VideoEditorSavePanel({
         setStatus(null);
         return;
       }
-      setStatus(`Saved ${data.count} clip(s) to Ad clips.`);
+      setStatus(`Saved ${data.count} segment(s) to Ad clips (not compiled).`);
     } catch {
       setError("Save failed");
       setStatus(null);
     } finally {
       setSavingClips(false);
-    }
-  }
-
-  async function serverRender() {
-    if (validClips.length === 0) return;
-    setRendering(true);
-    setError(null);
-    setStatus("Queueing FFmpeg compose on server…");
-    try {
-      const res = await fetch("/api/admin/video-editor/auto-render", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({
-          siteId,
-          title: title.trim() || "Edited video",
-          jobId: jobId || undefined,
-          logoPosition,
-          segments: segmentsFromClips(validClips),
-        }),
-      });
-      const data = await res.json();
-      if (!res.ok) {
-        setError(data.error || "Render failed");
-        setStatus(null);
-        return;
-      }
-      setStatus(
-        `Render queued. Clips saved to Ad clips. Compose finishes in the background.`
-      );
-    } catch {
-      setError("Render request failed");
-      setStatus(null);
-    } finally {
-      setRendering(false);
     }
   }
 
@@ -135,7 +201,8 @@ export default function VideoEditorSavePanel({
         <div>
           <h2 className="text-sm font-medium text-zinc-200">Export</h2>
           <p className="mt-1 text-xs text-zinc-500">
-            Server FFmpeg from timeline clips (S3 sources, logo + crossfades).
+            Compile every timeline clip into one video (logo, crossfades, intro/outro) and add it to
+            Ad clips.
           </p>
         </div>
       )}
@@ -167,30 +234,46 @@ export default function VideoEditorSavePanel({
         <p className={`text-sm ${error ? "text-red-400" : "text-emerald-400"}`}>{error || status}</p>
       )}
 
+      {compiledDetectionId && (
+        <Link
+          href="/admin/ad-clips"
+          className="inline-block text-sm text-brand-300 underline hover:text-brand-200"
+        >
+          View on Ad clips →
+        </Link>
+      )}
+
       <div className="flex flex-col gap-2">
         <button
           type="button"
-          disabled={validClips.length === 0 || !siteId || savingClips}
-          onClick={() => void saveToAdClips()}
-          className="w-full rounded-md border border-zinc-600 py-2 text-sm font-medium text-zinc-100 hover:bg-zinc-800 disabled:opacity-50"
-        >
-          {savingClips ? "Saving…" : "Save clips to Ad clips"}
-        </button>
-        <button
-          type="button"
-          disabled={validClips.length === 0 || !siteId || rendering}
-          onClick={() => void serverRender()}
+          disabled={validClips.length === 0 || !siteId || compiling}
+          onClick={() => void compileToAdClips()}
           className="w-full rounded-md bg-brand-600 py-2 text-sm font-medium text-white hover:bg-brand-500 disabled:opacity-50"
         >
-          {rendering ? "Queuing…" : compact ? "Render on server" : `Render ${validClips.length} clip(s) on server`}
+          {compiling
+            ? "Compiling…"
+            : compact
+              ? "Compile & add to Ad clips"
+              : `Compile ${validClips.length} clip(s) & add to Ad clips`}
         </button>
       </div>
 
       <details className="text-xs text-zinc-500">
         <summary className="cursor-pointer text-zinc-400 hover:text-zinc-300">
-          Upload external MP4 instead
+          More export options
         </summary>
         <div className="mt-3 space-y-2">
+          <button
+            type="button"
+            disabled={validClips.length === 0 || !siteId || savingClips || compiling}
+            onClick={() => void saveSegmentsToAdClips()}
+            className="w-full rounded-md border border-zinc-600 py-2 text-sm font-medium text-zinc-100 hover:bg-zinc-800 disabled:opacity-50"
+          >
+            {savingClips ? "Saving…" : "Save segments only (no compile)"}
+          </button>
+          <p className="text-[11px] leading-snug text-zinc-600">
+            Saves each timeline In/Out as separate clips on Ad clips — useful for re-editing later.
+          </p>
           <input
             type="file"
             accept="video/mp4,video/*"
@@ -203,7 +286,7 @@ export default function VideoEditorSavePanel({
             onClick={() => void uploadFile()}
             className="rounded-lg border border-zinc-600 px-4 py-2 text-sm text-zinc-200 hover:bg-zinc-800 disabled:opacity-50"
           >
-            {uploading ? "Uploading…" : "Upload to library"}
+            {uploading ? "Uploading…" : "Upload external MP4 to library"}
           </button>
         </div>
       </details>

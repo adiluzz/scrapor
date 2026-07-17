@@ -4,6 +4,7 @@ import {
   GetObjectCommand,
   DeleteObjectCommand,
   HeadObjectCommand,
+  CopyObjectCommand,
 } from "@aws-sdk/client-s3";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 
@@ -89,4 +90,18 @@ export async function objectExists(key: string): Promise<boolean> {
   } catch {
     return false;
   }
+}
+
+/** Server-side copy within the same bucket (e.g. promo render → library video). */
+export async function copyS3Object(sourceKey: string, destKey: string): Promise<string> {
+  await s3.send(
+    new CopyObjectCommand({
+      Bucket: bucket,
+      CopySource: `${bucket}/${sourceKey}`,
+      Key: destKey,
+      ContentType: "video/mp4",
+      MetadataDirective: "REPLACE",
+    })
+  );
+  return destKey;
 }

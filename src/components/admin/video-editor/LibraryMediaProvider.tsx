@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState, type Dispatch, type SetStateAction } from "react";
 import { DEFAULT_PROXY_DURATION_SEC } from "@/lib/video-editor-limits";
 import {
   type EditorClip,
@@ -40,7 +40,7 @@ export default function LibraryMediaProvider({
     selected: LibraryVideo[];
     videoIds: string[];
     clips: EditorClip[];
-    setClips: (clips: EditorClip[]) => void;
+    setClips: Dispatch<SetStateAction<EditorClip[]>>;
     library: {
       q: string;
       onQueryChange: (q: string) => void;

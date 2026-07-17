@@ -52,13 +52,21 @@ export async function syncVideoEditorJob(jobId: string) {
       });
     }
     if (run.status === "DONE") {
+      const detections = await prisma.videoAgentDetection.findMany({
+        where: { runId: job.videoAgentRunId },
+        select: { id: true },
+      });
       const segments = await segmentsFromVideoAgentRun(job.videoAgentRunId, job.targetDurationSec);
       if (segments.length === 0) {
+        const error =
+          detections.length === 0
+            ? "Analysis finished with no detections — try a more specific prompt describing visible moments"
+            : "Detections found but none fit the target duration — try a longer target or different prompt";
         return prisma.videoEditorJob.update({
           where: { id: jobId },
           data: {
             status: "ERROR",
-            error: "No highlight segments found — try a different prompt or model",
+            error,
             segmentsJson: "[]",
           },
         });

@@ -6,6 +6,7 @@ import { ensureDefaultVideoAgent } from "@/lib/video-agent-agent";
 import { enqueueVideoAgentRun } from "@/lib/video-agent-queue";
 import { resolveVideoAgentModel, DEFAULT_VIDEO_AGENT_MODEL } from "@/lib/video-agent-models";
 import { estimateVideoEditorCost } from "@/lib/video-editor-cost";
+import { resolveEditorExtractTargets } from "@/lib/video-editor-analyze";
 import { logger } from "@/lib/logger";
 
 const schema = z.object({
@@ -65,6 +66,8 @@ export async function POST(request: Request) {
     d.prompt?.trim() ||
     `Find the most engaging highlight moments suitable for a ${targetDurationSec}-second promo reel. Prefer clear action peaks and strong visual moments.`;
 
+  const extractTargets = await resolveEditorExtractTargets(userPrompt, model.id, targetDurationSec);
+
   try {
     const run = await prisma.videoAgentRun.create({
       data: {
@@ -72,7 +75,7 @@ export async function POST(request: Request) {
         agentId: agent.id,
         userPrompt,
         searchQuery: videos.map((v) => v.title).join(" ").slice(0, 200) || "highlights",
-        extractTargets: JSON.stringify(["highlight", "best_moment", "action_peak"]),
+        extractTargets: JSON.stringify(extractTargets),
         selectedVideoIds: JSON.stringify(videos.map((v) => v.id)),
         analysisModel: model.id,
         manualOnly: false,

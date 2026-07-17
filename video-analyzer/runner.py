@@ -59,7 +59,13 @@ def process_run(conn, run_id: str) -> None:
             conn, run["siteId"], run["searchQuery"], run.get("selectedVideoIds")
         )
         if not videos:
-            set_run_status(conn, run_id, "DONE")
+            log.warning("run_no_videos id=%s site=%s", run_id, run["siteId"])
+            set_run_status(
+                conn,
+                run_id,
+                "ERROR",
+                "No matching videos on this site (check publication / READY status)",
+            )
             return
 
         clear_detections(conn, run_id)
@@ -98,12 +104,13 @@ def _analyze_video(
     video_id = video["id"]
     title = video.get("title") or video_id
     duration = float(video.get("durationSec") or 0)
+    storage_site_id = video.get("storageSiteId") or site_id
 
     if duration <= 0:
         cache = work_dir / f"{video_id}.mp4"
         if not cache.exists():
-            if not download_video(site_id, video_id, cache):
-                log.warning("video_unavailable id=%s", video_id)
+            if not download_video(storage_site_id, video_id, cache):
+                log.warning("video_unavailable id=%s storage_site=%s", video_id, storage_site_id)
                 return
         duration = probe_duration(cache)
 
@@ -113,7 +120,7 @@ def _analyze_video(
     if CONFIG.use_scene_chunking:
         cache = work_dir / f"{video_id}.mp4"
         if not cache.exists():
-            download_video(site_id, video_id, cache)
+            download_video(storage_site_id, video_id, cache)
         chunks = build_scene_chunks(str(cache)) if cache.exists() else build_fixed_chunks(duration)
     else:
         chunks = build_fixed_chunks(duration)
@@ -121,7 +128,7 @@ def _analyze_video(
     for chunk in chunks:
         try:
             media = resolve_media_source(
-                site_id, video_id, work_dir, chunk.start_sec, chunk.duration_sec
+                storage_site_id, video_id, work_dir, chunk.start_sec, chunk.duration_sec
             )
             hits = analyzer.analyze(media, targets, learning_context)
             for det in hits:

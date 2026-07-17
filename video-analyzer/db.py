@@ -122,15 +122,16 @@ def insert_detection(
 
 
 def search_videos(conn, site_id: str, query: str) -> list[dict[str, Any]]:
-    """Fetch all READY videos matching search query (paginated internally)."""
+    """Fetch READY videos on this site (origin or published via VideoSite)."""
     pattern = f"%{query}%"
     rows = conn.execute(
         '''
-        SELECT DISTINCT v.id, v.title, v."durationSec"
+        SELECT DISTINCT v.id, v.title, v."durationSec", v."siteId"
         FROM "Video" v
-        WHERE v."siteId" = %s
-          AND v."isDeleted" = false
+        LEFT JOIN "VideoSite" vs ON vs."videoId" = v.id
+        WHERE v."isDeleted" = false
           AND v.status = 'READY'
+          AND (v."siteId" = %s OR vs."siteId" = %s)
           AND (
             v.title ILIKE %s
             OR v.description ILIKE %s
@@ -147,9 +148,12 @@ def search_videos(conn, site_id: str, query: str) -> list[dict[str, Any]]:
           )
         ORDER BY v."viewCount" DESC
         ''',
-        (site_id, pattern, pattern, pattern, pattern),
+        (site_id, site_id, pattern, pattern, pattern, pattern),
     ).fetchall()
-    return [{"id": r[0], "title": r[1], "durationSec": r[2]} for r in rows]
+    return [
+        {"id": r[0], "title": r[1], "durationSec": r[2], "storageSiteId": r[3]}
+        for r in rows
+    ]
 
 
 def fetch_videos_by_ids(conn, site_id: str, video_ids: list[str]) -> list[dict[str, Any]]:
@@ -157,17 +161,21 @@ def fetch_videos_by_ids(conn, site_id: str, video_ids: list[str]) -> list[dict[s
         return []
     rows = conn.execute(
         '''
-        SELECT id, title, "durationSec"
-        FROM "Video"
-        WHERE "siteId" = %s
-          AND "isDeleted" = false
-          AND status = 'READY'
-          AND id = ANY(%s)
-        ORDER BY "viewCount" DESC
+        SELECT DISTINCT v.id, v.title, v."durationSec", v."siteId"
+        FROM "Video" v
+        LEFT JOIN "VideoSite" vs ON vs."videoId" = v.id
+        WHERE v."isDeleted" = false
+          AND v.status = 'READY'
+          AND v.id = ANY(%s)
+          AND (v."siteId" = %s OR vs."siteId" = %s)
+        ORDER BY v."viewCount" DESC
         ''',
-        (site_id, video_ids),
+        (video_ids, site_id, site_id),
     ).fetchall()
-    return [{"id": r[0], "title": r[1], "durationSec": r[2]} for r in rows]
+    return [
+        {"id": r[0], "title": r[1], "durationSec": r[2], "storageSiteId": r[3]}
+        for r in rows
+    ]
 
 
 def resolve_run_videos(conn, site_id: str, search_query: str, selected_raw: str | None) -> list[dict[str, Any]]:

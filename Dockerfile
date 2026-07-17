@@ -19,7 +19,8 @@ RUN mkdir -p public && npx prisma generate && npm run build
 FROM node:24-slim AS runner
 WORKDIR /app
 ENV NODE_ENV=production
-RUN apt-get update && apt-get install -y --no-install-recommends openssl ca-certificates && rm -rf /var/lib/apt/lists/*
+# ffmpeg: admin video-editor clip extract for large library files (OpenReel)
+RUN apt-get update && apt-get install -y --no-install-recommends openssl ca-certificates ffmpeg && rm -rf /var/lib/apt/lists/*
 
 COPY --from=builder /app/public ./public
 COPY --from=builder /app/.next/standalone ./

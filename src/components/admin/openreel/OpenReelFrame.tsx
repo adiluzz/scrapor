@@ -9,8 +9,11 @@ export type OpenReelImportItem = {
   kind?: "video" | "image";
   /** Library video id (for server FFmpeg compose). */
   sourceVideoId?: string;
+  /** Original source in/out (for server render). */
   startSec?: number;
   endSec?: number;
+  /** Clip URL is already trimmed server-side — OpenReel must not re-trim. */
+  pretrimmed?: boolean;
 };
 
 /**
@@ -36,13 +39,18 @@ export default function OpenReelFrame({
       if (!data || data.source !== "openreel-scrapor") return;
       if (data.type === "READY" || data.type === "PONG") {
         setReady(true);
-        setStatus("OpenReel ready — importing library media…");
+        setStatus("OpenReel ready");
+      }
+      if (data.type === "IMPORT_PROGRESS") {
+        setStatus(`Importing ${data.id} (${data.phase}${data.bytes ? `, ${Math.round(Number(data.bytes) / 1024 / 1024)}MB` : ""})…`);
       }
       if (data.type === "IMPORT_OK") {
         setStatus(`Imported ${data.id}`);
       }
       if (data.type === "IMPORT_DONE") {
-        setStatus(`Imported ${data.count} item(s). Edit, then export from OpenReel.`);
+        setStatus(
+          `Imported ${data.count}/${data.requested ?? data.count} item(s). Edit, then export from OpenReel.`
+        );
       }
       if (data.type === "IMPORT_ERROR") {
         setStatus(`Import error (${data.id}): ${data.error}`);
@@ -57,7 +65,13 @@ export default function OpenReelFrame({
 
   useEffect(() => {
     if (!ready || !iframeRef.current?.contentWindow) return;
-    const key = JSON.stringify(items.map((i) => i.id + (i.startSec ?? "") + (i.endSec ?? "")));
+    if (items.length === 0) {
+      importedKey.current = "";
+      return;
+    }
+    const key = JSON.stringify(
+      items.map((i) => [i.id, i.url, i.startSec ?? "", i.endSec ?? "", i.pretrimmed ? 1 : 0])
+    );
     if (key === importedKey.current) return;
     importedKey.current = key;
 
@@ -71,6 +85,7 @@ export default function OpenReelFrame({
       });
     }
 
+    setStatus(`Importing ${items.length} item(s)…`);
     iframeRef.current.contentWindow.postMessage(
       { target: "openreel-scrapor", type: "IMPORT_MEDIA", items: payload },
       "*"
@@ -95,4 +110,13 @@ export default function OpenReelFrame({
       />
     </div>
   );
+}
+
+/** Build a same-origin URL for a server-extracted editor clip. */
+export function editorClipUrl(videoId: string, startSec: number, endSec: number): string {
+  const qs = new URLSearchParams({
+    startSec: String(startSec),
+    endSec: String(endSec),
+  });
+  return `/api/admin/videos/${videoId}/editor-clip?${qs}`;
 }

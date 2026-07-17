@@ -1,11 +1,17 @@
 /**
  * Host bridge: when OpenReel runs inside the scrapor admin iframe,
- * the parent posts IMPORT_MEDIA messages with same-origin stream URLs.
+ * the parent posts IMPORT_MEDIA messages with same-origin stream / clip URLs.
+ *
+ * Large tube files must NOT be fetched as full blobs — the parent should send
+ * pre-extracted editor-clip URLs (or short proxies). This bridge also enforces
+ * a hard download size limit as a last line of defense.
  */
 import { useProjectStore } from "../stores/project-store";
 import { useUIStore } from "../stores/ui-store";
 
 const PARENT_ORIGIN = "*";
+/** Keep in sync with src/lib/video-editor-limits.ts MAX_BROWSER_IMPORT_BYTES */
+const MAX_IMPORT_BYTES = 120 * 1024 * 1024;
 
 type ImportItem = {
   id: string;
@@ -14,6 +20,8 @@ type ImportItem = {
   kind?: "video" | "image";
   startSec?: number;
   endSec?: number;
+  /** Clip file is already trimmed server-side — do not apply start/end again. */
+  pretrimmed?: boolean;
 };
 
 function postToParent(type: string, payload: Record<string, unknown> = {}) {
@@ -24,8 +32,44 @@ function postToParent(type: string, payload: Record<string, unknown> = {}) {
 async function fetchAsFile(url: string, filename: string, mime: string): Promise<File> {
   const res = await fetch(url, { credentials: "include" });
   if (!res.ok) throw new Error(`Failed to fetch ${url}: ${res.status}`);
-  const blob = await res.blob();
-  return new File([blob], filename, { type: mime || blob.type || "application/octet-stream" });
+
+  const lenHeader = res.headers.get("content-length");
+  const declared = lenHeader ? parseInt(lenHeader, 10) : NaN;
+  if (Number.isFinite(declared) && declared > MAX_IMPORT_BYTES) {
+    throw new Error(
+      `File too large for browser editor (${Math.round(declared / 1024 / 1024)}MB). Use AI highlight or a server-extracted clip.`
+    );
+  }
+
+  if (!res.body) {
+    const blob = await res.blob();
+    if (blob.size > MAX_IMPORT_BYTES) {
+      throw new Error(`File too large for browser editor (${Math.round(blob.size / 1024 / 1024)}MB).`);
+    }
+    return new File([blob], filename, { type: mime || blob.type || "application/octet-stream" });
+  }
+
+  const reader = res.body.getReader();
+  const chunks: Uint8Array[] = [];
+  let total = 0;
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    if (!value) continue;
+    total += value.byteLength;
+    if (total > MAX_IMPORT_BYTES) {
+      await reader.cancel().catch(() => {});
+      throw new Error(
+        `Download exceeded ${Math.round(MAX_IMPORT_BYTES / 1024 / 1024)}MB browser limit. Use AI highlight or Load proxy.`
+      );
+    }
+    chunks.push(value);
+  }
+
+  const blob = new Blob(chunks as BlobPart[], {
+    type: mime || res.headers.get("content-type") || "application/octet-stream",
+  });
+  return new File([blob], filename, { type: blob.type });
 }
 
 async function importMediaItems(items: ImportItem[]) {
@@ -37,9 +81,11 @@ async function importMediaItems(items: ImportItem[]) {
   }
 
   let timelineCursor = 0;
+  let okCount = 0;
 
   for (const item of items) {
     try {
+      postToParent("IMPORT_PROGRESS", { id: item.id, phase: "download" });
       const isImage = item.kind === "image";
       const safeName = (item.title || item.id).replace(/[^\w.-]+/g, "_");
       const file = await fetchAsFile(
@@ -52,6 +98,7 @@ async function importMediaItems(items: ImportItem[]) {
         (useProjectStore.getState().project?.mediaLibrary.items || []).map((m) => m.id)
       );
 
+      postToParent("IMPORT_PROGRESS", { id: item.id, phase: "import", bytes: file.size });
       const importResult = await useProjectStore.getState().importMedia(file);
       if (!importResult.success) {
         postToParent("IMPORT_ERROR", {
@@ -74,23 +121,27 @@ async function importMediaItems(items: ImportItem[]) {
 
         const clips =
           useProjectStore.getState().project?.timeline.tracks.flatMap((t) => t.clips) || [];
-        const clip = clips.find((c) => c.mediaId === media.id && c.startTime === startAt) ||
+        const clip =
+          clips.find((c) => c.mediaId === media.id && c.startTime === startAt) ||
           clips.filter((c) => c.mediaId === media.id).at(-1);
 
         let clipDur = media.metadata.duration || 5;
-        if (
+        const shouldTrim =
+          !item.pretrimmed &&
           clip &&
           item.startSec != null &&
           item.endSec != null &&
-          item.endSec > item.startSec
-        ) {
-          await useProjectStore.getState().trimClip(clip.id, item.startSec, item.endSec);
-          clipDur = Math.max(0.1, item.endSec - item.startSec);
+          item.endSec > item.startSec;
+
+        if (shouldTrim && clip) {
+          await useProjectStore.getState().trimClip(clip.id, item.startSec!, item.endSec!);
+          clipDur = Math.max(0.1, item.endSec! - item.startSec!);
         }
         timelineCursor += clipDur;
       }
 
-      postToParent("IMPORT_OK", { id: item.id, mediaId: media.id });
+      okCount += 1;
+      postToParent("IMPORT_OK", { id: item.id, mediaId: media.id, bytes: file.size });
     } catch (e) {
       postToParent("IMPORT_ERROR", {
         id: item.id,
@@ -98,7 +149,7 @@ async function importMediaItems(items: ImportItem[]) {
       });
     }
   }
-  postToParent("IMPORT_DONE", { count: items.length });
+  postToParent("IMPORT_DONE", { count: okCount, requested: items.length });
 }
 
 export function installScraporHostBridge() {

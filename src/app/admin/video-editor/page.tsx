@@ -2,7 +2,10 @@
 
 import { useCallback, useEffect, useState } from "react";
 import LibraryMediaProvider from "@/components/admin/openreel/LibraryMediaProvider";
-import OpenReelFrame, { type OpenReelImportItem } from "@/components/admin/openreel/OpenReelFrame";
+import OpenReelFrame, {
+  editorClipUrl,
+  type OpenReelImportItem,
+} from "@/components/admin/openreel/OpenReelFrame";
 import VideoEditorAiPanel from "@/components/admin/VideoEditorAiPanel";
 import VideoEditorSavePanel from "@/components/admin/VideoEditorSavePanel";
 
@@ -38,14 +41,16 @@ function VideoEditorWorkspace({
       id: string
     ) => {
       setJobId(id);
+      // Pre-extract segments on the server so OpenReel never downloads full tube files.
       const items: OpenReelImportItem[] = segments.map((s, i) => ({
         id: `${s.videoId}-${i}-${s.startSec}`,
         title: `${s.title} (${s.startSec.toFixed(1)}–${s.endSec.toFixed(1)}s)`,
-        url: `/api/admin/videos/${s.videoId}/stream`,
+        url: editorClipUrl(s.videoId, s.startSec, s.endSec),
         kind: "video",
         sourceVideoId: s.videoId,
         startSec: s.startSec,
         endSec: s.endSec,
+        pretrimmed: true,
       }));
       setSegmentItems(items);
       setEditorKey((k) => k + 1);
@@ -110,7 +115,8 @@ export default function AdminVideoEditorPage() {
       <div>
         <h1 className="text-2xl font-semibold text-white">Video editor</h1>
         <p className="mt-1 text-sm text-zinc-400">
-          OpenReel NLE with library import, site logo overlay, and Bedrock AI highlights.
+          OpenReel NLE with safe imports for long videos (server-extracted clips / AI highlights),
+          site logo overlay, and Bedrock analysis.
         </p>
       </div>
 

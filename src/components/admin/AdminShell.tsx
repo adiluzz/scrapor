@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import Logo from "@/components/brand/Logo";
 
 const nav = [
@@ -21,6 +21,8 @@ const nav = [
   { href: "/admin/assistant", label: "Assistant" },
   { href: "/admin/settings", label: "Settings" },
 ];
+
+const SIDEBAR_KEY = "admin-sidebar-collapsed";
 
 function NavLinks({
   onNavigate,
@@ -74,11 +76,42 @@ export default function AdminShell({
   site?: LogoSite | null;
 }) {
   const pathname = usePathname();
+  const isVideoEditor = pathname === "/admin/video-editor" || pathname.startsWith("/admin/video-editor/");
   const [menuOpen, setMenuOpen] = useState(false);
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const [sidebarReady, setSidebarReady] = useState(false);
 
   useEffect(() => {
     setMenuOpen(false);
   }, [pathname]);
+
+  useEffect(() => {
+    try {
+      const stored = localStorage.getItem(SIDEBAR_KEY);
+      if (stored === "1") {
+        setSidebarCollapsed(true);
+      } else if (stored === "0") {
+        setSidebarCollapsed(false);
+      } else if (isVideoEditor) {
+        setSidebarCollapsed(true);
+      }
+    } catch {
+      if (isVideoEditor) setSidebarCollapsed(true);
+    }
+    setSidebarReady(true);
+  }, [isVideoEditor]);
+
+  const toggleSidebar = useCallback(() => {
+    setSidebarCollapsed((prev) => {
+      const next = !prev;
+      try {
+        localStorage.setItem(SIDEBAR_KEY, next ? "1" : "0");
+      } catch {
+        /* ignore */
+      }
+      return next;
+    });
+  }, []);
 
   useEffect(() => {
     document.body.style.overflow = menuOpen ? "hidden" : "";
@@ -133,12 +166,48 @@ export default function AdminShell({
 
       <div className="flex">
         {/* Desktop sidebar */}
-        <aside className="sticky top-0 hidden h-screen w-56 shrink-0 border-r border-zinc-800 bg-zinc-900 p-4 lg:block">
-          <div className="mb-6">{logo}</div>
+        <aside
+          className={`sticky top-0 hidden h-screen shrink-0 border-r border-zinc-800 bg-zinc-900 transition-[width] duration-200 lg:block ${
+            sidebarReady && sidebarCollapsed ? "w-0 overflow-hidden border-r-0 p-0" : "w-56 p-4"
+          }`}
+        >
+          <div className="mb-6 flex items-center justify-between gap-2">
+            <div className="min-w-0">{logo}</div>
+            <button
+              type="button"
+              aria-label="Collapse admin menu"
+              onClick={toggleSidebar}
+              className="shrink-0 rounded-lg p-1.5 text-zinc-400 hover:bg-zinc-800 hover:text-white"
+            >
+              <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
+              </svg>
+            </button>
+          </div>
           <NavLinks signOut={signOut} />
         </aside>
 
-        <main className="min-w-0 flex-1 p-4 sm:p-6 lg:p-8">{children}</main>
+        <div className="relative min-w-0 flex-1">
+          {/* Desktop sidebar expand tab when collapsed */}
+          {sidebarReady && sidebarCollapsed && (
+            <button
+              type="button"
+              aria-label="Open admin menu"
+              onClick={toggleSidebar}
+              className="fixed left-0 top-1/2 z-30 hidden -translate-y-1/2 rounded-r-lg border border-l-0 border-zinc-700 bg-zinc-900 px-1.5 py-3 text-zinc-400 shadow-lg hover:bg-zinc-800 hover:text-white lg:block"
+            >
+              <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
+              </svg>
+            </button>
+          )}
+
+          <main
+            className={`min-w-0 flex-1 ${isVideoEditor ? "p-0" : "p-4 sm:p-6 lg:p-8"}`}
+          >
+            {children}
+          </main>
+        </div>
       </div>
     </div>
   );

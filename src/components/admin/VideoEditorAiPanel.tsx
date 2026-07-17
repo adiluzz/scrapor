@@ -148,8 +148,8 @@ export default function VideoEditorAiPanel({
       <div>
         <h2 className="text-sm font-medium text-zinc-200">AI highlight (Bedrock)</h2>
         <p className="mt-1 text-xs text-zinc-500">
-          Analyzes your library footage and packs the best moments into ~{targetDurationSec}s.
-          Uses understanding models (Nova / Pegasus), not generative Nova Reel.
+          Uses the videos you checked in Library (server-side from S3). No OpenReel import required
+          before analyze. When done, segments are loaded into the editor automatically.
         </p>
       </div>
 

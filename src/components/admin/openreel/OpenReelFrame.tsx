@@ -23,10 +23,13 @@ export default function OpenReelFrame({
   items,
   logoUrl,
   className,
+  tall = false,
 }: {
   items: OpenReelImportItem[];
   logoUrl?: string | null;
   className?: string;
+  /** Use remaining viewport height (video editor full-width layout). */
+  tall?: boolean;
 }) {
   const iframeRef = useRef<HTMLIFrameElement>(null);
   const [ready, setReady] = useState(false);
@@ -93,13 +96,17 @@ export default function OpenReelFrame({
   }, [ready, items, logoUrl]);
 
   return (
-    <div className={className}>
-      <p className="mb-2 text-xs text-zinc-500">{status}</p>
+    <div className={`flex min-h-0 flex-col ${className || ""}`}>
+      <p className="mb-2 shrink-0 px-1 text-xs text-zinc-500">{status}</p>
       <iframe
         ref={iframeRef}
         title="OpenReel video editor"
         src="/openreel/index.html#/new?preset=youtube-video"
-        className="h-[min(78vh,900px)] w-full rounded-xl border border-zinc-800 bg-black"
+        className={
+          tall
+            ? "min-h-[420px] w-full flex-1 rounded-lg border border-zinc-800 bg-black"
+            : "h-[min(78vh,900px)] w-full rounded-xl border border-zinc-800 bg-black"
+        }
         allow="cross-origin-isolated; autoplay; clipboard-write"
         onLoad={() => {
           iframeRef.current?.contentWindow?.postMessage(

@@ -126,7 +126,7 @@ def search_videos(conn, site_id: str, query: str) -> list[dict[str, Any]]:
     pattern = f"%{query}%"
     rows = conn.execute(
         '''
-        SELECT DISTINCT v.id, v.title, v."durationSec", v."siteId"
+        SELECT DISTINCT v.id, v.title, v."durationSec", v."siteId", v."viewCount"
         FROM "Video" v
         LEFT JOIN "VideoSite" vs ON vs."videoId" = v.id
         WHERE v."isDeleted" = false
@@ -161,7 +161,7 @@ def fetch_videos_by_ids(conn, site_id: str, video_ids: list[str]) -> list[dict[s
         return []
     rows = conn.execute(
         '''
-        SELECT DISTINCT v.id, v.title, v."durationSec", v."siteId"
+        SELECT DISTINCT v.id, v.title, v."durationSec", v."siteId", v."viewCount"
         FROM "Video" v
         LEFT JOIN "VideoSite" vs ON vs."videoId" = v.id
         WHERE v."isDeleted" = false

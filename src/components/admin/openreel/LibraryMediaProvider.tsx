@@ -165,8 +165,8 @@ export default function LibraryMediaProvider({
       <div>
         <h2 className="text-sm font-medium text-zinc-200">Library</h2>
         <p className="mt-1 text-xs text-zinc-500">
-          Selecting a video does not download it. Full tube files crash the browser — load a short
-          proxy, or use AI highlight (server-extracted segments).
+          Check videos in the library — that is enough for AI analyze. You do not need to load them
+          into OpenReel first. “Load proxy” is only for manual editing without AI.
         </p>
       </div>
 

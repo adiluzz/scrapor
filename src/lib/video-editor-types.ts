@@ -81,4 +81,30 @@ export function newClipId(videoId: string): string {
   return `${videoId}-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
 }
 
+/** Strip trailing " #2" style suffixes when numbering clips from the same source. */
+export function baseClipTitle(title: string): string {
+  return title.replace(/\s+#\d+$/, "").trim() || title;
+}
+
+/** Title for the Nth clip cut from the same source video. */
+export function numberedClipTitle(baseTitle: string, index: number): string {
+  const base = baseClipTitle(baseTitle);
+  return index <= 1 ? base : `${base} #${index}`;
+}
+
+/** Suggest in/out for the next segment after an existing clip on the same source. */
+export function suggestNextClipRange(
+  sourceDurationSec: number,
+  afterSec: number,
+  defaultLenSec = 30
+): { startSec: number; endSec: number } {
+  const dur = sourceDurationSec > 0 ? sourceDurationSec : afterSec + defaultLenSec;
+  const startSec = Math.max(0, Math.min(afterSec, dur - MIN_CLIP_DURATION_SEC));
+  const endSec = Math.min(dur, startSec + defaultLenSec);
+  return {
+    startSec,
+    endSec: Math.max(endSec, startSec + MIN_CLIP_DURATION_SEC),
+  };
+}
+
 export const MIN_CLIP_DURATION_SEC = 0.5;

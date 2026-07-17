@@ -44,6 +44,8 @@ export default function ClipRangeSelector({
   onClearCrop,
   showCrop = false,
   onCurrentTimeChange,
+  onSourceDuration,
+  onAddAnotherClip,
 }: {
   videoId: string;
   initialRange?: ClipRange;
@@ -54,6 +56,9 @@ export default function ClipRangeSelector({
   onClearCrop?: () => void;
   showCrop?: boolean;
   onCurrentTimeChange?: (sec: number) => void;
+  onSourceDuration?: (sec: number) => void;
+  /** Insert another timeline clip from this same source (different in/out). */
+  onAddAnotherClip?: () => void;
 }) {
   const playerRef = useRef<VideoPlayerHandle>(null);
   const [duration, setDuration] = useState(0);
@@ -80,10 +85,24 @@ export default function ClipRangeSelector({
     onRangeChange?.({ startSec, endSec });
   }, [startSec, endSec, onRangeChange]);
 
-  const handleDuration = useCallback((d: number) => {
-    setDuration(d);
-    setEndSec((prev) => (prev <= 0 ? Math.min(d, 10) : prev));
-  }, []);
+  const handleDuration = useCallback(
+    (d: number) => {
+      setDuration(d);
+      onSourceDuration?.(d);
+      setEndSec((prev) => (prev <= 0 ? Math.min(d, 10) : prev));
+    },
+    [onSourceDuration]
+  );
+
+  useEffect(() => {
+    if (duration <= 0) return;
+    const t = initialRange?.startSec ?? 0;
+    playerRef.current?.seek(t);
+    setCurrent(t);
+    onCurrentTimeChange?.(t);
+    // Seek once when the player reports duration for this clip mount.
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- initialRange.startSec is fixed at mount (key=clip id)
+  }, [duration]);
 
   const handleTime = useCallback(
     (t: number) => {
@@ -139,6 +158,17 @@ export default function ClipRangeSelector({
     await player.play();
     setPlaying(true);
   }, [startSec]);
+
+  const previewFullVideo = useCallback(async () => {
+    const player = playerRef.current;
+    if (!player) return;
+    await player.ensurePlaying();
+    player.seek(0);
+    setCurrent(0);
+    onCurrentTimeChange?.(0);
+    await player.play();
+    setPlaying(true);
+  }, [onCurrentTimeChange]);
 
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
@@ -241,9 +271,33 @@ export default function ClipRangeSelector({
           className={`rounded-md border border-zinc-700 text-zinc-200 hover:bg-zinc-800 disabled:opacity-50 ${
             compact ? "px-2.5 py-1 text-[11px] font-medium" : "px-3 py-1.5 text-xs"
           }`}
+          title="Play only the trimmed In–Out range"
         >
-          Preview in/out
+          Preview clip
         </button>
+        <button
+          type="button"
+          onClick={() => void previewFullVideo()}
+          disabled={duration <= 0}
+          className={`rounded-md border border-zinc-700 text-zinc-200 hover:bg-zinc-800 disabled:opacity-50 ${
+            compact ? "px-2.5 py-1 text-[11px] font-medium" : "px-3 py-1.5 text-xs"
+          }`}
+          title="Play the full source video from the beginning"
+        >
+          Preview full video
+        </button>
+        {onAddAnotherClip && (
+          <button
+            type="button"
+            onClick={onAddAnotherClip}
+            className={`rounded-md border border-brand-500/40 bg-brand-950/30 text-brand-200 hover:bg-brand-950/50 ${
+              compact ? "px-2.5 py-1 text-[11px] font-medium" : "px-3 py-1.5 text-xs"
+            }`}
+            title="Keep this clip's range and add another segment from the same video"
+          >
+            + Another clip
+          </button>
+        )}
         {compact && endSec > startSec && (
           <span className="ml-auto text-[11px] tabular-nums text-brand-300">
             {(endSec - startSec).toFixed(1)}s

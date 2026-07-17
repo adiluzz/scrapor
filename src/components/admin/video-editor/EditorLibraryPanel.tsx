@@ -16,6 +16,7 @@ export default function EditorLibraryPanel({
   selected,
   onToggle,
   onAddToTimeline,
+  onAddVideoClip,
   clipCount,
   note,
 }: {
@@ -30,6 +31,7 @@ export default function EditorLibraryPanel({
   selected: LibraryVideo[];
   onToggle: (v: LibraryVideo) => void;
   onAddToTimeline: () => void;
+  onAddVideoClip: (v: LibraryVideo) => void;
   clipCount: number;
   note: string | null;
 }) {
@@ -37,7 +39,7 @@ export default function EditorLibraryPanel({
     <aside className="flex h-full min-h-0 w-full flex-col border-r border-zinc-800 bg-zinc-950/80">
       <div className="border-b border-zinc-800 px-3 py-2.5">
         <h2 className="text-xs font-semibold uppercase tracking-wider text-zinc-500">Media</h2>
-        <p className="mt-0.5 text-[11px] text-zinc-600">Search library · add to timeline</p>
+        <p className="mt-0.5 text-[11px] text-zinc-600">Search · add clips · cut many segments per video</p>
       </div>
 
       <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto p-3">
@@ -85,24 +87,34 @@ export default function EditorLibraryPanel({
               const on = selected.some((x) => x.id === v.id);
               return (
                 <li key={v.id}>
-                  <label
-                    className={`flex cursor-pointer items-start gap-2 rounded-md px-2 py-2 transition-colors ${
+                  <div
+                    className={`flex items-start gap-1 rounded-md transition-colors ${
                       on ? "bg-brand-950/40 ring-1 ring-brand-500/30" : "hover:bg-zinc-800/60"
                     }`}
                   >
-                    <input
-                      type="checkbox"
-                      checked={on}
-                      onChange={() => onToggle(v)}
-                      className="mt-0.5 accent-brand-500"
-                    />
-                    <span className="min-w-0 flex-1">
-                      <span className="block truncate text-sm text-zinc-200">{v.title}</span>
-                      <span className="text-[11px] text-zinc-500">
-                        {v.durationSec != null ? `${Math.round(v.durationSec / 60)} min` : "—"}
+                    <label className="flex min-w-0 flex-1 cursor-pointer items-start gap-2 px-2 py-2">
+                      <input
+                        type="checkbox"
+                        checked={on}
+                        onChange={() => onToggle(v)}
+                        className="mt-0.5 accent-brand-500"
+                      />
+                      <span className="min-w-0 flex-1">
+                        <span className="block truncate text-sm text-zinc-200">{v.title}</span>
+                        <span className="text-[11px] text-zinc-500">
+                          {v.durationSec != null ? `${Math.round(v.durationSec / 60)} min` : "—"}
+                        </span>
                       </span>
-                    </span>
-                  </label>
+                    </label>
+                    <button
+                      type="button"
+                      onClick={() => onAddVideoClip(v)}
+                      className="mr-1.5 mt-2 shrink-0 rounded border border-zinc-700 px-2 py-0.5 text-[11px] text-zinc-300 hover:bg-zinc-800"
+                      title="Add one clip from this video (click again for another segment)"
+                    >
+                      +
+                    </button>
+                  </div>
                 </li>
               );
             })}
@@ -125,6 +137,9 @@ export default function EditorLibraryPanel({
         >
           + Add to timeline
         </button>
+        <p className="mt-1.5 text-[10px] leading-snug text-zinc-600">
+          Use <span className="text-zinc-500">+</span> on a row to add the same video again as another clip.
+        </p>
         {note && <p className="mt-2 text-[11px] text-emerald-400/90">{note}</p>}
       </div>
     </aside>

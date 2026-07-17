@@ -6,6 +6,8 @@ import {
   type EditorClip,
   type LibraryVideo,
   newClipId,
+  numberedClipTitle,
+  suggestNextClipRange,
 } from "@/lib/video-editor-types";
 
 type SiteRow = {
@@ -48,6 +50,7 @@ export default function LibraryMediaProvider({
       selected: LibraryVideo[];
       onToggle: (v: LibraryVideo) => void;
       onAddToTimeline: () => void;
+      onAddVideoClip: (v: LibraryVideo) => void;
       note: string | null;
     };
   }) => React.ReactNode;
@@ -120,7 +123,13 @@ export default function LibraryMediaProvider({
     }
     const next = selected.map(defaultClipFromVideo);
     setClips((prev) => [...prev, ...next]);
-    setNote(`Added ${next.length} clip${next.length === 1 ? "" : "s"}.`);
+    setNote(`Added ${next.length} clip${next.length === 1 ? "" : "s"}. Use + Another clip to cut more segments.`);
+  }
+
+  function addVideoClip(v: LibraryVideo) {
+    const clip = defaultClipFromVideo(v);
+    setClips((prev) => [...prev, clip]);
+    setNote(`Added "${v.title.slice(0, 36)}${v.title.length > 36 ? "…" : ""}". Set In/Out, then + Another clip for more.`);
   }
 
   const library = {
@@ -132,6 +141,7 @@ export default function LibraryMediaProvider({
     selected,
     onToggle: toggle,
     onAddToTimeline: addSelectedToTimeline,
+    onAddVideoClip: addVideoClip,
     note,
   };
 

@@ -4,10 +4,20 @@ from __future__ import annotations
 
 
 def chunk_time_scope(start_sec: float, duration_sec: float) -> str:
+    """Absolute timeline note for models that see the full source video."""
     end = start_sec + duration_sec
     m1, s1 = divmod(int(start_sec), 60)
     m2, s2 = divmod(int(end), 60)
     return f"Only analyze the video between {m1}:{s1:02d} and {m2}:{s2:02d}."
+
+
+def chunk_relative_scope(duration_sec: float) -> str:
+    """Scope for models that only receive a cut chunk file (Nova S3 uploads)."""
+    dur = max(1, int(duration_sec or 1))
+    return (
+        f"This video file is a clip lasting {dur} seconds. "
+        f"Use timestamps relative to THIS file only (0 = start of file, max {dur})."
+    )
 
 
 def pegasus_detection_prompt(
@@ -40,30 +50,23 @@ def nova_detection_prompt(
     chunk_start: float,
     chunk_duration: float,
 ) -> str:
+    # Nova receives cut chunk files, not the full source — never use absolute
+    # source timestamps here (callers still pass chunk_start; parse adds it back).
     target_list = "\n".join(f'- "{t}"' for t in targets)
-    scope = chunk_time_scope(chunk_start, chunk_duration)
+    scope = chunk_relative_scope(chunk_duration)
     return f"""{scope}
 
-For each target event below, find ALL occurrences in the video with start/end times in seconds
-and a normalized bounding box on 0-1000 scale [x1,y1,x2,y2] around the action.
-
-Targets:
+Detect every occurrence of these on-screen events:
 {target_list}
 
-Respond with ONLY valid JSON:
-{{
-  "detections": [
-    {{
-      "label": "event name",
-      "startSec": 12.5,
-      "endSec": 18.0,
-      "confidence": 0.9,
-      "bbox": [x1, y1, x2, y2]
-    }}
-  ]
-}}
+For each hit include start/end seconds (relative to this file) and a bounding box
+on a 0-1000 scale as four numbers [left, top, right, bottom].
 
-If no events found, return {{"detections": []}}.
+Respond with ONLY valid JSON, for example:
+{{"detections":[{{"label":"event name","startSec":12.5,"endSec":18.0,"confidence":0.9,"bbox":[100,120,800,900]}}]}}
+
+If none found: {{"detections":[]}}
+Only include clear visible occurrences. Merge nothing — list each distinct occurrence.
 
 {learning_context}"""
 

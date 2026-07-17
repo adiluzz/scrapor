@@ -14,8 +14,8 @@ export async function GET(request: Request) {
 
   const detections = await prisma.videoAgentDetection.findMany({
     where: {
-      feedback: { approved: true },
       run: { siteId: auth.siteId },
+      OR: [{ feedback: { approved: true } }, { manual: true }],
       ...(label ? { label: { contains: label, mode: "insensitive" } } : {}),
     },
     orderBy: { createdAt: "desc" },

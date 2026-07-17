@@ -57,7 +57,7 @@ export default function ScraporVideoEditor({
   const [inspectorTab, setInspectorTab] = useState<InspectorTab>("clip");
   const [playheadSec, setPlayheadSec] = useState(0);
   const [pixelsPerSecond, setPixelsPerSecond] = useState(48);
-  const [showCrop, setShowCrop] = useState(true);
+  const [showCrop, setShowCrop] = useState(false);
 
   useEffect(() => {
     if (clips.length === 0) {
@@ -78,7 +78,16 @@ export default function ScraporVideoEditor({
       id: string,
       patch: Partial<Pick<EditorClip, "startSec" | "endSec" | "title" | "crop">>
     ) => {
-      onClipsChange(clips.map((c) => (c.id === id ? { ...c, ...patch } : c)));
+      onClipsChange(
+        clips.map((c) => {
+          if (c.id !== id) return c;
+          const next = { ...c, ...patch };
+          if ("crop" in patch && patch.crop === undefined) {
+            delete next.crop;
+          }
+          return next;
+        })
+      );
     },
     [clips, onClipsChange]
   );
@@ -200,7 +209,6 @@ export default function ScraporVideoEditor({
           title: s.title,
           startSec: s.startSec,
           endSec: s.endSec,
-          crop: defaultCrop("16:9"),
         }))
       );
       setInspectorTab("clip");
@@ -221,7 +229,7 @@ export default function ScraporVideoEditor({
             {clips.length === 0 ? "New edit" : `${clips.length} clips · ${formatEditorDuration(totalSec)}`}
           </p>
           <p className="hidden text-[11px] text-zinc-600 sm:block">
-            I/O trim · S split · Del remove · yellow ripple · red roll
+            Space play · I/O trim · S split · Crop toggle · Del remove
           </p>
         </div>
         <button
@@ -235,12 +243,26 @@ export default function ScraporVideoEditor({
         </button>
         <button
           type="button"
-          onClick={() => setShowCrop((v) => !v)}
+          onClick={() => {
+            if (!showCrop) {
+              if (selected && !selected.crop) {
+                updateClip(selected.id, { crop: defaultCrop("16:9") });
+              }
+              setShowCrop(true);
+            } else {
+              setShowCrop(false);
+            }
+          }}
           className={`rounded-md border px-2.5 py-1.5 text-xs ${
             showCrop
               ? "border-brand-500/50 bg-brand-950/30 text-brand-200"
               : "border-zinc-700 text-zinc-400 hover:bg-zinc-800"
           }`}
+          title={
+            showCrop
+              ? "Hide crop overlay"
+              : "Enable crop — drag yellow corners; None removes crop"
+          }
         >
           Crop
         </button>
@@ -297,9 +319,13 @@ export default function ScraporVideoEditor({
                   videoId={selected.videoId}
                   initialRange={{ startSec: selected.startSec, endSec: selected.endSec }}
                   onRangeChange={(range) => updateClip(selected.id, range)}
-                  showCrop={showCrop}
-                  crop={selected.crop ?? defaultCrop()}
+                  showCrop={showCrop && !!selected.crop}
+                  crop={selected.crop}
                   onCropChange={(c: EditorCrop) => updateClip(selected.id, { crop: c })}
+                  onClearCrop={() => {
+                    updateClip(selected.id, { crop: undefined });
+                    setShowCrop(false);
+                  }}
                   onCurrentTimeChange={setPlayheadSec}
                 />
               </div>
@@ -372,7 +398,7 @@ export default function ScraporVideoEditor({
                       </div>
                       <div className="flex justify-between gap-2">
                         <dt className="text-zinc-500">Crop</dt>
-                        <dd className="text-zinc-300">{(selected.crop ?? defaultCrop()).aspect}</dd>
+                        <dd className="text-zinc-300">{selected.crop ? selected.crop.aspect : "none"}</dd>
                       </div>
                     </dl>
                     <button

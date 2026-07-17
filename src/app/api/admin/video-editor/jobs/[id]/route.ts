@@ -4,6 +4,7 @@ import { prisma } from "@/lib/db";
 import { syncVideoEditorJob } from "@/lib/video-editor-jobs";
 import { enqueuePromoAdIteration } from "@/lib/promo-ad-queue";
 import { stringifyModelParams, defaultModelParams } from "@/lib/promo-ad/params";
+import { approveDetectionsForAdClips } from "@/lib/ad-clips";
 
 export async function GET(_request: Request, { params }: { params: Promise<{ id: string }> }) {
   const auth = await guardAdmin(_request, "GET");
@@ -15,7 +16,6 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
 
   job = (await syncVideoEditorJob(id)) || job;
 
-  // Kick auto-render when analysis just became READY for AUTO_RENDER mode
   if (job.mode === "AUTO_RENDER" && job.status === "RENDERING" && !job.promoAdId && job.segmentsJson) {
     try {
       const segments = JSON.parse(job.segmentsJson) as Array<{
@@ -31,7 +31,6 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
             ? await prisma.videoAgentRun.findUnique({ where: { id: job.videoAgentRunId } })
             : null;
 
-        // Create manual detections on the analysis run (or a tiny synthetic run)
         let runId = run?.id;
         if (!runId && agent) {
           const synthetic = await prisma.videoAgentRun.create({
@@ -68,6 +67,7 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
             });
             detectionIds.push(det.id);
           }
+          await approveDetectionsForAdClips(detectionIds, job.createdByUserId);
         }
 
         const modelParams = stringifyModelParams(

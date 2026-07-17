@@ -2,8 +2,6 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { guardAdmin, authUserId } from "@/lib/admin-guard";
 import { prisma } from "@/lib/db";
-import { enqueuePromoAdIteration } from "@/lib/promo-ad-queue";
-import { defaultModelParams, stringifyModelParams } from "@/lib/promo-ad/params";
 import { ensureDefaultVideoAgent } from "@/lib/video-agent-agent";
 import { approveDetectionsForAdClips } from "@/lib/ad-clips";
 import { logger } from "@/lib/logger";
@@ -18,27 +16,25 @@ const cropSchema = z
   })
   .optional();
 
-const segmentSchema = z.object({
-  videoId: z.string().min(1),
-  title: z.string().optional(),
-  startSec: z.number().min(0),
-  endSec: z.number().positive(),
-  crop: cropSchema,
-});
-
 const schema = z.object({
   siteId: z.string().min(1),
   title: z.string().max(200).optional(),
-  jobId: z.string().optional(),
-  segments: z.array(segmentSchema).min(1).max(40),
-  logoPosition: z.enum(["top-left", "top-right", "bottom-left", "bottom-right"]).optional(),
-  maxBodySeconds: z.number().int().min(5).max(300).optional(),
+  segments: z
+    .array(
+      z.object({
+        videoId: z.string().min(1),
+        title: z.string().optional(),
+        startSec: z.number().min(0),
+        endSec: z.number().positive(),
+        crop: cropSchema,
+      })
+    )
+    .min(1)
+    .max(40),
 });
 
 /**
- * Server FFmpeg compose from explicit timeline segments / AI auto-render.
- * Creates manual detections + CLIP_COMPOSE promo ad iteration.
- * Crop is stored on detection screenX/Y/W/H (normalized 0–1).
+ * Persist timeline clips as approved Ad clips (no FFmpeg compose).
  */
 export async function POST(request: Request) {
   const auth = await guardAdmin(request);
@@ -66,8 +62,8 @@ export async function POST(request: Request) {
       data: {
         siteId: d.siteId,
         agentId: agent.id,
-        userPrompt: "video-editor server render",
-        searchQuery: "editor-render",
+        userPrompt: d.title?.trim() || "video-editor save clips",
+        searchQuery: "editor-clips",
         extractTargets: JSON.stringify(["highlight"]),
         selectedVideoIds: JSON.stringify([...new Set(d.segments.map((s) => s.videoId))]),
         analysisModel: "manual",
@@ -78,7 +74,6 @@ export async function POST(request: Request) {
     });
 
     const detectionIds: string[] = [];
-    const cropAspects: string[] = [];
     for (const seg of d.segments) {
       const video = await prisma.video.findUnique({
         where: { id: seg.videoId },
@@ -102,70 +97,18 @@ export async function POST(request: Request) {
         },
       });
       detectionIds.push(det.id);
-      cropAspects.push(crop?.aspect || "16:9");
     }
 
     await approveDetectionsForAdClips(detectionIds, userId);
 
-    const bodySec =
-      d.maxBodySeconds ??
-      Math.ceil(d.segments.reduce((s, x) => s + (x.endSec - x.startSec), 0));
-
-    const portraitCount = cropAspects.filter((a) => a === "9:16" || a === "4:5").length;
-    const outputAspect = portraitCount > cropAspects.length / 2 ? "9:16" : "16:9";
-
-    const modelParams = stringifyModelParams(
-      defaultModelParams("CLIP_COMPOSE", {
-        maxBodySeconds: Math.min(300, Math.max(5, bodySec)),
-        logoPosition: d.logoPosition || "bottom-right",
-        logoOpacity: 0.85,
-        crossfadeSec: 0.4,
-        showTagline: true,
-        outputAspect,
-      })
-    );
-
-    const ad = await prisma.promoAd.create({
-      data: {
-        siteId: d.siteId,
-        title: d.title?.trim() || "Video editor render",
-        status: "GENERATING",
-        generationMode: "CLIP_COMPOSE",
-        modelParams,
-        createdByUserId: userId,
-        clips: {
-          create: detectionIds.map((detectionId, i) => ({ detectionId, sortOrder: i })),
-        },
-      },
-    });
-
-    const iteration = await prisma.promoAdIteration.create({
-      data: {
-        promoAdId: ad.id,
-        iterationNumber: 1,
-        modelParams,
-        status: "PENDING",
-        estimatedCostUsd: 0,
-      },
-    });
-
-    if (d.jobId) {
-      await prisma.videoEditorJob.updateMany({
-        where: { id: d.jobId, siteId: d.siteId },
-        data: { promoAdId: ad.id, status: "RENDERING", videoAgentRunId: run.id },
-      });
-    }
-
-    await enqueuePromoAdIteration(iteration.id);
-
     return NextResponse.json({
       ok: true,
-      promoAdId: ad.id,
-      iterationId: iteration.id,
       runId: run.id,
+      detectionIds,
+      count: detectionIds.length,
     });
   } catch (err) {
-    logger.error({ err }, "video-editor auto-render failed");
-    return NextResponse.json({ error: "Failed to start server render" }, { status: 500 });
+    logger.error({ err }, "video-editor save-clips failed");
+    return NextResponse.json({ error: "Failed to save clips" }, { status: 500 });
   }
 }

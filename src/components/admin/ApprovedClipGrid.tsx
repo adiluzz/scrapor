@@ -18,7 +18,7 @@ export default function ApprovedClipGrid({
   if (clips.length === 0) {
     return (
       <p className="rounded-xl border border-dashed border-zinc-700 p-8 text-center text-sm text-zinc-500">
-        No approved clips yet. Approve detections on a Video Agent run first.
+        No clips yet. Save or render clips from the Video editor — they appear here automatically.
       </p>
     );
   }

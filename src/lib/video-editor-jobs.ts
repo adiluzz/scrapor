@@ -1,5 +1,6 @@
 import { prisma } from "@/lib/db";
 import { packSegmentsToDuration } from "@/lib/video-editor-cost";
+import { approveDetectionsForAdClips } from "@/lib/ad-clips";
 
 export type EditorSegment = {
   videoId: string;
@@ -71,6 +72,10 @@ export async function syncVideoEditorJob(jobId: string) {
           },
         });
       }
+      await approveDetectionsForAdClips(
+        detections.map((d) => d.id),
+        job.createdByUserId
+      );
       return prisma.videoEditorJob.update({
         where: { id: jobId },
         data: {

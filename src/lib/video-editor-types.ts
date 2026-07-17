@@ -34,9 +34,19 @@ export const ASPECT_RATIOS: Record<Exclude<EditorCropAspect, "free">, number> = 
   "4:5": 4 / 5,
 };
 
+/** Full-frame crop (effectively no crop when exported). */
+export function fullFrameCrop(): EditorCrop {
+  return { x: 0, y: 0, w: 1, h: 1, aspect: "free" };
+}
+
+export function isFullFrameCrop(crop: EditorCrop | undefined | null): boolean {
+  if (!crop) return true;
+  return crop.x <= 0.001 && crop.y <= 0.001 && crop.w >= 0.999 && crop.h >= 0.999;
+}
+
 export function defaultCrop(aspect: EditorCropAspect = "16:9"): EditorCrop {
   if (aspect === "free") {
-    return { x: 0, y: 0, w: 1, h: 1, aspect: "free" };
+    return fullFrameCrop();
   }
   const target = ASPECT_RATIOS[aspect];
   // Assume source is roughly 16:9 for default framing; center-crop to aspect.

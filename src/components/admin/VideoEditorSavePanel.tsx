@@ -27,10 +27,41 @@ export default function VideoEditorSavePanel({
   const [status, setStatus] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [rendering, setRendering] = useState(false);
+  const [savingClips, setSavingClips] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [file, setFile] = useState<File | null>(null);
 
   const validClips = clips.filter((c) => c.endSec > c.startSec);
+
+  async function saveToAdClips() {
+    if (validClips.length === 0 || !siteId) return;
+    setSavingClips(true);
+    setError(null);
+    setStatus("Saving clips to Ad clips…");
+    try {
+      const res = await fetch("/api/admin/video-editor/save-clips", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          siteId,
+          title: title.trim() || "Edited clips",
+          segments: segmentsFromClips(validClips),
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setError(data.error || "Save failed");
+        setStatus(null);
+        return;
+      }
+      setStatus(`Saved ${data.count} clip(s) to Ad clips.`);
+    } catch {
+      setError("Save failed");
+      setStatus(null);
+    } finally {
+      setSavingClips(false);
+    }
+  }
 
   async function serverRender() {
     if (validClips.length === 0) return;
@@ -56,7 +87,7 @@ export default function VideoEditorSavePanel({
         return;
       }
       setStatus(
-        `Render queued (promo ad ${data.promoAdId || "…"}). Check Admin → Ads when complete, or link to library in a future update.`
+        `Render queued. Clips saved to Ad clips. Compose finishes in the background.`
       );
     } catch {
       setError("Render request failed");
@@ -136,7 +167,15 @@ export default function VideoEditorSavePanel({
         <p className={`text-sm ${error ? "text-red-400" : "text-emerald-400"}`}>{error || status}</p>
       )}
 
-      <div className="flex flex-wrap gap-2">
+      <div className="flex flex-col gap-2">
+        <button
+          type="button"
+          disabled={validClips.length === 0 || !siteId || savingClips}
+          onClick={() => void saveToAdClips()}
+          className="w-full rounded-md border border-zinc-600 py-2 text-sm font-medium text-zinc-100 hover:bg-zinc-800 disabled:opacity-50"
+        >
+          {savingClips ? "Saving…" : "Save clips to Ad clips"}
+        </button>
         <button
           type="button"
           disabled={validClips.length === 0 || !siteId || rendering}

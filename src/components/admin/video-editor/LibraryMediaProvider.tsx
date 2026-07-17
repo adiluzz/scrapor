@@ -5,7 +5,6 @@ import { DEFAULT_PROXY_DURATION_SEC } from "@/lib/video-editor-limits";
 import {
   type EditorClip,
   type LibraryVideo,
-  defaultCrop,
   newClipId,
 } from "@/lib/video-editor-types";
 
@@ -25,7 +24,6 @@ function defaultClipFromVideo(v: LibraryVideo): EditorClip {
     title: v.title,
     startSec: 0,
     endSec: end,
-    crop: defaultCrop("16:9"),
   };
 }
 

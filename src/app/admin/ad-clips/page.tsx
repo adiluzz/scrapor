@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import ApprovedClipGrid, { type ApprovedClip } from "@/components/admin/ApprovedClipGrid";
 
 export default function AdClipsPage() {
@@ -11,9 +11,6 @@ export default function AdClipsPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
-  const [showcaseVideoId, setShowcaseVideoId] = useState("");
-  const [creating, setCreating] = useState(false);
-  const [mode, setMode] = useState<"CLIP_COMPOSE" | "GENERATIVE">("CLIP_COMPOSE");
 
   useEffect(() => {
     document.title = "Ad clips · Admin";
@@ -38,21 +35,6 @@ export default function AdClipsPage() {
     loadClips();
   }, [loadClips]);
 
-  const showcaseOptions = useMemo(() => {
-    const map = new Map<string, string>();
-    for (const id of selectedIds) {
-      const clip = clips.find((c) => c.id === id);
-      if (clip) map.set(clip.videoId, clip.videoTitle);
-    }
-    return Array.from(map.entries());
-  }, [clips, selectedIds]);
-
-  useEffect(() => {
-    if (!showcaseVideoId && showcaseOptions[0]) {
-      setShowcaseVideoId(showcaseOptions[0][0]);
-    }
-  }, [showcaseOptions, showcaseVideoId]);
-
   function toggle(id: string) {
     setSelectedIds((prev) => {
       const next = new Set(prev);
@@ -62,44 +44,29 @@ export default function AdClipsPage() {
     });
   }
 
-  async function createAd() {
+  function openInEditor() {
     if (selectedIds.size === 0) return;
-    setCreating(true);
-    setError(null);
-    try {
-      const res = await fetch("/api/promo-ads", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          detectionIds: Array.from(selectedIds),
-          showcaseVideoId: showcaseVideoId || undefined,
-          generationMode: mode,
-        }),
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Failed to create ad");
-      router.push(`/admin/ads/create?id=${data.ad.id}`);
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Create failed");
-    } finally {
-      setCreating(false);
-    }
+    const qs = new URLSearchParams({
+      detections: Array.from(selectedIds).join(","),
+    });
+    router.push(`/admin/video-editor?${qs}`);
   }
 
   return (
     <div className="space-y-6">
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold text-white">Approved ad clips</h1>
+          <h1 className="text-2xl font-bold text-white">Ad clips</h1>
           <p className="mt-1 text-sm text-zinc-400">
-            Select clips from Video Agent approvals to build a promo ad.
+            All saved clips from the Video editor (AI highlight and manual trims). Select clips to
+            open them on the timeline.
           </p>
         </div>
         <Link
-          href="/admin/ads"
-          className="text-sm text-brand-400 hover:text-brand-300"
+          href="/admin/video-editor"
+          className="rounded-lg bg-brand-600 px-4 py-2 text-sm font-medium text-white hover:bg-brand-500"
         >
-          View all promo ads →
+          Open video editor
         </Link>
       </div>
 
@@ -120,50 +87,12 @@ export default function AdClipsPage() {
           <p className="mb-3 text-sm text-zinc-300">
             {selectedIds.size} clip{selectedIds.size === 1 ? "" : "s"} selected
           </p>
-
-          <div className="mb-3 flex flex-wrap gap-4">
-            <label className="flex items-center gap-2 text-sm text-zinc-300">
-              <input
-                type="radio"
-                checked={mode === "CLIP_COMPOSE"}
-                onChange={() => setMode("CLIP_COMPOSE")}
-              />
-              Clip compose (no AI, $0)
-            </label>
-            <label className="flex items-center gap-2 text-sm text-zinc-300">
-              <input
-                type="radio"
-                checked={mode === "GENERATIVE"}
-                onChange={() => setMode("GENERATIVE")}
-              />
-              AI generate
-            </label>
-          </div>
-
-          {showcaseOptions.length > 0 && (
-            <label className="mb-3 block text-sm text-zinc-400">
-              Showcase video
-              <select
-                value={showcaseVideoId}
-                onChange={(e) => setShowcaseVideoId(e.target.value)}
-                className="mt-1 w-full max-w-md rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-white"
-              >
-                {showcaseOptions.map(([id, title]) => (
-                  <option key={id} value={id}>
-                    {title}
-                  </option>
-                ))}
-              </select>
-            </label>
-          )}
-
           <button
             type="button"
-            disabled={creating}
-            onClick={createAd}
-            className="rounded-lg bg-brand-600 px-4 py-2 text-sm font-medium text-white hover:bg-brand-500 disabled:opacity-50"
+            onClick={openInEditor}
+            className="rounded-lg bg-brand-600 px-4 py-2 text-sm font-medium text-white hover:bg-brand-500"
           >
-            {creating ? "Creating draft…" : "Create promo ad"}
+            Open in video editor
           </button>
         </div>
       )}

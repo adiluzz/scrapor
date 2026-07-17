@@ -27,8 +27,20 @@ def _j(msg: dict) -> str:
     return json.dumps(msg, default=str)
 
 
+def _redis_client() -> redis.Redis:
+    # socket_timeout must exceed blpop timeout, otherwise idle polls raise
+    # TimeoutError and flood logs (and can disrupt the consumer loop).
+    return redis.from_url(
+        os.environ.get("REDIS_URL", "redis://localhost:6379"),
+        socket_timeout=30,
+        socket_connect_timeout=10,
+        health_check_interval=30,
+        retry_on_timeout=True,
+    )
+
+
 def main() -> None:
-    r = redis.from_url(os.environ.get("REDIS_URL", "redis://localhost:6379"))
+    r = _redis_client()
     conn = connect()
 
     try:
@@ -50,6 +62,14 @@ def main() -> None:
             run_id = item[1].decode() if isinstance(item[1], bytes) else item[1]
             log.info(_j({"event": "job_received", "runId": run_id}))
             process_run(conn, run_id)
+        except redis.TimeoutError:
+            # Idle / transient socket timeout — reconnect and keep polling.
+            try:
+                r.close()
+            except Exception:  # noqa: BLE001
+                pass
+            r = _redis_client()
+            time.sleep(1)
         except Exception as e:  # noqa: BLE001
             log.error(_j({
                 "event": "loop_error",
@@ -57,6 +77,11 @@ def main() -> None:
                 "traceback": traceback.format_exc()[-800:],
             }))
             time.sleep(3)
+            try:
+                r.close()
+            except Exception:  # noqa: BLE001
+                pass
+            r = _redis_client()
 
 
 if __name__ == "__main__":

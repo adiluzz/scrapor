@@ -154,26 +154,42 @@ export default function CropOverlay({
         style={{ left: 0, top: `${T + H}%`, width: "100%", height: `${100 - T - H}%` }}
       />
 
+      {/* Frame only — interior stays click-through so the player play button works */}
       <div
-        className="pointer-events-auto absolute border-2 border-white/90 shadow-[0_0_0_1px_rgba(0,0,0,0.5)]"
+        className="pointer-events-none absolute border-2 border-white/90 shadow-[0_0_0_1px_rgba(0,0,0,0.5)]"
         style={{
           left: `${L}%`,
           top: `${T}%`,
           width: `${W}%`,
           height: `${H}%`,
-          cursor: "grab",
         }}
-        onPointerDown={startDrag("move")}
       >
         <div className="pointer-events-none absolute inset-0 grid grid-cols-3 grid-rows-3">
           {Array.from({ length: 9 }).map((_, i) => (
             <div key={i} className="border border-white/15" />
           ))}
         </div>
+        {/* Edge hit-targets for move (not the full box) */}
+        <div
+          className="pointer-events-auto absolute inset-x-2 -top-1 h-2.5 cursor-grab"
+          onPointerDown={startDrag("move")}
+        />
+        <div
+          className="pointer-events-auto absolute inset-x-2 -bottom-1 h-2.5 cursor-grab"
+          onPointerDown={startDrag("move")}
+        />
+        <div
+          className="pointer-events-auto absolute inset-y-2 -left-1 w-2.5 cursor-grab"
+          onPointerDown={startDrag("move")}
+        />
+        <div
+          className="pointer-events-auto absolute inset-y-2 -right-1 w-2.5 cursor-grab"
+          onPointerDown={startDrag("move")}
+        />
         {(["nw", "ne", "sw", "se"] as const).map((corner) => (
           <div
             key={corner}
-            className={`absolute h-3.5 w-3.5 bg-yellow-400 ${
+            className={`pointer-events-auto absolute h-3.5 w-3.5 bg-yellow-400 ${
               corner.includes("n") ? "-top-1.5" : "-bottom-1.5"
             } ${corner.includes("w") ? "-left-1.5" : "-right-1.5"} ${
               corner === "nw" || corner === "se" ? "cursor-nwse-resize" : "cursor-nesw-resize"
@@ -189,13 +205,16 @@ export default function CropOverlay({
 export function CropAspectControls({
   crop,
   onChange,
+  onClear,
 }: {
   crop: EditorCrop;
   onChange: (crop: EditorCrop) => void;
+  /** Remove crop entirely (full frame, no export crop). */
+  onClear?: () => void;
 }) {
   const aspects: EditorCropAspect[] = ["16:9", "9:16", "1:1", "4:5", "free"];
   return (
-    <div className="flex flex-wrap gap-1">
+    <div className="flex flex-wrap items-center gap-1">
       {aspects.map((a) => (
         <button
           key={a}
@@ -214,9 +233,20 @@ export function CropAspectControls({
         type="button"
         onClick={() => onChange(defaultCrop(crop.aspect))}
         className="rounded border border-zinc-700 px-2 py-0.5 text-[11px] text-zinc-400 hover:bg-zinc-800"
+        title="Recenter this aspect ratio"
       >
         Reset
       </button>
+      {onClear && (
+        <button
+          type="button"
+          onClick={onClear}
+          className="rounded border border-zinc-700 px-2 py-0.5 text-[11px] text-zinc-400 hover:bg-zinc-800"
+          title="Remove crop — use full frame"
+        >
+          None
+        </button>
+      )}
     </div>
   );
 }

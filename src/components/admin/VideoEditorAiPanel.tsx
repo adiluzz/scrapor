@@ -97,7 +97,7 @@ export default function VideoEditorAiPanel({
       }
       if (data.job?.status === "DONE") {
         setLoading(false);
-        setStatus("DONE — check Promo ads / library for the rendered file");
+        setStatus("DONE — clips saved to Ad clips");
       }
       if (data.job?.status === "ERROR") {
         setError(data.job.error || "Job failed");

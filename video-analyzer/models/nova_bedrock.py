@@ -60,8 +60,31 @@ class NovaBedrockAnalyzer:
         for part in parts:
             if "text" in part:
                 text += part["text"]
+        stop = response.get("stopReason")
+        usage = response.get("usage") or {}
         try:
-            return parse_detections_json(text, chunk_offset=media.chunk_start_sec)
+            dets = parse_detections_json(text, chunk_offset=media.chunk_start_sec)
         except json.JSONDecodeError:
-            log.warning("nova_json_parse_failed text=%s", text[:500])
+            log.warning(
+                "nova_json_parse_failed stop=%s out_tokens=%s text=%s",
+                stop,
+                usage.get("outputTokens"),
+                text[:500],
+            )
             return []
+        if not dets:
+            log.info(
+                "nova_empty_detections stop=%s out_tokens=%s chunk_start=%s text=%s",
+                stop,
+                usage.get("outputTokens"),
+                media.chunk_start_sec,
+                text[:300],
+            )
+        else:
+            log.info(
+                "nova_detections count=%s chunk_start=%s labels=%s",
+                len(dets),
+                media.chunk_start_sec,
+                [d.label for d in dets[:8]],
+            )
+        return dets

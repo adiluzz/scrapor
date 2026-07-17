@@ -7,7 +7,7 @@ import SourceTrimBar from "@/components/admin/video-editor/SourceTrimBar";
 import type { VideoPlayerHandle } from "@/components/player/VideoPlayer";
 import {
   type EditorCrop,
-  defaultCrop,
+  fullFrameCrop,
   MIN_CLIP_DURATION_SEC,
 } from "@/lib/video-editor-types";
 
@@ -41,6 +41,7 @@ export default function ClipRangeSelector({
   compact = false,
   crop,
   onCropChange,
+  onClearCrop,
   showCrop = false,
   onCurrentTimeChange,
 }: {
@@ -50,17 +51,19 @@ export default function ClipRangeSelector({
   compact?: boolean;
   crop?: EditorCrop;
   onCropChange?: (crop: EditorCrop) => void;
+  onClearCrop?: () => void;
   showCrop?: boolean;
   onCurrentTimeChange?: (sec: number) => void;
 }) {
   const playerRef = useRef<VideoPlayerHandle>(null);
   const [duration, setDuration] = useState(0);
   const [current, setCurrent] = useState(0);
+  const [playing, setPlaying] = useState(false);
   const [startSec, setStartSec] = useState(initialRange?.startSec ?? 0);
   const [endSec, setEndSec] = useState(initialRange?.endSec ?? 0);
   const [startText, setStartText] = useState("");
   const [endText, setEndText] = useState("");
-  const [localCrop, setLocalCrop] = useState<EditorCrop>(crop ?? defaultCrop());
+  const [localCrop, setLocalCrop] = useState<EditorCrop>(crop ?? fullFrameCrop());
 
   useEffect(() => {
     setStartSec(initialRange?.startSec ?? 0);
@@ -68,7 +71,7 @@ export default function ClipRangeSelector({
   }, [videoId, initialRange?.startSec, initialRange?.endSec]);
 
   useEffect(() => {
-    if (crop) setLocalCrop(crop);
+    setLocalCrop(crop ?? fullFrameCrop());
   }, [crop]);
 
   useEffect(() => {
@@ -115,19 +118,36 @@ export default function ClipRangeSelector({
     if (startSec >= t) setStartSec(Math.max(0, t - 5));
   }, [startSec]);
 
+  const togglePlay = useCallback(async () => {
+    const player = playerRef.current;
+    if (!player) return;
+    if (playing) {
+      player.pause();
+      setPlaying(false);
+      return;
+    }
+    await player.ensurePlaying();
+    await player.play();
+    setPlaying(true);
+  }, [playing]);
+
   const previewClip = useCallback(async () => {
     const player = playerRef.current;
     if (!player) return;
     await player.ensurePlaying();
     player.seek(startSec);
     await player.play();
+    setPlaying(true);
   }, [startSec]);
 
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
       const tag = (e.target as HTMLElement)?.tagName;
       if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT") return;
-      if (e.key === "i" || e.key === "I") {
+      if (e.key === " " || e.code === "Space") {
+        e.preventDefault();
+        void togglePlay();
+      } else if (e.key === "i" || e.key === "I") {
         e.preventDefault();
         void markStart();
       } else if (e.key === "o" || e.key === "O") {
@@ -137,7 +157,7 @@ export default function ClipRangeSelector({
     }
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [markStart, markEnd]);
+  }, [markStart, markEnd, togglePlay]);
 
   const applyCrop = useCallback(
     (c: EditorCrop) => {
@@ -160,7 +180,14 @@ export default function ClipRangeSelector({
       </div>
 
       {showCrop && (
-        <CropAspectControls crop={localCrop} onChange={applyCrop} />
+        <CropAspectControls
+          crop={localCrop}
+          onChange={applyCrop}
+          onClear={() => {
+            setLocalCrop(fullFrameCrop());
+            onClearCrop?.();
+          }}
+        />
       )}
 
       {duration > 0 && (
@@ -179,6 +206,16 @@ export default function ClipRangeSelector({
       )}
 
       <div className={`flex flex-wrap gap-2 ${compact ? "items-center" : ""}`}>
+        <button
+          type="button"
+          onClick={() => void togglePlay()}
+          className={`rounded-md bg-brand-600 text-white hover:bg-brand-500 ${
+            compact ? "px-3 py-1 text-[11px] font-medium" : "px-3 py-1.5 text-xs"
+          }`}
+          title="Play / pause (Space)"
+        >
+          {playing ? "Pause" : "Play"}
+        </button>
         <button
           type="button"
           onClick={markStart}
@@ -201,11 +238,11 @@ export default function ClipRangeSelector({
           type="button"
           onClick={previewClip}
           disabled={endSec <= startSec}
-          className={`rounded-md bg-brand-600 text-white hover:bg-brand-500 disabled:opacity-50 ${
+          className={`rounded-md border border-zinc-700 text-zinc-200 hover:bg-zinc-800 disabled:opacity-50 ${
             compact ? "px-2.5 py-1 text-[11px] font-medium" : "px-3 py-1.5 text-xs"
           }`}
         >
-          Preview
+          Preview in/out
         </button>
         {compact && endSec > startSec && (
           <span className="ml-auto text-[11px] tabular-nums text-brand-300">

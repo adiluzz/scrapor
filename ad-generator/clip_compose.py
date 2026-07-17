@@ -44,6 +44,11 @@ def compose_promo_ad(
     ken_burns = model_params.get("kenBurns") is True
     remove_logos = model_params.get("removeSourceLogos", True) is not False
     logo_removal_mode = model_params.get("logoRemovalMode") or "both"
+    output_aspect = model_params.get("outputAspect") or "16:9"
+    if output_aspect == "9:16":
+        target_w, target_h = 1080, 1920
+    else:
+        target_w, target_h = 1920, 1080
 
     segments_dir = work / "segments"
     segments_dir.mkdir(exist_ok=True)
@@ -65,6 +70,20 @@ def compose_promo_ad(
             if not download_video(site_id, video_id, src):
                 raise FileNotFoundError(f"Cannot download video {video_id}")
 
+        crop_norm = None
+        if (
+            clip.get("screenW") is not None
+            and clip.get("screenH") is not None
+            and float(clip["screenW"]) > 0
+            and float(clip["screenH"]) > 0
+        ):
+            crop_norm = {
+                "x": float(clip.get("screenX") or 0),
+                "y": float(clip.get("screenY") or 0),
+                "w": float(clip["screenW"]),
+                "h": float(clip["screenH"]),
+            }
+
         seg_out = segments_dir / f"seg_{i:03d}.mp4"
         normalize_segment(
             src,
@@ -76,6 +95,9 @@ def compose_promo_ad(
             logo_removal_mode=logo_removal_mode,
             ken_burns=ken_burns,
             work_dir=work,
+            crop_norm=crop_norm,
+            target_w=target_w,
+            target_h=target_h,
         )
         normalized.append(seg_out)
 

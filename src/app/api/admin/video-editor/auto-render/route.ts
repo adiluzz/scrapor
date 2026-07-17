@@ -7,11 +7,22 @@ import { defaultModelParams, stringifyModelParams } from "@/lib/promo-ad/params"
 import { ensureDefaultVideoAgent } from "@/lib/video-agent-agent";
 import { logger } from "@/lib/logger";
 
+const cropSchema = z
+  .object({
+    x: z.number().min(0).max(1),
+    y: z.number().min(0).max(1),
+    w: z.number().min(0.05).max(1),
+    h: z.number().min(0.05).max(1),
+    aspect: z.enum(["16:9", "9:16", "1:1", "4:5", "free"]).optional(),
+  })
+  .optional();
+
 const segmentSchema = z.object({
   videoId: z.string().min(1),
   title: z.string().optional(),
   startSec: z.number().min(0),
   endSec: z.number().positive(),
+  crop: cropSchema,
 });
 
 const schema = z.object({
@@ -26,6 +37,7 @@ const schema = z.object({
 /**
  * Server FFmpeg compose from explicit timeline segments / AI auto-render.
  * Creates manual detections + CLIP_COMPOSE promo ad iteration.
+ * Crop is stored on detection screenX/Y/W/H (normalized 0–1).
  */
 export async function POST(request: Request) {
   const auth = await guardAdmin(request);
@@ -65,11 +77,13 @@ export async function POST(request: Request) {
     });
 
     const detectionIds: string[] = [];
+    const cropAspects: string[] = [];
     for (const seg of d.segments) {
       const video = await prisma.video.findUnique({
         where: { id: seg.videoId },
         select: { title: true },
       });
+      const crop = seg.crop;
       const det = await prisma.videoAgentDetection.create({
         data: {
           runId: run.id,
@@ -80,14 +94,22 @@ export async function POST(request: Request) {
           endSec: seg.endSec,
           confidence: 1,
           manual: true,
+          screenX: crop?.x ?? null,
+          screenY: crop?.y ?? null,
+          screenW: crop?.w ?? null,
+          screenH: crop?.h ?? null,
         },
       });
       detectionIds.push(det.id);
+      cropAspects.push(crop?.aspect || "16:9");
     }
 
     const bodySec =
       d.maxBodySeconds ??
       Math.ceil(d.segments.reduce((s, x) => s + (x.endSec - x.startSec), 0));
+
+    const portraitCount = cropAspects.filter((a) => a === "9:16" || a === "4:5").length;
+    const outputAspect = portraitCount > cropAspects.length / 2 ? "9:16" : "16:9";
 
     const modelParams = stringifyModelParams(
       defaultModelParams("CLIP_COMPOSE", {
@@ -96,6 +118,7 @@ export async function POST(request: Request) {
         logoOpacity: 0.85,
         crossfadeSec: 0.4,
         showTagline: true,
+        outputAspect,
       })
     );
 

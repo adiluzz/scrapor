@@ -15,6 +15,8 @@ export type PromoAdModelParams = {
   kenBurns?: boolean;
   removeSourceLogos?: boolean;
   logoRemovalMode?: "presets" | "auto" | "both";
+  /** Output canvas aspect for CLIP_COMPOSE (from editor crop majority). */
+  outputAspect?: "16:9" | "9:16";
 };
 
 export function parseModelParams(raw: string | null | undefined): PromoAdModelParams {

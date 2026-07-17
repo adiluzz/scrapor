@@ -12,11 +12,13 @@ export default function VideoEditorSavePanel({
   jobId,
   defaultTitle,
   clips = [],
+  compact = false,
 }: {
   siteId: string;
   jobId?: string | null;
   defaultTitle?: string;
   clips?: EditorClip[];
+  compact?: boolean;
 }) {
   const [title, setTitle] = useState(defaultTitle || "Edited video");
   const [logoPosition, setLogoPosition] = useState<
@@ -97,21 +99,22 @@ export default function VideoEditorSavePanel({
   }
 
   return (
-    <div className="space-y-3 rounded-xl border border-zinc-800 bg-zinc-900/50 p-5">
-      <div>
-        <h2 className="text-sm font-medium text-zinc-200">Export</h2>
-        <p className="mt-1 text-xs text-zinc-500">
-          Primary path: server FFmpeg from timeline clips (reads source MP4s from S3, applies logo
-          + crossfades). Optional: upload an external MP4 directly to the library.
-        </p>
-      </div>
+    <div className={compact ? "space-y-3" : "space-y-3 rounded-xl border border-zinc-800 bg-zinc-900/50 p-5"}>
+      {!compact && (
+        <div>
+          <h2 className="text-sm font-medium text-zinc-200">Export</h2>
+          <p className="mt-1 text-xs text-zinc-500">
+            Server FFmpeg from timeline clips (S3 sources, logo + crossfades).
+          </p>
+        </div>
+      )}
 
       <label className="block space-y-1.5">
         <span className="text-sm text-zinc-400">Title</span>
         <input
           value={title}
           onChange={(e) => setTitle(e.target.value)}
-          className="w-full rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm text-white"
+          className="w-full rounded-md border border-zinc-800 bg-zinc-900 px-2 py-1.5 text-sm text-white"
         />
       </label>
 
@@ -120,7 +123,7 @@ export default function VideoEditorSavePanel({
         <select
           value={logoPosition}
           onChange={(e) => setLogoPosition(e.target.value as typeof logoPosition)}
-          className="w-full rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm text-white"
+          className="w-full rounded-md border border-zinc-800 bg-zinc-900 px-2 py-1.5 text-sm text-white"
         >
           <option value="bottom-right">Bottom right</option>
           <option value="bottom-left">Bottom left</option>
@@ -138,9 +141,9 @@ export default function VideoEditorSavePanel({
           type="button"
           disabled={validClips.length === 0 || !siteId || rendering}
           onClick={() => void serverRender()}
-          className="rounded-lg bg-brand-600 px-4 py-2 text-sm font-medium text-white hover:bg-brand-500 disabled:opacity-50"
+          className="w-full rounded-md bg-brand-600 py-2 text-sm font-medium text-white hover:bg-brand-500 disabled:opacity-50"
         >
-          {rendering ? "Queuing…" : `Render ${validClips.length} clip(s) on server`}
+          {rendering ? "Queuing…" : compact ? "Render on server" : `Render ${validClips.length} clip(s) on server`}
         </button>
       </div>
 

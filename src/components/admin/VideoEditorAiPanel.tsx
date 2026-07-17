@@ -32,10 +32,12 @@ export default function VideoEditorAiPanel({
   siteId,
   videoIds,
   onSegmentsReady,
+  compact = false,
 }: {
   siteId: string;
   videoIds: string[];
   onSegmentsReady: (segments: Segment[], jobId: string) => void;
+  compact?: boolean;
 }) {
   const [models, setModels] = useState<ModelRow[]>([]);
   const [modelId, setModelId] = useState("nova-2-lite");
@@ -144,14 +146,16 @@ export default function VideoEditorAiPanel({
   }
 
   return (
-    <div className="space-y-4 rounded-xl border border-zinc-800 bg-zinc-900/50 p-5">
-      <div>
-        <h2 className="text-sm font-medium text-zinc-200">AI highlight (Bedrock)</h2>
-        <p className="mt-1 text-xs text-zinc-500">
-          Uses the videos you checked in Library (server-side from S3). Segments are added to the
-          timeline when analysis completes.
-        </p>
-      </div>
+    <div className={compact ? "space-y-3" : "space-y-4 rounded-xl border border-zinc-800 bg-zinc-900/50 p-5"}>
+      {!compact && (
+        <div>
+          <h2 className="text-sm font-medium text-zinc-200">AI highlight (Bedrock)</h2>
+          <p className="mt-1 text-xs text-zinc-500">
+            Uses the videos you checked in Library (server-side from S3). Segments are added to the
+            timeline when analysis completes.
+          </p>
+        </div>
+      )}
 
       <label className="block space-y-1.5">
         <span className="text-sm text-zinc-400">Model</span>

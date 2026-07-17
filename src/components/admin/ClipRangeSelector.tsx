@@ -2,7 +2,14 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import AdminClipPlayer from "@/components/admin/AdminClipPlayer";
+import CropOverlay, { CropAspectControls } from "@/components/admin/video-editor/CropOverlay";
+import SourceTrimBar from "@/components/admin/video-editor/SourceTrimBar";
 import type { VideoPlayerHandle } from "@/components/player/VideoPlayer";
+import {
+  type EditorCrop,
+  defaultCrop,
+  MIN_CLIP_DURATION_SEC,
+} from "@/lib/video-editor-types";
 
 function formatTime(sec: number) {
   const m = Math.floor(sec / 60);
@@ -31,10 +38,20 @@ export default function ClipRangeSelector({
   videoId,
   initialRange,
   onRangeChange,
+  compact = false,
+  crop,
+  onCropChange,
+  showCrop = false,
+  onCurrentTimeChange,
 }: {
   videoId: string;
   initialRange?: ClipRange;
   onRangeChange?: (range: ClipRange) => void;
+  compact?: boolean;
+  crop?: EditorCrop;
+  onCropChange?: (crop: EditorCrop) => void;
+  showCrop?: boolean;
+  onCurrentTimeChange?: (sec: number) => void;
 }) {
   const playerRef = useRef<VideoPlayerHandle>(null);
   const [duration, setDuration] = useState(0);
@@ -43,11 +60,16 @@ export default function ClipRangeSelector({
   const [endSec, setEndSec] = useState(initialRange?.endSec ?? 0);
   const [startText, setStartText] = useState("");
   const [endText, setEndText] = useState("");
+  const [localCrop, setLocalCrop] = useState<EditorCrop>(crop ?? defaultCrop());
 
   useEffect(() => {
     setStartSec(initialRange?.startSec ?? 0);
     setEndSec(initialRange?.endSec ?? 0);
   }, [videoId, initialRange?.startSec, initialRange?.endSec]);
+
+  useEffect(() => {
+    if (crop) setLocalCrop(crop);
+  }, [crop]);
 
   useEffect(() => {
     setStartText(formatTime(startSec));
@@ -60,6 +82,19 @@ export default function ClipRangeSelector({
     setEndSec((prev) => (prev <= 0 ? Math.min(d, 10) : prev));
   }, []);
 
+  const handleTime = useCallback(
+    (t: number) => {
+      setCurrent(t);
+      onCurrentTimeChange?.(t);
+    },
+    [onCurrentTimeChange]
+  );
+
+  const seek = useCallback((t: number) => {
+    playerRef.current?.seek(t);
+    setCurrent(t);
+  }, []);
+
   const markStart = useCallback(async () => {
     const player = playerRef.current;
     if (!player) return;
@@ -67,7 +102,7 @@ export default function ClipRangeSelector({
     const t = player.getCurrentTime();
     setStartSec(Math.max(0, t));
     setCurrent(t);
-    if (endSec <= t) setEndSec(Math.min(duration || t + 5, t + 10));
+    if (endSec <= t) setEndSec(Math.min(duration || t + 5, t + MIN_CLIP_DURATION_SEC + 5));
   }, [duration, endSec]);
 
   const markEnd = useCallback(async () => {
@@ -75,7 +110,7 @@ export default function ClipRangeSelector({
     if (!player) return;
     await player.ensurePlaying();
     const t = player.getCurrentTime();
-    setEndSec(t);
+    setEndSec(Math.max(t, startSec + MIN_CLIP_DURATION_SEC));
     setCurrent(t);
     if (startSec >= t) setStartSec(Math.max(0, t - 5));
   }, [startSec]);
@@ -88,125 +123,128 @@ export default function ClipRangeSelector({
     await player.play();
   }, [startSec]);
 
+  useEffect(() => {
+    function onKey(e: KeyboardEvent) {
+      const tag = (e.target as HTMLElement)?.tagName;
+      if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT") return;
+      if (e.key === "i" || e.key === "I") {
+        e.preventDefault();
+        void markStart();
+      } else if (e.key === "o" || e.key === "O") {
+        e.preventDefault();
+        void markEnd();
+      }
+    }
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [markStart, markEnd]);
+
+  const applyCrop = useCallback(
+    (c: EditorCrop) => {
+      setLocalCrop(c);
+      onCropChange?.(c);
+    },
+    [onCropChange]
+  );
+
   return (
-    <div className="space-y-3">
-      <div className="relative">
+    <div className={compact ? "space-y-2" : "space-y-3"}>
+      <div className="relative aspect-video overflow-hidden rounded-lg bg-black">
         <AdminClipPlayer
           ref={playerRef}
           videoId={videoId}
-          onTimeUpdate={setCurrent}
+          onTimeUpdate={handleTime}
           onDuration={handleDuration}
         />
-        {duration > 0 && (
-          <div
-            className="pointer-events-none absolute bottom-12 left-0 right-0 z-30 mx-3 h-1 bg-zinc-800/80"
-            aria-hidden
-          >
-            <div
-              className="absolute top-0 h-full bg-brand-500/80"
-              style={{
-                left: `${(startSec / duration) * 100}%`,
-                width: `${((endSec - startSec) / duration) * 100}%`,
-              }}
-            />
-          </div>
-        )}
+        {showCrop && <CropOverlay crop={localCrop} onChange={applyCrop} />}
       </div>
 
-      <p className="text-xs text-zinc-500">
-        Use the player controls (including ←/→ to skip 7s), pause at the action, then mark start
-        and end.
-      </p>
+      {showCrop && (
+        <CropAspectControls crop={localCrop} onChange={applyCrop} />
+      )}
 
-      <div className="flex flex-wrap gap-2">
+      {duration > 0 && (
+        <SourceTrimBar
+          videoId={videoId}
+          duration={duration}
+          startSec={startSec}
+          endSec={endSec}
+          currentSec={current}
+          onRangeChange={(r) => {
+            setStartSec(r.startSec);
+            setEndSec(r.endSec);
+          }}
+          onSeek={seek}
+        />
+      )}
+
+      <div className={`flex flex-wrap gap-2 ${compact ? "items-center" : ""}`}>
         <button
           type="button"
           onClick={markStart}
-          className="rounded-lg bg-zinc-800 px-3 py-1.5 text-xs text-zinc-200 hover:bg-zinc-700"
+          className={`rounded-md bg-zinc-800 text-zinc-200 hover:bg-zinc-700 ${
+            compact ? "px-2.5 py-1 text-[11px] font-medium" : "px-3 py-1.5 text-xs"
+          }`}
         >
-          Mark start ({formatTime(current)})
+          In ({formatTime(current)})
         </button>
         <button
           type="button"
           onClick={markEnd}
-          className="rounded-lg bg-zinc-800 px-3 py-1.5 text-xs text-zinc-200 hover:bg-zinc-700"
+          className={`rounded-md bg-zinc-800 text-zinc-200 hover:bg-zinc-700 ${
+            compact ? "px-2.5 py-1 text-[11px] font-medium" : "px-3 py-1.5 text-xs"
+          }`}
         >
-          Mark end ({formatTime(current)})
+          Out ({formatTime(current)})
         </button>
         <button
           type="button"
           onClick={previewClip}
           disabled={endSec <= startSec}
-          className="rounded-lg bg-brand-600/80 px-3 py-1.5 text-xs text-white hover:bg-brand-500 disabled:opacity-50"
+          className={`rounded-md bg-brand-600 text-white hover:bg-brand-500 disabled:opacity-50 ${
+            compact ? "px-2.5 py-1 text-[11px] font-medium" : "px-3 py-1.5 text-xs"
+          }`}
         >
-          Preview clip
+          Preview
         </button>
-      </div>
-
-      <div className="grid gap-3 sm:grid-cols-2">
-        <label className="block text-xs text-zinc-400">
-          Start (m:ss or seconds)
-          <input
-            value={startText}
-            onChange={(e) => setStartText(e.target.value)}
-            onBlur={() => {
-              const v = parseTimeInput(startText);
-              if (v != null) setStartSec(Math.max(0, Math.min(v, duration || v)));
-            }}
-            className="mt-1 w-full rounded-lg border border-zinc-700 bg-zinc-950 px-2 py-1.5 text-sm text-white"
-          />
-        </label>
-        <label className="block text-xs text-zinc-400">
-          End (m:ss or seconds)
-          <input
-            value={endText}
-            onChange={(e) => setEndText(e.target.value)}
-            onBlur={() => {
-              const v = parseTimeInput(endText);
-              if (v != null) setEndSec(Math.max(0, Math.min(v, duration || v)));
-            }}
-            className="mt-1 w-full rounded-lg border border-zinc-700 bg-zinc-950 px-2 py-1.5 text-sm text-white"
-          />
-        </label>
-      </div>
-
-      {duration > 0 && (
-        <div className="space-y-1">
-          <input
-            type="range"
-            min={0}
-            max={duration}
-            step={0.1}
-            value={startSec}
-            onChange={(e) => {
-              const v = parseFloat(e.target.value);
-              setStartSec(v);
-              if (endSec <= v) setEndSec(Math.min(duration, v + 1));
-            }}
-            className="w-full accent-brand-500"
-          />
-          <input
-            type="range"
-            min={0}
-            max={duration}
-            step={0.1}
-            value={endSec}
-            onChange={(e) => {
-              const v = parseFloat(e.target.value);
-              setEndSec(v);
-              if (startSec >= v) setStartSec(Math.max(0, v - 1));
-            }}
-            className="w-full accent-brand-500"
-          />
-        </div>
-      )}
-
-      <p className="text-xs text-brand-300">
-        Selected: {formatTime(startSec)} → {formatTime(endSec)}
-        {endSec > startSec && (
-          <span className="text-zinc-500"> ({(endSec - startSec).toFixed(1)}s)</span>
+        {compact && endSec > startSec && (
+          <span className="ml-auto text-[11px] tabular-nums text-brand-300">
+            {(endSec - startSec).toFixed(1)}s
+          </span>
         )}
-      </p>
+      </div>
+
+      <details className="text-xs text-zinc-500">
+        <summary className="cursor-pointer text-zinc-400 hover:text-zinc-300">
+          Exact times
+        </summary>
+        <div className="mt-2 grid grid-cols-2 gap-2">
+          <label className="block text-xs text-zinc-400">
+            Start
+            <input
+              value={startText}
+              onChange={(e) => setStartText(e.target.value)}
+              onBlur={() => {
+                const v = parseTimeInput(startText);
+                if (v != null) setStartSec(Math.max(0, Math.min(v, duration || v)));
+              }}
+              className="mt-1 w-full rounded-md border border-zinc-700 bg-zinc-950 px-2 py-1.5 text-sm text-white"
+            />
+          </label>
+          <label className="block text-xs text-zinc-400">
+            End
+            <input
+              value={endText}
+              onChange={(e) => setEndText(e.target.value)}
+              onBlur={() => {
+                const v = parseTimeInput(endText);
+                if (v != null) setEndSec(Math.max(0, Math.min(v, duration || v)));
+              }}
+              className="mt-1 w-full rounded-md border border-zinc-700 bg-zinc-950 px-2 py-1.5 text-sm text-white"
+            />
+          </label>
+        </div>
+      </details>
     </div>
   );
 }

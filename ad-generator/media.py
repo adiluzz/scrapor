@@ -102,6 +102,27 @@ def probe_duration(video_path: Path) -> float:
         return 0.0
 
 
+def probe_video_size(video_path: Path) -> tuple[int, int]:
+    result = subprocess.run(
+        [
+            "ffprobe", "-v", "error",
+            "-select_streams", "v:0",
+            "-show_entries", "stream=width,height",
+            "-of", "csv=p=0",
+            str(video_path),
+        ],
+        capture_output=True,
+        text=True,
+        timeout=120,
+        check=False,
+    )
+    try:
+        parts = result.stdout.strip().split(",")
+        return int(parts[0]), int(parts[1])
+    except (ValueError, IndexError):
+        return TARGET_W, TARGET_H
+
+
 def has_audio_stream(video_path: Path) -> bool:
     result = subprocess.run(
         [
@@ -125,14 +146,17 @@ def _build_normalize_vf(
     *,
     ken_burns: bool,
     fade_sec: float,
+    target_w: int = TARGET_W,
+    target_h: int = TARGET_H,
+    crop_filter: str | None = None,
 ) -> str:
     """Video filter chain after optional delogo prefix."""
     fade_in = max(0.1, min(fade_sec, duration / 4))
     fade_out_start = max(fade_in, duration - fade_in)
 
     scale_pad = (
-        f"scale={TARGET_W}:{TARGET_H}:force_original_aspect_ratio=decrease,"
-        f"pad={TARGET_W}:{TARGET_H}:(ow-iw)/2:(oh-ih)/2:black"
+        f"scale={target_w}:{target_h}:force_original_aspect_ratio=decrease,"
+        f"pad={target_w}:{target_h}:(ow-iw)/2:(oh-ih)/2:black"
     )
     color = "eq=contrast=1.05:saturation=1.08,unsharp=3:3:0.4:3:3:0.0"
     fades = (
@@ -140,16 +164,18 @@ def _build_normalize_vf(
         f"fade=t=out:st={fade_out_start:.3f}:d={fade_in:.3f}"
     )
 
+    prefix = f"{crop_filter}," if crop_filter else ""
+
     if ken_burns:
         frames = max(1, int(duration * TARGET_FPS))
         motion = (
             f"zoompan=z='min(1.0+0.0008*on,1.04)':"
             f"x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':"
-            f"d={frames}:s={TARGET_W}x{TARGET_H}:fps={TARGET_FPS}"
+            f"d={frames}:s={target_w}x{target_h}:fps={TARGET_FPS}"
         )
-        core = f"{scale_pad},{color},{motion},{fades},format=yuv420p"
+        core = f"{prefix}{scale_pad},{color},{motion},{fades},format=yuv420p"
     else:
-        core = f"{scale_pad},{color},{fades},fps={TARGET_FPS},format=yuv420p"
+        core = f"{prefix}{scale_pad},{color},{fades},fps={TARGET_FPS},format=yuv420p"
 
     delogo = delogo_filter_chain(delogo_rects)
     if delogo:
@@ -169,6 +195,9 @@ def normalize_segment(
     ken_burns: bool = False,
     fade_sec: float = 0.25,
     work_dir: Path | None = None,
+    crop_norm: dict | None = None,
+    target_w: int = TARGET_W,
+    target_h: int = TARGET_H,
 ) -> Path:
     dest.parent.mkdir(parents=True, exist_ok=True)
     duration = max(0.5, end - start)
@@ -190,7 +219,34 @@ def normalize_segment(
             [(r.x, r.y, r.w, r.h) for r in delogo_rects],
         )
 
-    vf = _build_normalize_vf(duration, delogo_rects, ken_burns=ken_burns, fade_sec=fade_sec)
+    crop_filter = None
+    if crop_norm and all(
+        crop_norm.get(k) is not None for k in ("x", "y", "w", "h")
+    ):
+        vw, vh = probe_video_size(src)
+        cx = max(0.0, min(1.0, float(crop_norm["x"])))
+        cy = max(0.0, min(1.0, float(crop_norm["y"])))
+        cw = max(0.05, min(1.0 - cx, float(crop_norm["w"])))
+        ch = max(0.05, min(1.0 - cy, float(crop_norm["h"])))
+        px = int(cx * vw)
+        py = int(cy * vh)
+        pw = max(2, int(cw * vw) // 2 * 2)
+        ph = max(2, int(ch * vh) // 2 * 2)
+        if px + pw > vw:
+            pw = vw - px
+        if py + ph > vh:
+            ph = vh - py
+        crop_filter = f"crop={pw}:{ph}:{px}:{py}"
+
+    vf = _build_normalize_vf(
+        duration,
+        delogo_rects,
+        ken_burns=ken_burns,
+        fade_sec=fade_sec,
+        target_w=target_w,
+        target_h=target_h,
+        crop_filter=crop_filter,
+    )
     run_ffmpeg([
         "-ss", str(max(0, start - 0.1)),
         "-i", str(src),

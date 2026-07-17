@@ -774,3 +774,49 @@ model PromoAdIteration {
   @@unique([promoAdId, iterationNumber])
   @@index([promoAdId])
 }
+
+// ─────────────────────────────────────────────────────────────
+// Video editor (OpenReel + Bedrock highlight jobs)
+// ─────────────────────────────────────────────────────────────
+
+enum VideoEditorJobStatus {
+  PENDING
+  ANALYZING
+  READY
+  RENDERING
+  DONE
+  ERROR
+}
+
+enum VideoEditorJobMode {
+  ANALYZE_OPEN
+  AUTO_RENDER
+}
+
+model VideoEditorJob {
+  id               String               @id @default(cuid())
+  siteId           String
+  /// JSON string[] of source video IDs
+  sourceVideoIds   String
+  title            String?
+  mode             VideoEditorJobMode   @default(ANALYZE_OPEN)
+  status           VideoEditorJobStatus @default(PENDING)
+  analysisModel    String               @default("nova-2-lite")
+  targetDurationSec Int                 @default(30)
+  /// Linked video-agent run used for Bedrock analysis (optional)
+  videoAgentRunId  String?
+  /// Linked promo-ad used for FFmpeg auto-render (optional)
+  promoAdId        String?
+  /// Resulting library video after upload / auto-render
+  resultVideoId    String?
+  /// JSON segments: { videoId, title, startSec, endSec, confidence? }[]
+  segmentsJson     String?
+  estimatedCostUsd Float?
+  error            String?
+  createdByUserId  String?
+  createdAt        DateTime             @default(now())
+  updatedAt        DateTime             @updatedAt
+
+  @@index([siteId, createdAt])
+  @@index([status])
+}

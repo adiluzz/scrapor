@@ -59,6 +59,7 @@ export default function ApprovedClipGrid({
                 detection={clip}
                 onFeedback={async () => {}}
                 busy
+                autoStart={false}
                 showDownload
                 downloadHref={adClipDownloadUrl(clip)}
                 downloadFilename={adClipDownloadFilename(clip.videoTitle, clip.label)}

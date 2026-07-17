@@ -46,6 +46,7 @@ export default function DetectionClipCard({
   showDownload = false,
   downloadHref,
   downloadFilename,
+  autoStart = true,
 }: {
   detection: DetectionClip;
   onFeedback: (detectionId: string, approved: boolean) => Promise<void>;
@@ -59,6 +60,8 @@ export default function DetectionClipCard({
   showDownload?: boolean;
   downloadHref?: string;
   downloadFilename?: string;
+  /** When false, show a poster + play button instead of autoplaying. */
+  autoStart?: boolean;
 }) {
   const [error, setError] = useState<string | null>(null);
   const [editing, setEditing] = useState(false);
@@ -67,6 +70,8 @@ export default function DetectionClipCard({
   const [editEnd, setEditEnd] = useState(formatTime(detection.endSec));
   const [editBusy, setEditBusy] = useState(false);
   const [downloading, setDownloading] = useState(false);
+  const [playing, setPlaying] = useState(autoStart);
+  const [poster, setPoster] = useState<string | null>(null);
 
   useEffect(() => {
     if (!editing) {
@@ -75,6 +80,25 @@ export default function DetectionClipCard({
       setEditEnd(formatTime(detection.endSec));
     }
   }, [detection, editing]);
+
+  useEffect(() => {
+    setPlaying(autoStart);
+  }, [autoStart, detection.id, detection.startSec, detection.endSec]);
+
+  useEffect(() => {
+    if (autoStart) return;
+    let cancelled = false;
+    setPoster(null);
+    void fetch(`/api/admin/videos/${detection.videoId}/player-meta`)
+      .then((r) => r.json())
+      .then((data) => {
+        if (!cancelled && data.poster) setPoster(data.poster);
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [autoStart, detection.videoId]);
 
   const voted = detection.feedback != null;
   const approved = detection.feedback?.approved;
@@ -143,7 +167,29 @@ export default function DetectionClipCard({
             {error}
           </div>
         )}
-        {!editing && (
+        {!editing && !playing && !autoStart && (
+          <button
+            type="button"
+            onClick={() => setPlaying(true)}
+            className="absolute inset-0 z-[5] flex items-center justify-center bg-zinc-950"
+            aria-label={`Play ${detection.videoTitle}`}
+          >
+            {poster ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img
+                src={poster}
+                alt=""
+                className="absolute inset-0 h-full w-full object-cover opacity-70"
+              />
+            ) : null}
+            <span className="relative flex h-14 w-14 items-center justify-center rounded-full bg-brand-600 text-white shadow-lg ring-2 ring-white/20 hover:bg-brand-500">
+              <svg viewBox="0 0 24 24" className="ml-0.5 h-7 w-7 fill-current" aria-hidden>
+                <path d="M8 5v14l11-7z" />
+              </svg>
+            </span>
+          </button>
+        )}
+        {!editing && (autoStart || playing) && (
           <>
             <AdminClipPlayer
               key={`${detection.videoId}-${detection.startSec}-${detection.endSec}`}

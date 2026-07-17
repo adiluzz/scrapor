@@ -960,10 +960,18 @@ export default forwardRef(function VideoPlayer(
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       const player = playerRef.current;
-      if (!player || status !== "playing") return;
-      if (adminPreview) return;
       const t = e.target as HTMLElement | null;
       if (t && (t.tagName === "INPUT" || t.tagName === "TEXTAREA" || t.isContentEditable)) return;
+
+      if (e.key === "ArrowRight" || e.key === "ArrowLeft") {
+        if (!player || status === "loading" || status === "error" || status === "ad") return;
+        e.preventDefault();
+        skipWithFlash(e.key === "ArrowRight" ? "right" : "left");
+        return;
+      }
+
+      if (!player || status !== "playing") return;
+      if (adminPreview) return;
       if (e.key === " " || e.code === "Space") {
         e.preventDefault();
         if (player.paused()) {
@@ -971,12 +979,6 @@ export default forwardRef(function VideoPlayer(
         } else {
           player.pause();
         }
-      } else if (e.key === "ArrowRight") {
-        e.preventDefault();
-        skipWithFlash("right");
-      } else if (e.key === "ArrowLeft") {
-        e.preventDefault();
-        skipWithFlash("left");
       }
     };
     window.addEventListener("keydown", onKey);

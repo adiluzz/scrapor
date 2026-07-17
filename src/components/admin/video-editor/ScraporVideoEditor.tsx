@@ -276,7 +276,7 @@ export default function ScraporVideoEditor({
             {clips.length === 0 ? "New edit" : `${clips.length} clips · ${formatEditorDuration(totalSec)}`}
           </p>
           <p className="hidden text-[11px] text-zinc-600 sm:block">
-            ←/→ skip · Space play · I/O trim · S split · click timeline to change clip
+            ←/→ skip in player · Space play · I/O trim · S split · click timeline to change clip
           </p>
         </div>
         <button

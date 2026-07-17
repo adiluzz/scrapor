@@ -250,17 +250,11 @@ const ClipRangeSelector = forwardRef<
       } else if (e.key === "o" || e.key === "O") {
         e.preventDefault();
         void markEnd();
-      } else if (e.key === "ArrowLeft" && !e.metaKey && !e.ctrlKey && !e.altKey) {
-        e.preventDefault();
-        skipBy(e.shiftKey ? -1 : -SKIP_SEC);
-      } else if (e.key === "ArrowRight" && !e.metaKey && !e.ctrlKey && !e.altKey) {
-        e.preventDefault();
-        skipBy(e.shiftKey ? 1 : SKIP_SEC);
       }
     }
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [markStart, markEnd, togglePlay, skipBy]);
+  }, [markStart, markEnd, togglePlay]);
 
   const applyCrop = useCallback(
     (c: EditorCrop) => {

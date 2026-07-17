@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import AdminClipPlayer from "@/components/admin/AdminClipPlayer";
+import { formatEditorDuration } from "@/lib/video-editor-format";
 
 export type DetectionClip = {
   id: string;
@@ -47,6 +48,7 @@ export default function DetectionClipCard({
   downloadHref,
   downloadFilename,
   autoStart = true,
+  showClipLength = false,
 }: {
   detection: DetectionClip;
   onFeedback: (detectionId: string, approved: boolean) => Promise<void>;
@@ -62,6 +64,8 @@ export default function DetectionClipCard({
   downloadFilename?: string;
   /** When false, show a poster + play button instead of autoplaying. */
   autoStart?: boolean;
+  /** Show clip duration on the preview and in metadata (Ad clips grid). */
+  showClipLength?: boolean;
 }) {
   const [error, setError] = useState<string | null>(null);
   const [editing, setEditing] = useState(false);
@@ -108,6 +112,8 @@ export default function DetectionClipCard({
     detection.screenY != null &&
     detection.screenW != null &&
     detection.screenH != null;
+
+  const clipDurationSec = Math.max(0, detection.endSec - detection.startSec);
 
   async function handleDownload() {
     if (!downloadHref) return;
@@ -166,6 +172,11 @@ export default function DetectionClipCard({
           <div className="absolute inset-0 z-10 flex items-center justify-center p-3 text-center text-xs text-red-400">
             {error}
           </div>
+        )}
+        {showClipLength && !editing && (
+          <span className="absolute bottom-3 right-3 z-10 rounded bg-black/75 px-2 py-0.5 text-[11px] font-medium tabular-nums text-white">
+            {formatEditorDuration(clipDurationSec)}
+          </span>
         )}
         {!editing && !playing && !autoStart && (
           <button
@@ -296,6 +307,11 @@ export default function DetectionClipCard({
           <>
             <p className="text-xs text-brand-300">{detection.label}</p>
             <p className="text-xs text-zinc-400">
+              {showClipLength && (
+                <span className="mr-2 font-medium text-zinc-200">
+                  {formatEditorDuration(clipDurationSec)}
+                </span>
+              )}
               {formatTime(detection.startSec)} – {formatTime(detection.endSec)}
               {detection.confidence != null && (
                 <span className="ml-2 text-zinc-500">

@@ -1,7 +1,7 @@
 import { createReadStream, existsSync, statSync } from "fs";
 import { join } from "path";
 import { NextResponse } from "next/server";
-import { GetObjectCommand, HeadObjectCommand } from "@aws-sdk/client-s3";
+import { GetObjectCommand } from "@aws-sdk/client-s3";
 import { prisma } from "@/lib/db";
 import { guardAdmin } from "@/lib/admin-guard";
 import {

@@ -7,6 +7,9 @@ import {
   CopyObjectCommand,
 } from "@aws-sdk/client-s3";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
+import { createWriteStream } from "node:fs";
+import { pipeline } from "node:stream/promises";
+import type { Readable } from "node:stream";
 
 const region = process.env.AWS_REGION || "us-east-1";
 const bucket = process.env.S3_BUCKET || "pisster-media";
@@ -53,6 +56,21 @@ export const s3Keys = {
   pornstarImage: (siteId: string, pornstarId: string) => `sites/${siteId}/pornstars/${pornstarId}/image.jpg`,
   creatorAvatar: (siteId: string, creatorId: string) => `sites/${siteId}/creators/${creatorId}/avatar.jpg`,
 };
+
+export function resolveVideoStorageKey(video: {
+  id: string;
+  siteId: string;
+  s3VideoKey?: string | null;
+}): string {
+  return video.s3VideoKey || s3Keys.video(video.siteId, video.id);
+}
+
+/** Write an S3 object to disk (Node 24 ChecksumStream-safe). */
+export async function downloadS3ObjectToFile(key: string, destPath: string): Promise<void> {
+  const obj = await s3.send(new GetObjectCommand({ Bucket: bucket, Key: key }));
+  if (!obj.Body) throw new Error("Empty S3 object");
+  await pipeline(obj.Body as unknown as Readable, createWriteStream(destPath));
+}
 
 export async function uploadBuffer(
   key: string,

@@ -1,11 +1,12 @@
-import { createWriteStream, existsSync } from "node:fs";
+import { existsSync } from "node:fs";
 import { mkdir, rm, stat } from "node:fs/promises";
 import { join } from "node:path";
-import { pipeline } from "node:stream/promises";
-import { Readable } from "node:stream";
-import { GetObjectCommand } from "@aws-sdk/client-s3";
 import { prisma } from "@/lib/db";
-import { isS3Configured, s3, S3_BUCKET, s3Keys } from "@/lib/storage";
+import {
+  downloadS3ObjectToFile,
+  isS3Configured,
+  resolveVideoStorageKey,
+} from "@/lib/storage";
 import { runProcess } from "@/lib/assistant-tools/utils";
 import { MAX_EDITOR_CLIP_DURATION_SEC } from "@/lib/video-editor-limits";
 import { logger } from "@/lib/logger";
@@ -20,7 +21,11 @@ function clipCachePath(videoId: string, startSec: number, endSec: number): strin
   return join(CLIP_CACHE_DIR, `${videoId}_${a}_${b}.mp4`);
 }
 
-async function resolveSourcePath(videoId: string, siteId: string): Promise<string> {
+async function resolveSourcePath(
+  videoId: string,
+  siteId: string,
+  s3VideoKey?: string | null
+): Promise<string> {
   await mkdir(join(UPLOAD_ROOT, "tmp", "editor-src"), { recursive: true });
   const localCandidates = [
     join(DOWNLOADS_DIR, videoId, "video.mp4"),
@@ -40,14 +45,8 @@ async function resolveSourcePath(videoId: string, siteId: string): Promise<strin
     if (st.size > 0) return dest;
   }
 
-  const key = s3Keys.video(siteId, videoId);
-  const obj = await s3.send(new GetObjectCommand({ Bucket: S3_BUCKET, Key: key }));
-  if (!obj.Body) throw new Error("Empty S3 object");
-
-  await pipeline(
-    Readable.fromWeb(obj.Body as unknown as import("node:stream/web").ReadableStream),
-    createWriteStream(dest)
-  );
+  const key = s3VideoKey || resolveVideoStorageKey({ id: videoId, siteId });
+  await downloadS3ObjectToFile(key, dest);
   return dest;
 }
 
@@ -68,7 +67,7 @@ export async function ensureEditorClip(input: {
 
   const video = await prisma.video.findUnique({
     where: { id: input.videoId },
-    select: { id: true, siteId: true, isDeleted: true },
+    select: { id: true, siteId: true, s3VideoKey: true, isDeleted: true },
   });
   if (!video || video.isDeleted) throw new Error("Video not found");
 
@@ -81,7 +80,7 @@ export async function ensureEditorClip(input: {
     }
   }
 
-  const srcPath = await resolveSourcePath(video.id, video.siteId);
+  const srcPath = await resolveSourcePath(video.id, video.siteId, video.s3VideoKey);
   const tmpOut = `${outPath}.partial.mp4`;
   await rm(tmpOut, { force: true }).catch(() => {});
 

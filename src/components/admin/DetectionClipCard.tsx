@@ -66,6 +66,7 @@ export default function DetectionClipCard({
   const [editStart, setEditStart] = useState(formatTime(detection.startSec));
   const [editEnd, setEditEnd] = useState(formatTime(detection.endSec));
   const [editBusy, setEditBusy] = useState(false);
+  const [downloading, setDownloading] = useState(false);
 
   useEffect(() => {
     if (!editing) {
@@ -83,6 +84,32 @@ export default function DetectionClipCard({
     detection.screenY != null &&
     detection.screenW != null &&
     detection.screenH != null;
+
+  async function handleDownload() {
+    if (!downloadHref) return;
+    setDownloading(true);
+    setError(null);
+    try {
+      const res = await fetch(downloadHref);
+      if (!res.ok) {
+        const data = (await res.json().catch(() => ({}))) as { error?: string };
+        throw new Error(data.error || `Download failed (${res.status})`);
+      }
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = downloadFilename || "clip.mp4";
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Download failed");
+    } finally {
+      setDownloading(false);
+    }
+  }
 
   async function saveEdit() {
     if (!onUpdate) return;
@@ -236,13 +263,14 @@ export default function DetectionClipCard({
         {!editing && (
           <div className="flex flex-wrap gap-2 pt-1">
             {showDownload && downloadHref && (
-              <a
-                href={downloadHref}
-                download={downloadFilename}
-                className="rounded-lg bg-zinc-800 px-3 py-2 text-xs font-medium text-zinc-200 hover:bg-zinc-700"
+              <button
+                type="button"
+                disabled={downloading}
+                onClick={() => void handleDownload()}
+                className="rounded-lg bg-zinc-800 px-3 py-2 text-xs font-medium text-zinc-200 hover:bg-zinc-700 disabled:opacity-50"
               >
-                Download
-              </a>
+                {downloading ? "Preparing…" : "Download"}
+              </button>
             )}
             {onUpdate && (
               <button

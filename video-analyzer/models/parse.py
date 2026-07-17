@@ -45,7 +45,7 @@ def parse_detections_json(raw: str, chunk_offset: float = 0.0) -> list[Detection
         if not label:
             continue
         start = float(item.get("startSec") or item.get("start_sec") or item.get("start_time") or 0)
-        end = float(item.get("endSec") or item.get("end_sec") or item.get("end_time") or start + 2)
+        end = float(item.get("endSec") or item.get("end_sec") or item.get("end_time") or start + 7)
         conf = item.get("confidence")
         confidence = float(conf) if conf is not None else None
         bbox = item.get("bbox")
@@ -71,7 +71,7 @@ def parse_segments_response(segments: list[dict[str, Any]], targets: list[str], 
     for seg in segments:
         seg_id = str(seg.get("id") or seg.get("segment_id") or "").lower()
         start = float(seg.get("start_time") or seg.get("start") or 0)
-        end = float(seg.get("end_time") or seg.get("end") or start + 2)
+        end = float(seg.get("end_time") or seg.get("end") or start + 7)
         fields = seg.get("fields") or seg
         label = None
         for t_lower, t_orig in target_lower.items():

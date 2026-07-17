@@ -7,6 +7,7 @@ import { enqueueVideoAgentRun } from "@/lib/video-agent-queue";
 import { resolveVideoAgentModel, DEFAULT_VIDEO_AGENT_MODEL } from "@/lib/video-agent-models";
 import { estimateVideoEditorCost } from "@/lib/video-editor-cost";
 import { resolveEditorExtractTargets } from "@/lib/video-editor-analyze";
+import { defaultEditorAnalysisPrompt } from "@/lib/video-editor-segment-filter";
 import { logger } from "@/lib/logger";
 
 const schema = z.object({
@@ -63,8 +64,7 @@ export async function POST(request: Request) {
 
   const agent = await ensureDefaultVideoAgent();
   const userPrompt =
-    d.prompt?.trim() ||
-    `Find the most engaging highlight moments suitable for a ${targetDurationSec}-second promo reel. Prefer clear action peaks and strong visual moments.`;
+    d.prompt?.trim() || defaultEditorAnalysisPrompt(targetDurationSec);
 
   const extractTargets = await resolveEditorExtractTargets(userPrompt, model.id, targetDurationSec);
 

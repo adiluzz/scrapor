@@ -151,8 +151,10 @@ export default function VideoEditorAiPanel({
         <div>
           <h2 className="text-sm font-medium text-zinc-200">AI highlight (Bedrock)</h2>
           <p className="mt-1 text-xs text-zinc-500">
-            Uses the videos you checked in Library (server-side from S3). Segments are added to the
-            timeline when analysis completes.
+            Uses the videos you checked in Library (server-side from S3). Builds{" "}
+            {Math.ceil(targetDurationSec / 10)}–{Math.floor(targetDurationSec / 5)} clips of 5–10s
+            each (skips ads and still frames). Segments land on the timeline when analysis
+            completes.
           </p>
         </div>
       )}
@@ -176,6 +178,9 @@ export default function VideoEditorAiPanel({
 
       <label className="block space-y-1.5">
         <span className="text-sm text-zinc-400">Target length (seconds)</span>
+        <p className="text-[11px] text-zinc-600">
+          Output is split into 5–10s moving-video clips (e.g. 30s → about 3–6 clips).
+        </p>
         <input
           type="number"
           min={5}

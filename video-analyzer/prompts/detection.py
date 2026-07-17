@@ -2,6 +2,15 @@
 
 from __future__ import annotations
 
+DETECTION_RULES = """
+Rules for every detection:
+- Each clip must span 5–10 seconds of continuous moving video with visible action.
+- Only detect segments with ongoing motion — not frozen frames, posters, thumbnails, title cards, or still images.
+- Do NOT detect preroll ads, interstitial ads, sponsor cards, end cards, or full-screen promotional screens.
+- Small corner watermarks/logos are fine to ignore — never treat them as the main subject.
+- Prefer the most engaging action peaks in the actual scene footage.
+"""
+
 
 def chunk_time_scope(start_sec: float, duration_sec: float) -> str:
     """Absolute timeline note for models that see the full source video."""
@@ -41,6 +50,8 @@ Return a JSON object with a "detections" array. Each item must have:
 
 Only include clear visible occurrences. Merge nothing — list each distinct occurrence.
 
+{DETECTION_RULES}
+
 {learning_context}"""
 
 
@@ -67,6 +78,8 @@ Respond with ONLY valid JSON, for example:
 
 If none found: {{"detections":[]}}
 Only include clear visible occurrences. Merge nothing — list each distinct occurrence.
+
+{DETECTION_RULES}
 
 {learning_context}"""
 

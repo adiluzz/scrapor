@@ -1,11 +1,12 @@
 import { parseUserPrompt } from "@/lib/video-agent/parse-prompt";
 import { logger } from "@/lib/logger";
+import { defaultEditorAnalysisPrompt } from "@/lib/video-editor-segment-filter";
 
 /** Concrete visible actions Nova can detect (not abstract slug keys). */
 const HIGHLIGHT_TARGET_FALLBACK = [
-  "engaging highlight moment",
-  "strong visual action peak",
-  "compelling on-screen moment",
+  "continuous on-screen action with visible motion",
+  "dynamic video highlight with moving subjects",
+  "engaging action peak in live footage",
 ];
 
 const ABSTRACT_TARGET_KEYS = new Set(["highlight", "best_moment", "action_peak", "best moment"]);
@@ -27,8 +28,7 @@ export async function resolveEditorExtractTargets(
   targetDurationSec: number
 ): Promise<string[]> {
   const prompt =
-    userPrompt.trim() ||
-    `Find the most engaging highlight moments suitable for a ${targetDurationSec}-second promo reel. Prefer clear action peaks and strong visual moments.`;
+    userPrompt.trim() || defaultEditorAnalysisPrompt(targetDurationSec);
 
   try {
     const parsed = await parseUserPrompt(prompt, analysisModelId);

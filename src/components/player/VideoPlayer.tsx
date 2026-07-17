@@ -961,6 +961,7 @@ export default forwardRef(function VideoPlayer(
     const onKey = (e: KeyboardEvent) => {
       const player = playerRef.current;
       if (!player || status !== "playing") return;
+      if (adminPreview) return;
       const t = e.target as HTMLElement | null;
       if (t && (t.tagName === "INPUT" || t.tagName === "TEXTAREA" || t.isContentEditable)) return;
       if (e.key === " " || e.code === "Space") {
@@ -982,7 +983,7 @@ export default forwardRef(function VideoPlayer(
     return () => window.removeEventListener("keydown", onKey);
     // skipWithFlash closes over latest setters; rebind when playback status changes.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [status]);
+  }, [adminPreview, status]);
 
   async function grantAndPlay(adSessionId: string, outcome: string) {
     setStatus("loading");

@@ -3,6 +3,11 @@ import {
   resolveVideoAgentModel,
   type VideoAgentModelId,
 } from "@/lib/video-agent-models";
+import {
+  EDITOR_CLIP_MIN_SEC,
+  normalizeEditorClipDuration,
+  shouldRejectEditorSegment,
+} from "@/lib/video-editor-segment-filter";
 
 /** Planner / ranking text call (Nova 2 Lite). */
 const PLANNER_COST_USD = 0.01;
@@ -74,7 +79,7 @@ export function estimateVideoEditorCost(input: {
     totalUsd,
     formula: `${formula} + planner $${plannerUsd.toFixed(2)} + render $0 (FFmpeg/OpenReel)`,
     wallTimeEstimate: wallTime,
-    note: `Cuts your source footage to ~${targetDurationSec}s. Does not use Nova Reel generative pricing.`,
+    note: `Cuts your source to ~${targetDurationSec}s in ${EDITOR_CLIP_MIN_SEC}–10s moving-video clips. Does not use Nova Reel generative pricing.`,
   };
 }
 
@@ -87,6 +92,11 @@ export function packSegmentsToDuration(
     endSec: number;
     confidence?: number | null;
     label?: string;
+    screenX?: number | null;
+    screenY?: number | null;
+    screenW?: number | null;
+    screenH?: number | null;
+    sourceDurationSec?: number | null;
   }>,
   targetDurationSec: number
 ): Array<{
@@ -97,15 +107,24 @@ export function packSegmentsToDuration(
   confidence?: number;
 }> {
   const sorted = [...segments]
-    .map((s) => ({
-      videoId: s.videoId,
-      title: s.videoTitle || s.label || s.videoId,
-      startSec: s.startSec,
-      endSec: s.endSec,
-      confidence: s.confidence ?? 0.5,
-      dur: Math.max(0.1, s.endSec - s.startSec),
-    }))
-    .filter((s) => s.dur > 0.2)
+    .filter((s) => !shouldRejectEditorSegment(s))
+    .map((s) => {
+      const normalized = normalizeEditorClipDuration(
+        s.startSec,
+        s.endSec,
+        s.sourceDurationSec
+      );
+      if (!normalized) return null;
+      return {
+        videoId: s.videoId,
+        title: s.videoTitle || s.label || s.videoId,
+        startSec: normalized.startSec,
+        endSec: normalized.endSec,
+        confidence: s.confidence ?? 0.5,
+        dur: normalized.endSec - normalized.startSec,
+      };
+    })
+    .filter((s): s is NonNullable<typeof s> => s != null && s.dur >= EDITOR_CLIP_MIN_SEC)
     .sort((a, b) => b.confidence - a.confidence);
 
   const out: Array<{
@@ -118,16 +137,15 @@ export function packSegmentsToDuration(
   let used = 0;
   for (const s of sorted) {
     if (used >= targetDurationSec) break;
-    const remaining = targetDurationSec - used;
-    const take = Math.min(s.dur, remaining);
+    if (used + s.dur > targetDurationSec) continue;
     out.push({
       videoId: s.videoId,
       title: s.title,
       startSec: s.startSec,
-      endSec: s.startSec + take,
+      endSec: s.endSec,
       confidence: s.confidence,
     });
-    used += take;
+    used += s.dur;
   }
   // Prefer chronological order for playback
   return out.sort((a, b) => a.startSec - b.startSec || a.videoId.localeCompare(b.videoId));

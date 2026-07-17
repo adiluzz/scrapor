@@ -9,7 +9,9 @@ def build_learning_context(examples: list[dict[str, Any]]) -> str:
     if not examples:
         return (
             "No prior training examples yet. Be conservative — only report detections "
-            "when the action is clearly visible."
+            "when the action is clearly visible in moving video. "
+            "Skip ads, sponsor cards, full-screen promos, still images, and frozen frames. "
+            "Each detection should be 5–10 seconds long."
         )
 
     approved = [e for e in examples if e.get("approved")]

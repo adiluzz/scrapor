@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { forwardRef, useCallback, useEffect, useImperativeHandle, useRef, useState } from "react";
 import AdminClipPlayer from "@/components/admin/AdminClipPlayer";
 import CropOverlay, { CropAspectControls } from "@/components/admin/video-editor/CropOverlay";
 import SourceTrimBar from "@/components/admin/video-editor/SourceTrimBar";
@@ -34,20 +34,15 @@ export type ClipRange = {
   endSec: number;
 };
 
-export default function ClipRangeSelector({
-  clipId,
-  videoId,
-  initialRange,
-  onRangeChange,
-  compact = false,
-  crop,
-  onCropChange,
-  onClearCrop,
-  showCrop = false,
-  onCurrentTimeChange,
-  onSourceDuration,
-  onAddAnotherClip,
-}: {
+const SKIP_SEC = 5;
+
+export type ClipRangeSelectorHandle = {
+  skip: (deltaSec: number) => void;
+};
+
+const ClipRangeSelector = forwardRef<
+  ClipRangeSelectorHandle,
+  {
   /** Timeline clip id — used to sync trim state without overwriting other clips. */
   clipId: string;
   videoId: string;
@@ -62,8 +57,26 @@ export default function ClipRangeSelector({
   onSourceDuration?: (sec: number) => void;
   /** Append another timeline clip (same or other source). Passes current In/Out. */
   onAddAnotherClip?: (savedRange: ClipRange) => void;
-}) {
+}
+>(function ClipRangeSelector(
+  {
+  clipId,
+  videoId,
+  initialRange,
+  onRangeChange,
+  compact = false,
+  crop,
+  onCropChange,
+  onClearCrop,
+  showCrop = false,
+  onCurrentTimeChange,
+  onSourceDuration,
+  onAddAnotherClip,
+  },
+  ref
+) {
   const playerRef = useRef<VideoPlayerHandle>(null);
+  const durationRef = useRef(0);
   const onRangeChangeRef = useRef(onRangeChange);
   onRangeChangeRef.current = onRangeChange;
   const syncingFromParent = useRef(false);
@@ -120,6 +133,7 @@ export default function ClipRangeSelector({
 
   const handleDuration = useCallback(
     (d: number) => {
+      durationRef.current = d;
       setDuration(d);
       onSourceDuration?.(d);
       setEndSec((prev) => (prev <= 0 ? Math.min(d, 10) : prev));
@@ -145,10 +159,26 @@ export default function ClipRangeSelector({
     [onCurrentTimeChange]
   );
 
-  const seek = useCallback((t: number) => {
-    playerRef.current?.seek(t);
-    setCurrent(t);
-  }, []);
+  const seek = useCallback(
+    (t: number) => {
+      const max = durationRef.current > 0 ? durationRef.current : t;
+      const next = Math.max(0, Math.min(max, t));
+      playerRef.current?.seek(next);
+      setCurrent(next);
+      onCurrentTimeChange?.(next);
+    },
+    [onCurrentTimeChange]
+  );
+
+  const skipBy = useCallback(
+    (delta: number) => {
+      const cur = playerRef.current?.getCurrentTime() ?? current;
+      seek(cur + delta);
+    },
+    [current, seek]
+  );
+
+  useImperativeHandle(ref, () => ({ skip: skipBy }), [skipBy]);
 
   const markStart = useCallback(async () => {
     const player = playerRef.current;
@@ -220,11 +250,17 @@ export default function ClipRangeSelector({
       } else if (e.key === "o" || e.key === "O") {
         e.preventDefault();
         void markEnd();
+      } else if (e.key === "ArrowLeft" && !e.metaKey && !e.ctrlKey && !e.altKey) {
+        e.preventDefault();
+        skipBy(e.shiftKey ? -1 : -SKIP_SEC);
+      } else if (e.key === "ArrowRight" && !e.metaKey && !e.ctrlKey && !e.altKey) {
+        e.preventDefault();
+        skipBy(e.shiftKey ? 1 : SKIP_SEC);
       }
     }
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [markStart, markEnd, togglePlay]);
+  }, [markStart, markEnd, togglePlay, skipBy]);
 
   const applyCrop = useCallback(
     (c: EditorCrop) => {
@@ -272,6 +308,28 @@ export default function ClipRangeSelector({
       )}
 
       <div className={`flex flex-wrap gap-2 ${compact ? "items-center" : ""}`}>
+        <button
+          type="button"
+          onClick={() => skipBy(-SKIP_SEC)}
+          disabled={duration <= 0}
+          className={`rounded-md border border-zinc-700 text-zinc-200 hover:bg-zinc-800 disabled:opacity-50 ${
+            compact ? "px-2.5 py-1 text-[11px] font-medium" : "px-3 py-1.5 text-xs"
+          }`}
+          title="Skip back 5s (←)"
+        >
+          ← 5s
+        </button>
+        <button
+          type="button"
+          onClick={() => skipBy(SKIP_SEC)}
+          disabled={duration <= 0}
+          className={`rounded-md border border-zinc-700 text-zinc-200 hover:bg-zinc-800 disabled:opacity-50 ${
+            compact ? "px-2.5 py-1 text-[11px] font-medium" : "px-3 py-1.5 text-xs"
+          }`}
+          title="Skip forward 5s (→)"
+        >
+          5s →
+        </button>
         <button
           type="button"
           onClick={() => void togglePlay()}
@@ -378,4 +436,6 @@ export default function ClipRangeSelector({
       </details>
     </div>
   );
-}
+});
+
+export default ClipRangeSelector;

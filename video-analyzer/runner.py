@@ -18,6 +18,7 @@ from db import (
     set_run_status,
     touch_run,
 )
+from filters import prepare_detection
 from learning import build_learning_context
 from media import download_video, probe_duration, resolve_media_source
 from models.registry import create_analyzer
@@ -132,20 +133,23 @@ def _analyze_video(
             )
             hits = analyzer.analyze(media, targets, learning_context)
             for det in hits:
+                prepared = prepare_detection(det, duration if duration > 0 else None)
+                if not prepared:
+                    continue
                 insert_detection(
                     conn,
                     run_id=run_id,
                     video_id=video_id,
                     video_title=title,
-                    label=det.label,
-                    start_sec=det.start_sec,
-                    end_sec=det.end_sec,
-                    screen_x=det.screen_x,
-                    screen_y=det.screen_y,
-                    screen_w=det.screen_w,
-                    screen_h=det.screen_h,
-                    confidence=det.confidence,
-                    frame_sec=det.frame_sec,
+                    label=prepared.label,
+                    start_sec=prepared.start_sec,
+                    end_sec=prepared.end_sec,
+                    screen_x=prepared.screen_x,
+                    screen_y=prepared.screen_y,
+                    screen_w=prepared.screen_w,
+                    screen_h=prepared.screen_h,
+                    confidence=prepared.confidence,
+                    frame_sec=prepared.frame_sec,
                 )
             touch_run(conn, run_id)
         except Exception as e:  # noqa: BLE001

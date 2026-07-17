@@ -20,6 +20,14 @@ export async function segmentsFromVideoAgentRun(
     where: { runId },
     orderBy: { confidence: "desc" },
   });
+  const durationByVideo = new Map(
+    (
+      await prisma.video.findMany({
+        where: { id: { in: [...new Set(detections.map((d) => d.videoId))] } },
+        select: { id: true, durationSec: true },
+      })
+    ).map((v) => [v.id, v.durationSec])
+  );
   return packSegmentsToDuration(
     detections.map((d) => ({
       videoId: d.videoId,
@@ -28,6 +36,11 @@ export async function segmentsFromVideoAgentRun(
       endSec: d.endSec,
       confidence: d.confidence,
       label: d.label,
+      screenX: d.screenX,
+      screenY: d.screenY,
+      screenW: d.screenW,
+      screenH: d.screenH,
+      sourceDurationSec: durationByVideo.get(d.videoId) ?? null,
     })),
     targetDurationSec
   );
@@ -63,7 +76,7 @@ export async function syncVideoEditorJob(jobId: string) {
         const error =
           detections.length === 0
             ? "Analysis finished with no detections — try a more specific prompt describing visible moments"
-            : "Detections found but none fit the target duration — try a longer target or different prompt";
+            : "Detections found but none passed filters (5–10s moving video, no ads/stills) — try a different prompt";
         return prisma.videoEditorJob.update({
           where: { id: jobId },
           data: {

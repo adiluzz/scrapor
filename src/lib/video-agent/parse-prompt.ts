@@ -24,8 +24,10 @@ const PARSE_INSTRUCTIONS = `You configure a video analysis agent. The user descr
 
 Return JSON only with:
 - searchQuery: concise search terms for our video API (title/tags/pornstars)
-- extractTargets: list of distinct events to locate (e.g. "piss drinking", "piss swallowing"). Each must be a specific visible action.
-- reasoning: optional short note`;
+- extractTargets: list of distinct events to locate (e.g. "piss drinking", "piss swallowing"). Each must be a specific visible action with continuous motion in live video footage.
+- reasoning: optional short note
+
+Never propose extractTargets for ads, sponsor cards, interstitials, still images, posters, thumbnails, title cards, or static screens. Small corner watermarks are OK to ignore.`;
 
 function buildPrompt(userPrompt: string): string {
   return `${PARSE_INSTRUCTIONS}

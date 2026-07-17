@@ -29,6 +29,7 @@ export default function EditorTimeline({
   onDuplicate,
   onRippleTrim,
   onRoll,
+  onSkipSec,
   playheadSec = 0,
   pixelsPerSecond,
   onPixelsPerSecondChange,
@@ -42,6 +43,8 @@ export default function EditorTimeline({
   onRippleTrim: (id: string, side: "in" | "out", newSec: number) => void;
   /** Absolute new out for clip[editIndex] and in for clip[editIndex+1]. */
   onRoll: (editIndex: number, aEndSec: number, bStartSec: number) => void;
+  /** Skip playhead within the source video (seconds). */
+  onSkipSec?: (deltaSec: number) => void;
   /** Source time within the selected clip (absolute startSec…endSec). */
   playheadSec?: number;
   pixelsPerSecond: number;
@@ -328,18 +331,38 @@ export default function EditorTimeline({
           </span>
           <div className="flex gap-1">
             <IconBtn
-              label="Move earlier"
-              disabled={selectedIndex === 0}
-              onClick={() => onMove(selectedId, -1)}
+              label="Skip back 5s in video"
+              disabled={!onSkipSec}
+              onClick={(e) => {
+                e.stopPropagation();
+                onSkipSec?.(-5);
+              }}
             >
               ←
             </IconBtn>
             <IconBtn
-              label="Move later"
+              label="Skip forward 5s in video"
+              disabled={!onSkipSec}
+              onClick={(e) => {
+                e.stopPropagation();
+                onSkipSec?.(5);
+              }}
+            >
+              →
+            </IconBtn>
+            <IconBtn
+              label="Move clip earlier on timeline"
+              disabled={selectedIndex === 0}
+              onClick={() => onMove(selectedId, -1)}
+            >
+              ⇤
+            </IconBtn>
+            <IconBtn
+              label="Move clip later on timeline"
               disabled={selectedIndex === clips.length - 1}
               onClick={() => onMove(selectedId, 1)}
             >
-              →
+              ⇥
             </IconBtn>
             <IconBtn label="Duplicate" onClick={() => onDuplicate(selectedId)}>
               ⧉
@@ -366,7 +389,7 @@ function IconBtn({
 }: {
   children: React.ReactNode;
   label: string;
-  onClick: () => void;
+  onClick: (e: React.MouseEvent<HTMLButtonElement>) => void;
   disabled?: boolean;
   danger?: boolean;
 }) {

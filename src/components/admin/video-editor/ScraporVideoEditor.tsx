@@ -14,7 +14,9 @@ import {
 } from "@/lib/video-editor-types";
 import { DEFAULT_PROXY_DURATION_SEC } from "@/lib/video-editor-limits";
 import { formatEditorDuration } from "@/lib/video-editor-format";
-import ClipRangeSelector from "@/components/admin/ClipRangeSelector";
+import ClipRangeSelector, {
+  type ClipRangeSelectorHandle,
+} from "@/components/admin/ClipRangeSelector";
 import VideoEditorAiPanel from "@/components/admin/VideoEditorAiPanel";
 import VideoEditorSavePanel from "@/components/admin/VideoEditorSavePanel";
 import EditorLibraryPanel from "@/components/admin/video-editor/EditorLibraryPanel";
@@ -65,6 +67,7 @@ export default function ScraporVideoEditor({
   const [showCrop, setShowCrop] = useState(false);
   const [sourceDurationSec, setSourceDurationSec] = useState(0);
   const prevClipCount = useRef(clips.length);
+  const clipSelectorRef = useRef<ClipRangeSelectorHandle>(null);
 
   useEffect(() => {
     if (clips.length > prevClipCount.current && clips.length > 0) {
@@ -219,14 +222,9 @@ export default function ScraporVideoEditor({
     setSelectedId(right.id);
   }, [selected, playheadSec, clips, onClipsChange]);
 
-  const selectAdjacent = useCallback(
-    (dir: -1 | 1) => {
-      if (selectedIndex < 0) return;
-      const next = selectedIndex + dir;
-      if (next >= 0 && next < clips.length) setSelectedId(clips[next].id);
-    },
-    [clips, selectedIndex]
-  );
+  const skipPlayhead = useCallback((delta: number) => {
+    clipSelectorRef.current?.skip(delta);
+  }, []);
 
   useEffect(() => {
     function onKeyDown(e: KeyboardEvent) {
@@ -237,10 +235,6 @@ export default function ScraporVideoEditor({
           e.preventDefault();
           removeClip(selectedId);
         }
-      } else if (e.key === "ArrowLeft" && !e.metaKey && !e.ctrlKey) {
-        selectAdjacent(-1);
-      } else if (e.key === "ArrowRight" && !e.metaKey && !e.ctrlKey) {
-        selectAdjacent(1);
       } else if (e.key === "s" || e.key === "S" || e.key === "c" || e.key === "C") {
         e.preventDefault();
         splitAtPlayhead();
@@ -248,7 +242,7 @@ export default function ScraporVideoEditor({
     }
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [selectedId, removeClip, selectAdjacent, splitAtPlayhead]);
+  }, [selectedId, removeClip, splitAtPlayhead]);
 
   const onSegmentsReady = useCallback(
     (
@@ -282,7 +276,7 @@ export default function ScraporVideoEditor({
             {clips.length === 0 ? "New edit" : `${clips.length} clips · ${formatEditorDuration(totalSec)}`}
           </p>
           <p className="hidden text-[11px] text-zinc-600 sm:block">
-            Space play · I/O trim · + Another clip · Crop · S split
+            ←/→ skip · Space play · I/O trim · S split · click timeline to change clip
           </p>
         </div>
         <button
@@ -377,6 +371,7 @@ export default function ScraporVideoEditor({
                   </span>
                 </div>
                 <ClipRangeSelector
+                  ref={clipSelectorRef}
                   key={selected.id}
                   clipId={selected.id}
                   compact
@@ -541,6 +536,7 @@ export default function ScraporVideoEditor({
           onDuplicate={duplicateClip}
           onRippleTrim={onRippleTrim}
           onRoll={onRoll}
+          onSkipSec={skipPlayhead}
           playheadSec={playheadSec}
           pixelsPerSecond={pixelsPerSecond}
           onPixelsPerSecondChange={setPixelsPerSecond}

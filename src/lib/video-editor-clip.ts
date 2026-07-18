@@ -175,8 +175,8 @@ export async function ensureEditorClipGif(input: {
   const fps = dur > 15 ? 8 : 10;
   const filterComplex = [
     `[0:v]fps=${fps},scale=480:-1:flags=lanczos,split[s0][s1]`,
-    `[s0]palettegen=stats_mode=diff[p]`,
-    `[s1]paletteuse=dither=bayer:bayer_scale=3[p]`,
+    `[s0]palettegen=stats_mode=diff[pal]`,
+    `[s1][pal]paletteuse=dither=bayer:bayer_scale=3[out]`,
   ].join(";");
 
   const args = [
@@ -190,7 +190,7 @@ export async function ensureEditorClipGif(input: {
     "-filter_complex",
     filterComplex,
     "-map",
-    "[p]",
+    "[out]",
     "-an",
     "-loop",
     "0",

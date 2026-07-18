@@ -19,8 +19,6 @@ export type PromoAdModelParams = {
   kenBurns?: boolean;
   removeSourceLogos?: boolean;
   logoRemovalMode?: "presets" | "auto" | "both";
-  /** When true, compiled output is linked on the public tube (VideoSite + READY). Default off for editor exports. */
-  publishToSite?: boolean;
   /** Output canvas aspect for CLIP_COMPOSE (from editor crop majority). */
   outputAspect?: "16:9" | "9:16";
 };
@@ -48,7 +46,6 @@ export function defaultModelParams(
           showTagline: true,
           brandIntroOutro: true,
           logoOverlay: false,
-          publishToSite: false,
           maxBodySeconds: 60,
           logoOpacity: 0.9,
           crossfadeSec: 0.5,

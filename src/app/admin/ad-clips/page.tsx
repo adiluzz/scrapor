@@ -75,8 +75,8 @@ export default function AdClipsPage() {
         <div>
           <h1 className="text-2xl font-bold text-white">Ad clips</h1>
           <p className="mt-1 text-sm text-zinc-400">
-            Compiled videos and saved segments from the Video editor. Select clips to open them on
-            the timeline.
+            Compiled videos and saved segments from the Video editor. Publish compiled exports to a
+            site from each card — nothing goes live automatically.
           </p>
         </div>
         <Link
@@ -114,7 +114,13 @@ export default function AdClipsPage() {
       {loading ? (
         <p className="text-sm text-zinc-500">Loading clips…</p>
       ) : (
-        <ApprovedClipGrid clips={clips} selectedIds={selectedIds} onToggle={toggle} />
+        <ApprovedClipGrid
+          clips={clips}
+          selectedIds={selectedIds}
+          onToggle={toggle}
+          sites={sites}
+          onClipsUpdated={() => void loadClips()}
+        />
       )}
 
       {selectedIds.size > 0 && (

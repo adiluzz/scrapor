@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { guardAdmin } from "@/lib/admin-guard";
 import { adClipsSiteWhere } from "@/lib/ad-clips";
+import { isClipPublishableVideo } from "@/lib/ad-clips-publish";
 import { prisma } from "@/lib/db";
 
 const PAGE_SIZE = 48;
@@ -49,8 +50,32 @@ export async function GET(request: Request) {
       : [];
   const siteNameById = new Map(sites.map((s) => [s.id, s.name]));
 
+  const videoIds = [...new Set(items.map((d) => d.videoId))];
+  const videos =
+    videoIds.length > 0
+      ? await prisma.video.findMany({
+          where: { id: { in: videoIds } },
+          select: {
+            id: true,
+            sourceUrl: true,
+            sourceSite: true,
+            status: true,
+            s3VideoKey: true,
+            slug: true,
+            sites: {
+              include: { site: { select: { id: true, name: true, domain: true } } },
+            },
+          },
+        })
+      : [];
+  const videoById = new Map(videos.map((v) => [v.id, v]));
+
   return NextResponse.json({
-    clips: items.map((d) => ({
+    clips: items.map((d) => {
+      const video = videoById.get(d.videoId);
+      const canPublishToSite = video ? isClipPublishableVideo(video) : false;
+      const publishedSites = video?.sites.map((vs) => vs.site) ?? [];
+      return {
       id: d.id,
       videoId: d.videoId,
       videoTitle: d.videoTitle,
@@ -66,7 +91,12 @@ export async function GET(request: Request) {
       siteId: d.run.siteId,
       siteName: siteNameById.get(d.run.siteId) ?? d.run.siteId,
       feedback: d.feedback,
-    })),
+      canPublishToSite,
+      videoStatus: video?.status ?? null,
+      videoSlug: video?.slug ?? null,
+      publishedSites,
+    };
+    }),
     nextCursor,
   });
 }

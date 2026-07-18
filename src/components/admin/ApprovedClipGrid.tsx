@@ -1,24 +1,35 @@
 "use client";
 
 import DetectionClipCard, { type DetectionClip } from "@/components/admin/DetectionClipCard";
+import ClipPublishControls from "@/components/admin/ClipPublishControls";
 import { adClipDownloadFilename, adClipDownloadUrl } from "@/lib/ad-clip-download";
 
 export type ApprovedClip = DetectionClip & {
   runId?: string;
   siteId?: string;
   siteName?: string;
+  videoSlug?: string | null;
+  canPublishToSite?: boolean;
+  videoStatus?: string | null;
+  publishedSites?: Array<{ id: string; name: string; domain: string }>;
 };
+
+type SiteOption = { id: string; name: string; domain?: string };
 
 export default function ApprovedClipGrid({
   clips,
   selectedIds,
   onToggle,
   selectable = true,
+  sites = [],
+  onClipsUpdated,
 }: {
   clips: ApprovedClip[];
   selectedIds: Set<string>;
   onToggle: (id: string) => void;
   selectable?: boolean;
+  sites?: SiteOption[];
+  onClipsUpdated?: () => void;
 }) {
   if (clips.length === 0) {
     return (
@@ -65,6 +76,19 @@ export default function ApprovedClipGrid({
                 downloadHref={adClipDownloadUrl(clip)}
                 downloadFilename={adClipDownloadFilename(clip.videoTitle, clip.label)}
               />
+              {clip.canPublishToSite && onClipsUpdated && (
+                <ClipPublishControls
+                  detectionId={clip.id}
+                  videoId={clip.videoId}
+                  videoSlug={clip.videoSlug}
+                  canPublish={Boolean(clip.canPublishToSite)}
+                  videoStatus={clip.videoStatus ?? null}
+                  publishedSites={clip.publishedSites ?? []}
+                  sites={sites}
+                  defaultSiteId={clip.siteId}
+                  onUpdated={onClipsUpdated}
+                />
+              )}
             </div>
           </div>
         );

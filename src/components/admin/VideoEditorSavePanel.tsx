@@ -22,7 +22,6 @@ export default function VideoEditorSavePanel({
   compact?: boolean;
 }) {
   const [title, setTitle] = useState(defaultTitle || "Edited video");
-  const [publishToSite, setPublishToSite] = useState(false);
   const [status, setStatus] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [compiling, setCompiling] = useState(false);
@@ -65,7 +64,7 @@ export default function VideoEditorSavePanel({
             stopPolling();
             setCompiling(false);
             setCompiledDetectionId(data.detectionId ?? null);
-            setStatus(`Compiled video added to Ad clips: “${data.title}”.${data.publishToSite ? " Published on the public site." : " Not published to the site — review in Admin → Videos first."}`);
+            setStatus(`Compiled video added to Ad clips: “${data.title}”. Publish from Ad clips when ready.`);
             return;
           }
           if (data.status === "ERROR") {
@@ -104,7 +103,6 @@ export default function VideoEditorSavePanel({
           siteId,
           title: title.trim() || "Edited video",
           jobId: jobId || undefined,
-          publishToSite,
           segments: segmentsFromClips(validClips),
         }),
       });
@@ -199,8 +197,8 @@ export default function VideoEditorSavePanel({
         <div>
           <h2 className="text-sm font-medium text-zinc-200">Export</h2>
           <p className="mt-1 text-xs text-zinc-500">
-            Compile every timeline clip into one video (selected site logo in intro/outro,
-            crossfades) and add it to Ad clips.
+            Compile every timeline clip into one video (site logo in intro/outro, crossfades) and
+            add it to Ad clips. Publish to a site from Ad clips when ready.
           </p>
         </div>
       )}
@@ -212,22 +210,6 @@ export default function VideoEditorSavePanel({
           onChange={(e) => setTitle(e.target.value)}
           className="w-full rounded-md border border-zinc-800 bg-zinc-900 px-2 py-1.5 text-sm text-white"
         />
-      </label>
-
-      <label className="flex items-start gap-2 text-sm text-zinc-300">
-        <input
-          type="checkbox"
-          checked={publishToSite}
-          onChange={(e) => setPublishToSite(e.target.checked)}
-          className="mt-0.5"
-        />
-        <span>
-          Publish to the public site
-          <span className="mt-0.5 block text-[11px] text-zinc-600">
-            Leave unchecked to keep the compile in Ad clips only until you publish from Admin →
-            Videos.
-          </span>
-        </span>
       </label>
 
       {(error || status) && (

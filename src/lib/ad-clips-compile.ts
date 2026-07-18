@@ -53,11 +53,9 @@ export async function publishCompiledPromoAdToAdClips(
 
   const sourceUrl = compiledVideoSourceUrl(promoAdId);
   const title = (ad.title || "Compiled edit").slice(0, 200);
-  const params = parseModelParams(ad.modelParams);
-  const publishToSite = params.publishToSite === true;
   const durationSec = estimateCompiledDurationSec(
     ad.clips.map((c) => c.detection),
-    params.maxBodySeconds
+    parseModelParams(ad.modelParams).maxBodySeconds
   );
 
   let video = await prisma.video.findUnique({ where: { sourceUrl } });
@@ -65,15 +63,13 @@ export async function publishCompiledPromoAdToAdClips(
   if (!video) {
     video = await upsertVideoWithMedia({
       siteId: ad.siteId,
-      publishSiteIds: publishToSite ? [ad.siteId] : [],
+      publishSiteIds: [],
       sourceUrl,
       title,
-      description: publishToSite
-        ? "Compiled from video editor timeline"
-        : "Compiled from video editor (not published to site — approve in Admin → Videos)",
+      description: "Compiled from video editor — publish from Ad clips when ready",
       durationSec,
       sourceSite: "VideoEditor",
-      status: publishToSite && isS3Configured() ? "READY" : "PENDING",
+      status: "PENDING",
       tags: ["compiled", "edited"],
     });
 
@@ -82,11 +78,7 @@ export async function publishCompiledPromoAdToAdClips(
       await copyS3Object(iteration.s3Key, destKey);
       video = await prisma.video.update({
         where: { id: video.id },
-        data: {
-          s3VideoKey: destKey,
-          durationSec,
-          ...(publishToSite ? { status: "READY" as const } : {}),
-        },
+        data: { s3VideoKey: destKey, durationSec },
       });
     }
 
@@ -148,7 +140,7 @@ export async function publishCompiledPromoAdToAdClips(
 export type CompileStatus =
   | { status: "PENDING" | "GENERATING" | "DRAFT" }
   | { status: "ERROR"; error: string | null }
-  | ({ status: "DONE"; publishToSite: boolean } & CompiledPublishResult);
+  | ({ status: "DONE" } & CompiledPublishResult);
 
 /** Poll promo-ad compose; publish to Ad clips when the render finishes. */
 export async function syncPromoAdCompileStatus(
@@ -167,11 +159,10 @@ export async function syncPromoAdCompileStatus(
     return { status: "ERROR", error: ad.iterations[0]?.error ?? "Render failed" };
   }
 
-  const params = parseModelParams(ad.modelParams);
   if (ad.status === "DONE" && ad.iterations[0]?.s3Key) {
     const published = await publishCompiledPromoAdToAdClips(promoAdId, userId);
     if (!published) return { status: "ERROR", error: "Render finished but publish failed" };
-    return { status: "DONE", publishToSite: params.publishToSite === true, ...published };
+    return { status: "DONE", ...published };
   }
 
   const iterStatus = ad.iterations[0]?.status;

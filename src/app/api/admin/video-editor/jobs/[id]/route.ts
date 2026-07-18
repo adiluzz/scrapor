@@ -74,7 +74,6 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
             crossfadeSec: 0.4,
             logoOverlay: false,
             brandIntroOutro: true,
-            publishToSite: job.publishToSite,
           })
         );
 

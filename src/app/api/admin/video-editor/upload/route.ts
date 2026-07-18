@@ -73,13 +73,13 @@ export async function POST(request: Request) {
     const uploadId = crypto.randomUUID();
     const video = await upsertVideoWithMedia({
       siteId,
-      publishSiteIds: [siteId],
+      publishSiteIds: [],
       sourceUrl: `editor://${siteId}/${uploadId}`,
       title,
-      description: "Created in admin Video editor",
+      description: "Created in admin Video editor — publish from Ad clips when ready",
       durationSec,
       sourceSite: "VideoEditor",
-      status: isS3Configured() ? "READY" : "PENDING",
+      status: "PENDING",
       tags: ["edited"],
     });
 
@@ -88,7 +88,7 @@ export async function POST(request: Request) {
       await uploadBuffer(key, buf, "video/mp4");
       await prisma.video.update({
         where: { id: video.id },
-        data: { s3VideoKey: key, status: "READY" },
+        data: { s3VideoKey: key },
       });
     }
 

@@ -31,7 +31,6 @@ const schema = z.object({
   jobId: z.string().optional(),
   segments: z.array(segmentSchema).min(1).max(40),
   maxBodySeconds: z.number().int().min(5).max(300).optional(),
-  publishToSite: z.boolean().optional(),
 });
 
 /**
@@ -118,7 +117,6 @@ export async function POST(request: Request) {
         showTagline: true,
         logoOverlay: false,
         brandIntroOutro: true,
-        publishToSite: d.publishToSite === true,
         outputAspect,
       })
     );

@@ -4,6 +4,7 @@ import { approveDetectionForAdClips } from "@/lib/ad-clips";
 import { ensureDefaultVideoAgent } from "@/lib/video-agent-agent";
 import { parseModelParams } from "@/lib/promo-ad/params";
 import { copyS3Object, isS3Configured, s3Keys } from "@/lib/storage";
+import { redis, PREVIEW_QUEUE_KEY } from "@/lib/redis";
 import { logger } from "@/lib/logger";
 
 const COMPILED_SOURCE_PREFIX = "editor-compile://";
@@ -80,6 +81,12 @@ export async function publishCompiledPromoAdToAdClips(
         where: { id: video.id },
         data: { s3VideoKey: destKey, status: "READY", durationSec },
       });
+    }
+
+    try {
+      await redis.rpush(PREVIEW_QUEUE_KEY, video.id);
+    } catch (err) {
+      logger.warn({ err, videoId: video.id }, "compiled video preview queue failed");
     }
   }
 

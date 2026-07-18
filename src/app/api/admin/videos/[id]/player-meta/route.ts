@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { guardAdmin } from "@/lib/admin-guard";
 import { adminThumbUrl, loadStoryboardData } from "@/lib/media";
+import { ensureVideoPosterUrl } from "@/lib/video-thumbnail";
 
 /** Poster, storyboard, and heatmap for admin clip tools using VideoPlayer. */
 export async function GET(
@@ -19,7 +20,7 @@ export async function GET(
   if (!video) return NextResponse.json({ error: "Not found" }, { status: 404 });
 
   const [poster, storyboard] = await Promise.all([
-    adminThumbUrl(video),
+    ensureVideoPosterUrl(video.id),
     loadStoryboardData(video, { directS3: video.isDeleted }),
   ]);
 

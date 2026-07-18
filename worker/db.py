@@ -325,7 +325,8 @@ def load_video_media(conn, video_id: str):
     with conn.cursor() as cur:
         cur.execute(
             'SELECT id,"siteId","durationSec","s3VideoKey","s3PreviewKey",'
-            '"s3StoryboardKey","s3StoryboardVttKey","previewVersion" '
+            '"s3StoryboardKey","s3StoryboardVttKey","previewVersion","s3ThumbKey",'
+            '"sourceSite","sourceUrl" '
             'FROM "Video" WHERE id=%s',
             (video_id,),
         )
@@ -341,6 +342,9 @@ def load_video_media(conn, video_id: str):
         "s3StoryboardKey": row[5],
         "s3StoryboardVttKey": row[6],
         "previewVersion": row[7],
+        "s3ThumbKey": row[8],
+        "sourceSite": row[9],
+        "sourceUrl": row[10],
     }
 
 
@@ -352,14 +356,23 @@ def update_video_preview_media(
     s3_storyboard_key,
     s3_storyboard_vtt_key,
     preview_version: int,
+    s3_thumb_key=None,
 ):
     with conn.cursor() as cur:
-        cur.execute(
-            'UPDATE "Video" SET "s3PreviewKey"=%s,"s3StoryboardKey"=%s,'
-            '"s3StoryboardVttKey"=%s,"previewVersion"=%s,"updatedAt"=now() '
-            'WHERE id=%s',
-            (s3_preview_key, s3_storyboard_key, s3_storyboard_vtt_key, preview_version, video_id),
-        )
+        if s3_thumb_key:
+            cur.execute(
+                'UPDATE "Video" SET "s3PreviewKey"=%s,"s3StoryboardKey"=%s,'
+                '"s3StoryboardVttKey"=%s,"previewVersion"=%s,"s3ThumbKey"=%s,"updatedAt"=now() '
+                'WHERE id=%s',
+                (s3_preview_key, s3_storyboard_key, s3_storyboard_vtt_key, preview_version, s3_thumb_key, video_id),
+            )
+        else:
+            cur.execute(
+                'UPDATE "Video" SET "s3PreviewKey"=%s,"s3StoryboardKey"=%s,'
+                '"s3StoryboardVttKey"=%s,"previewVersion"=%s,"updatedAt"=now() '
+                'WHERE id=%s',
+                (s3_preview_key, s3_storyboard_key, s3_storyboard_vtt_key, preview_version, video_id),
+            )
 
 
 def set_video_status(conn, video_id: str, status: str):

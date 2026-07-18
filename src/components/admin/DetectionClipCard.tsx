@@ -76,6 +76,7 @@ export default function DetectionClipCard({
   const [downloading, setDownloading] = useState(false);
   const [playing, setPlaying] = useState(autoStart);
   const [poster, setPoster] = useState<string | null>(null);
+  const [posterFailed, setPosterFailed] = useState(false);
 
   useEffect(() => {
     if (!editing) {
@@ -93,6 +94,15 @@ export default function DetectionClipCard({
     if (autoStart) return;
     let cancelled = false;
     setPoster(null);
+    setPosterFailed(false);
+
+    if (showClipLength || detection.label === "compiled") {
+      setPoster(`/api/admin/videos/${detection.videoId}/poster`);
+      return () => {
+        cancelled = true;
+      };
+    }
+
     void fetch(`/api/admin/videos/${detection.videoId}/player-meta`)
       .then((r) => r.json())
       .then((data) => {
@@ -102,7 +112,7 @@ export default function DetectionClipCard({
     return () => {
       cancelled = true;
     };
-  }, [autoStart, detection.videoId]);
+  }, [autoStart, detection.videoId, detection.label, showClipLength]);
 
   const voted = detection.feedback != null;
   const approved = detection.feedback?.approved;
@@ -185,12 +195,13 @@ export default function DetectionClipCard({
             className="absolute inset-0 z-[5] flex items-center justify-center bg-zinc-950"
             aria-label={`Play ${detection.videoTitle}`}
           >
-            {poster ? (
+            {poster && !posterFailed ? (
               // eslint-disable-next-line @next/next/no-img-element
               <img
                 src={poster}
                 alt=""
                 className="absolute inset-0 h-full w-full object-cover opacity-70"
+                onError={() => setPosterFailed(true)}
               />
             ) : null}
             <span className="relative flex h-14 w-14 items-center justify-center rounded-full bg-brand-600 text-white shadow-lg ring-2 ring-white/20 hover:bg-brand-500">

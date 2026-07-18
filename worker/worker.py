@@ -772,23 +772,36 @@ def process_regenerate_preview(conn, video_id: str):
             duration = media.probe_duration(video_path)
 
         preview = os.path.join(tmp_dir, "preview.mp4")
+        thumb = os.path.join(tmp_dir, "thumbnail.jpg")
         sprite = os.path.join(tmp_dir, "storyboard.jpg")
         vtt = os.path.join(tmp_dir, "storyboard.vtt")
+
+        compiled = (
+            v.get("sourceSite") == "VideoEditor"
+            or str(v.get("sourceUrl") or "").startswith("editor-compile://")
+        )
+        thumb_at = 8 if compiled else 5
 
         if not media.make_preview(video_path, preview, duration=duration, force=True):
             _event("warning", "preview_regen_failed", videoId=video_id, stage="make_preview")
             return
 
+        media.make_thumbnail(video_path, thumb, "", at_sec=thumb_at)
         storyboard_ok = media.make_storyboard(video_path, sprite, vtt, duration, force=True)
 
         preview_key = v.get("s3PreviewKey")
         storyboard_key = v.get("s3StoryboardKey")
         vtt_key = v.get("s3StoryboardVttKey")
+        thumb_key = v.get("s3ThumbKey")
 
         if storage.configured():
             preview_key = storage.upload(
                 preview, storage.key_preview(site_id, video_id), "video/mp4"
             ) or preview_key
+            if os.path.exists(thumb):
+                thumb_key = storage.upload(
+                    thumb, storage.key_thumb(site_id, video_id), "image/jpeg"
+                ) or thumb_key
             if storyboard_ok:
                 storyboard_key = storage.upload(
                     sprite, storage.key_storyboard(site_id, video_id), "image/jpeg"
@@ -800,21 +813,25 @@ def process_regenerate_preview(conn, video_id: str):
             local_dir = os.path.join(ROOT, "downloads", video_id)
             os.makedirs(local_dir, exist_ok=True)
             shutil.copy(preview, os.path.join(local_dir, "preview.mp4"))
+            if os.path.exists(thumb):
+                shutil.copy(thumb, os.path.join(local_dir, "thumbnail.jpg"))
             if storyboard_ok:
                 shutil.copy(sprite, os.path.join(local_dir, "storyboard.jpg"))
                 shutil.copy(vtt, os.path.join(local_dir, "storyboard.vtt"))
             preview_key = preview_key or f"local:{video_id}/preview.mp4"
 
+        preview_version = 3 if compiled else media.PREVIEW_VERSION
         db.update_video_preview_media(
             conn,
             video_id,
             s3_preview_key=preview_key,
             s3_storyboard_key=storyboard_key if storyboard_ok else v.get("s3StoryboardKey"),
             s3_storyboard_vtt_key=vtt_key if storyboard_ok else v.get("s3StoryboardVttKey"),
-            preview_version=media.PREVIEW_VERSION,
+            preview_version=preview_version,
+            s3_thumb_key=thumb_key,
         )
-        _event("info", "preview_regen_done", videoId=video_id, previewVersion=media.PREVIEW_VERSION,
-               storyboard=storyboard_ok)
+        _event("info", "preview_regen_done", videoId=video_id, previewVersion=preview_version,
+               storyboard=storyboard_ok, thumb=bool(thumb_key))
     except Exception as e:
         _event("warning", "preview_regen_failed", videoId=video_id, reason=str(e)[:500],
                errorType=type(e).__name__, traceback=traceback.format_exc()[-800:])

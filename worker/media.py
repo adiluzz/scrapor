@@ -190,7 +190,7 @@ def make_preview(
     return _fallback_preview_clip(video_path, dest, duration, timeout)
 
 
-def make_thumbnail(video_path: str, dest: str, thumbnail_url: str = "") -> bool:
+def make_thumbnail(video_path: str, dest: str, thumbnail_url: str = "", at_sec: int = 5) -> bool:
     if os.path.exists(dest) and os.path.getsize(dest) > 1000:
         return True
     if thumbnail_url.startswith("http"):
@@ -207,7 +207,7 @@ def make_thumbnail(video_path: str, dest: str, thumbnail_url: str = "") -> bool:
             pass
     try:
         r = subprocess.run(
-            ["ffmpeg", "-y", "-ss", "5", "-i", video_path, "-vframes", "1", "-q:v", "2", dest],
+            ["ffmpeg", "-y", "-ss", str(at_sec), "-i", video_path, "-vframes", "1", "-q:v", "2", dest],
             capture_output=True, timeout=60)
         return r.returncode == 0 and os.path.exists(dest)
     except Exception:

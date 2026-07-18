@@ -569,10 +569,10 @@ export default forwardRef(function VideoPlayer(
       if (!timelineZone || !seekBar || !progressControl) return;
 
       /** Align custom hit zone + heatmap with the visible Video.js seek track (border/insets differ). */
-      const syncSeekTrackLayout = () => {
+      const syncSeekTrackLayout = (): boolean => {
         const rootRect = root.getBoundingClientRect();
         const barRect = seekBar.getBoundingClientRect();
-        if (barRect.width <= 0) return;
+        if (barRect.width <= 0) return false;
         const left = barRect.left - rootRect.left;
         timelineZone.style.left = `${left}px`;
         timelineZone.style.width = `${barRect.width}px`;
@@ -585,8 +585,21 @@ export default forwardRef(function VideoPlayer(
           heatmap.style.paddingLeft = "0";
           heatmap.style.paddingRight = "0";
         }
+        return true;
       };
-      syncSeekTrackLayout();
+
+      let syncFrame = 0;
+      const scheduleSeekTrackLayoutSync = () => {
+        cancelAnimationFrame(syncFrame);
+        let attempts = 0;
+        const tick = () => {
+          if (syncSeekTrackLayout() || attempts >= 60) return;
+          attempts += 1;
+          syncFrame = requestAnimationFrame(tick);
+        };
+        syncFrame = requestAnimationFrame(tick);
+      };
+      scheduleSeekTrackLayoutSync();
 
       let scrubbing = false;
 
@@ -601,27 +614,13 @@ export default forwardRef(function VideoPlayer(
       };
 
       const seekFromClientX = (clientX: number) => {
-        // Prefer the visible seek track; fall back to the hit zone (same inset).
+        syncSeekTrackLayout();
         const rect = seekBar.getBoundingClientRect();
-        const zoneRect = timelineZone.getBoundingClientRect();
-        const track = rect.width > 0 ? rect : zoneRect;
-        if (track.width <= 0) return;
-        const pct = Math.min(1, Math.max(0, (clientX - track.left) / track.width));
+        if (rect.width <= 0) return;
+        const pct = Math.min(1, Math.max(0, (clientX - rect.left) / rect.width));
         const dur = player.duration();
         if (!dur || !Number.isFinite(dur) || dur <= 0) return;
-        let target = pct * dur;
-        try {
-          const seekable = player.seekable();
-          if (seekable && seekable.length > 0) {
-            const start = seekable.start(0);
-            const end = seekable.end(seekable.length - 1);
-            if (Number.isFinite(start) && Number.isFinite(end) && end > start) {
-              target = Math.min(end, Math.max(start, target));
-            }
-          }
-        } catch {
-          /* ignore seekable errors */
-        }
+        const target = pct * dur;
         player.userActive(true);
         const wasEnded = player.ended();
         player.currentTime(target);
@@ -658,12 +657,15 @@ export default forwardRef(function VideoPlayer(
       };
 
       const isInsideZone = (clientX: number, clientY: number) => {
-        const rect = timelineZone.getBoundingClientRect();
+        const zoneRect = timelineZone.getBoundingClientRect();
+        const barRect = seekBar.getBoundingClientRect();
+        const left = barRect.width > 0 ? barRect.left : zoneRect.left;
+        const right = barRect.width > 0 ? barRect.right : zoneRect.right;
         return (
-          clientX >= rect.left &&
-          clientX <= rect.right &&
-          clientY >= rect.top &&
-          clientY <= rect.bottom
+          clientX >= left &&
+          clientX <= right &&
+          clientY >= zoneRect.top &&
+          clientY <= zoneRect.bottom
         );
       };
 
@@ -750,15 +752,22 @@ export default forwardRef(function VideoPlayer(
       timelineZone.addEventListener("touchcancel", onTouchEnd);
       window.addEventListener("mouseup", onMouseUp);
       document.addEventListener("mousemove", onMouseMove);
-      window.addEventListener("resize", syncSeekTrackLayout);
+      const onLayoutChange = () => scheduleSeekTrackLayoutSync();
+      window.addEventListener("resize", onLayoutChange);
+      player.on("resize", onLayoutChange);
+      player.on("loadedmetadata", onLayoutChange);
+      player.on("loadeddata", onLayoutChange);
+      player.on("durationchange", onLayoutChange);
       const ro =
         typeof ResizeObserver !== "undefined"
-          ? new ResizeObserver(() => syncSeekTrackLayout())
+          ? new ResizeObserver(onLayoutChange)
           : null;
       ro?.observe(root);
       ro?.observe(seekBar);
+      ro?.observe(progressControl);
 
       const cleanup = () => {
+        cancelAnimationFrame(syncFrame);
         timelineZone.removeEventListener("mouseenter", onMouseEnter);
         timelineZone.removeEventListener("mousemove", onMouseMove);
         timelineZone.removeEventListener("mousedown", onMouseDown);
@@ -769,7 +778,11 @@ export default forwardRef(function VideoPlayer(
         timelineZone.removeEventListener("touchcancel", onTouchEnd);
         window.removeEventListener("mouseup", onMouseUp);
         document.removeEventListener("mousemove", onMouseMove);
-        window.removeEventListener("resize", syncSeekTrackLayout);
+        window.removeEventListener("resize", onLayoutChange);
+        player.off("resize", onLayoutChange);
+        player.off("loadedmetadata", onLayoutChange);
+        player.off("loadeddata", onLayoutChange);
+        player.off("durationchange", onLayoutChange);
         ro?.disconnect();
         timelineZone.style.removeProperty("left");
         timelineZone.style.removeProperty("width");
@@ -934,7 +947,9 @@ export default forwardRef(function VideoPlayer(
       return;
     }
 
-    const frame = requestAnimationFrame(() => attachTimelineInteractions());
+    const frame = requestAnimationFrame(() => {
+      requestAnimationFrame(() => attachTimelineInteractions());
+    });
 
     const rebind = () => {
       setPreview(null);

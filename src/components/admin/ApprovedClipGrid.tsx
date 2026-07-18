@@ -2,7 +2,7 @@
 
 import DetectionClipCard, { type DetectionClip } from "@/components/admin/DetectionClipCard";
 import ClipPublishControls from "@/components/admin/ClipPublishControls";
-import { adClipDownloadFilename, adClipDownloadUrl } from "@/lib/ad-clip-download";
+import { adClipDownloadFilename, adClipDownloadUrl, adClipGifDownloadFilename, adClipGifDownloadUrl } from "@/lib/ad-clip-download";
 
 export type ApprovedClip = DetectionClip & {
   runId?: string;
@@ -23,6 +23,9 @@ export default function ApprovedClipGrid({
   selectable = true,
   sites = [],
   onClipsUpdated,
+  showReviewControls = false,
+  onFeedback,
+  feedbackBusy = false,
 }: {
   clips: ApprovedClip[];
   selectedIds: Set<string>;
@@ -30,11 +33,15 @@ export default function ApprovedClipGrid({
   selectable?: boolean;
   sites?: SiteOption[];
   onClipsUpdated?: () => void;
+  showReviewControls?: boolean;
+  onFeedback?: (detectionId: string, approved: boolean) => Promise<void>;
+  feedbackBusy?: boolean;
 }) {
   if (clips.length === 0) {
     return (
       <p className="rounded-xl border border-dashed border-zinc-700 p-8 text-center text-sm text-zinc-500">
-        No clips yet. Use Export → <strong className="font-medium text-zinc-400">Compile &amp; add to Ad clips</strong> in the video editor.
+        No clips yet. Run AI analysis in the video editor, then approve picks under{" "}
+        <strong className="font-medium text-zinc-400">Pending review</strong>.
       </p>
     );
   }
@@ -68,13 +75,17 @@ export default function ApprovedClipGrid({
             >
               <DetectionClipCard
                 detection={clip}
-                onFeedback={async () => {}}
-                busy
+                onFeedback={onFeedback ?? (async () => {})}
+                busy={feedbackBusy}
                 autoStart={false}
                 showClipLength
-                showDownload
+                showDownload={!showReviewControls}
+                showGifDownload
+                showFeedbackActions={showReviewControls}
                 downloadHref={adClipDownloadUrl(clip)}
                 downloadFilename={adClipDownloadFilename(clip.videoTitle, clip.label)}
+                gifDownloadHref={adClipGifDownloadUrl(clip)}
+                gifDownloadFilename={adClipGifDownloadFilename(clip.videoTitle, clip.label)}
               />
               {clip.canPublishToSite && onClipsUpdated && (
                 <ClipPublishControls

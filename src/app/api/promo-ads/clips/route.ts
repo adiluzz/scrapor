@@ -14,11 +14,17 @@ export async function GET(request: Request) {
   const cursor = url.searchParams.get("cursor");
   const label = url.searchParams.get("label")?.trim();
   const siteId = url.searchParams.get("siteId");
+  const review = url.searchParams.get("review") === "pending" ? "pending" : "approved";
+
+  const reviewWhere =
+    review === "pending"
+      ? { feedback: null }
+      : { feedback: { approved: true } };
 
   const detections = await prisma.videoAgentDetection.findMany({
     where: {
       ...adClipsSiteWhere(auth, siteId),
-      OR: [{ feedback: { approved: true } }, { manual: true }],
+      ...reviewWhere,
       ...(label ? { label: { contains: label, mode: "insensitive" } } : {}),
     },
     orderBy: { createdAt: "desc" },
@@ -98,5 +104,6 @@ export async function GET(request: Request) {
     };
     }),
     nextCursor,
+    review,
   });
 }

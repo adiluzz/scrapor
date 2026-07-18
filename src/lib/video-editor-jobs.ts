@@ -1,6 +1,5 @@
 import { prisma } from "@/lib/db";
 import { packSegmentsToDuration } from "@/lib/video-editor-cost";
-import { approveDetectionsForAdClips } from "@/lib/ad-clips";
 import { syncPromoAdCompileStatus } from "@/lib/ad-clips-compile";
 
 export type EditorSegment = {
@@ -86,14 +85,10 @@ export async function syncVideoEditorJob(jobId: string) {
           },
         });
       }
-      await approveDetectionsForAdClips(
-        detections.map((d) => d.id),
-        job.createdByUserId
-      );
       return prisma.videoEditorJob.update({
         where: { id: jobId },
         data: {
-          status: job.mode === "AUTO_RENDER" ? "RENDERING" : "READY",
+          status: "READY",
           segmentsJson: JSON.stringify(segments),
         },
       });

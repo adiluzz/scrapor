@@ -1,6 +1,5 @@
 import { prisma } from "@/lib/db";
 import { upsertVideoWithMedia } from "@/lib/videos";
-import { approveDetectionForAdClips } from "@/lib/ad-clips";
 import { ensureDefaultVideoAgent } from "@/lib/video-agent-agent";
 import { parseModelParams } from "@/lib/promo-ad/params";
 import { copyS3Object, isS3Configured, s3Keys } from "@/lib/storage";
@@ -94,7 +93,6 @@ export async function publishCompiledPromoAdToAdClips(
     orderBy: { createdAt: "desc" },
   });
   if (existingDet) {
-    await approveDetectionForAdClips(existingDet.id, userId);
     return { videoId: video.id, detectionId: existingDet.id, title };
   }
 
@@ -126,8 +124,6 @@ export async function publishCompiledPromoAdToAdClips(
       manual: true,
     },
   });
-
-  await approveDetectionForAdClips(det.id, userId);
 
   logger.info(
     { promoAdId, videoId: video.id, detectionId: det.id },

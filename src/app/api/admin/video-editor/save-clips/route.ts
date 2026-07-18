@@ -3,7 +3,6 @@ import { z } from "zod";
 import { guardAdmin, authUserId } from "@/lib/admin-guard";
 import { prisma } from "@/lib/db";
 import { ensureDefaultVideoAgent } from "@/lib/video-agent-agent";
-import { approveDetectionsForAdClips } from "@/lib/ad-clips";
 import { logger } from "@/lib/logger";
 
 const cropSchema = z
@@ -34,7 +33,7 @@ const schema = z.object({
 });
 
 /**
- * Persist timeline clips as approved Ad clips (no FFmpeg compose).
+ * Persist timeline clips as Ad clips (no FFmpeg compose). Review in Pending before they appear under Approved.
  */
 export async function POST(request: Request) {
   const auth = await guardAdmin(request);
@@ -98,8 +97,6 @@ export async function POST(request: Request) {
       });
       detectionIds.push(det.id);
     }
-
-    await approveDetectionsForAdClips(detectionIds, userId);
 
     return NextResponse.json({
       ok: true,

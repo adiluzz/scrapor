@@ -45,10 +45,14 @@ export default function DetectionClipCard({
   labelOptions = [],
   busy,
   showDownload = false,
+  showGifDownload = false,
   downloadHref,
   downloadFilename,
+  gifDownloadHref,
+  gifDownloadFilename,
   autoStart = true,
   showClipLength = false,
+  showFeedbackActions = true,
 }: {
   detection: DetectionClip;
   onFeedback: (detectionId: string, approved: boolean) => Promise<void>;
@@ -60,12 +64,17 @@ export default function DetectionClipCard({
   labelOptions?: string[];
   busy?: boolean;
   showDownload?: boolean;
+  showGifDownload?: boolean;
   downloadHref?: string;
   downloadFilename?: string;
+  gifDownloadHref?: string;
+  gifDownloadFilename?: string;
   /** When false, show a poster + play button instead of autoplaying. */
   autoStart?: boolean;
   /** Show clip duration on the preview and in metadata (Ad clips grid). */
   showClipLength?: boolean;
+  /** Approve / reject controls (pending review). */
+  showFeedbackActions?: boolean;
 }) {
   const [error, setError] = useState<string | null>(null);
   const [editing, setEditing] = useState(false);
@@ -74,6 +83,7 @@ export default function DetectionClipCard({
   const [editEnd, setEditEnd] = useState(formatTime(detection.endSec));
   const [editBusy, setEditBusy] = useState(false);
   const [downloading, setDownloading] = useState(false);
+  const [downloadingGif, setDownloadingGif] = useState(false);
   const [playing, setPlaying] = useState(autoStart);
   const [poster, setPoster] = useState<string | null>(null);
   const [posterFailed, setPosterFailed] = useState(false);
@@ -148,6 +158,32 @@ export default function DetectionClipCard({
       setError(e instanceof Error ? e.message : "Download failed");
     } finally {
       setDownloading(false);
+    }
+  }
+
+  async function handleGifDownload() {
+    if (!gifDownloadHref) return;
+    setDownloadingGif(true);
+    setError(null);
+    try {
+      const res = await fetch(gifDownloadHref);
+      if (!res.ok) {
+        const data = (await res.json().catch(() => ({}))) as { error?: string };
+        throw new Error(data.error || `GIF export failed (${res.status})`);
+      }
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = gifDownloadFilename || "clip.gif";
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "GIF export failed");
+    } finally {
+      setDownloadingGif(false);
     }
   }
 
@@ -338,11 +374,21 @@ export default function DetectionClipCard({
             {showDownload && downloadHref && (
               <button
                 type="button"
-                disabled={downloading}
+                disabled={downloading || downloadingGif}
                 onClick={() => void handleDownload()}
                 className="rounded-lg bg-zinc-800 px-3 py-2 text-xs font-medium text-zinc-200 hover:bg-zinc-700 disabled:opacity-50"
               >
                 {downloading ? "Preparing…" : "Download"}
+              </button>
+            )}
+            {showGifDownload && gifDownloadHref && (
+              <button
+                type="button"
+                disabled={downloading || downloadingGif}
+                onClick={() => void handleGifDownload()}
+                className="rounded-lg bg-zinc-800 px-3 py-2 text-xs font-medium text-zinc-200 hover:bg-zinc-700 disabled:opacity-50"
+              >
+                {downloadingGif ? "Creating GIF…" : "Download GIF"}
               </button>
             )}
             {onUpdate && (
@@ -355,30 +401,34 @@ export default function DetectionClipCard({
                 Edit
               </button>
             )}
-            <button
-              type="button"
-              disabled={busy || voted}
-              onClick={() => onFeedback(detection.id, true)}
-              className={`flex-1 rounded-lg px-3 py-2 text-xs font-medium ${
-                approved === true
-                  ? "bg-emerald-800 text-emerald-100"
-                  : "bg-zinc-800 text-zinc-200 hover:bg-emerald-900/60 hover:text-emerald-200"
-              } disabled:opacity-50`}
-            >
-              Approve
-            </button>
-            <button
-              type="button"
-              disabled={busy || voted}
-              onClick={() => onFeedback(detection.id, false)}
-              className={`flex-1 rounded-lg px-3 py-2 text-xs font-medium ${
-                approved === false
-                  ? "bg-red-900 text-red-100"
-                  : "bg-zinc-800 text-zinc-200 hover:bg-red-900/60 hover:text-red-200"
-              } disabled:opacity-50`}
-            >
-              Reject
-            </button>
+            {showFeedbackActions && (
+              <>
+                <button
+                  type="button"
+                  disabled={busy || voted}
+                  onClick={() => onFeedback(detection.id, true)}
+                  className={`flex-1 rounded-lg px-3 py-2 text-xs font-medium ${
+                    approved === true
+                      ? "bg-emerald-800 text-emerald-100"
+                      : "bg-zinc-800 text-zinc-200 hover:bg-emerald-900/60 hover:text-emerald-200"
+                  } disabled:opacity-50`}
+                >
+                  Approve
+                </button>
+                <button
+                  type="button"
+                  disabled={busy || voted}
+                  onClick={() => onFeedback(detection.id, false)}
+                  className={`flex-1 rounded-lg px-3 py-2 text-xs font-medium ${
+                    approved === false
+                      ? "bg-red-900 text-red-100"
+                      : "bg-zinc-800 text-zinc-200 hover:bg-red-900/60 hover:text-red-200"
+                  } disabled:opacity-50`}
+                >
+                  Reject
+                </button>
+              </>
+            )}
             {onDelete && (
               <button
                 type="button"

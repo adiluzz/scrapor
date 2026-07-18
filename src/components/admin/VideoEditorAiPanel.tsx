@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useEffect, useState } from "react";
 
 type Estimate = {
@@ -48,7 +49,7 @@ export default function VideoEditorAiPanel({
   const [status, setStatus] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
-  const [mode, setMode] = useState<"ANALYZE_OPEN" | "AUTO_RENDER">("AUTO_RENDER");
+  const [reviewLink, setReviewLink] = useState<string | null>(null);
 
   useEffect(() => {
     fetch("/api/video-agent/models")
@@ -94,10 +95,13 @@ export default function VideoEditorAiPanel({
       if (data.job?.status === "READY" && Array.isArray(data.segments)) {
         onSegmentsReady(data.segments, jobId);
         setLoading(false);
+        setReviewLink("/admin/ad-clips?review=pending");
+        setStatus("READY — review and approve clips in Ad clips");
       }
       if (data.job?.status === "DONE") {
         setLoading(false);
-        setStatus("DONE — added to Ad clips");
+        setStatus("DONE — compiled video ready in Ad clips (pending review until approved)");
+        setReviewLink("/admin/ad-clips?review=pending");
       }
       if (data.job?.status === "ERROR") {
         setError(data.job.error || "Job failed");
@@ -126,7 +130,7 @@ export default function VideoEditorAiPanel({
           videoIds,
           targetDurationSec,
           analysisModelId: modelId,
-          mode,
+          mode: "ANALYZE_OPEN",
           prompt: prompt.trim() || undefined,
         }),
       });
@@ -152,8 +156,9 @@ export default function VideoEditorAiPanel({
           <h2 className="text-sm font-medium text-zinc-200">AI highlight reel</h2>
           <p className="mt-1 text-xs text-zinc-500">
             Scans your selected library videos, finds non-overlapping 5–10s clips that fill your
-            target length (default 30s), skips ads and still frames, then compiles to Ad clips.
-            Publish to a site from Ad clips when ready.
+            target length (default 30s), skips ads and still frames. Approve picks in{" "}
+            <strong className="font-medium text-zinc-400">Ad clips → Pending review</strong> before
+            compiling; approved clips are saved for AI training.
           </p>
         </div>
       )}
@@ -203,25 +208,6 @@ export default function VideoEditorAiPanel({
         />
       </label>
 
-      <fieldset className="flex flex-wrap gap-4 text-sm text-zinc-300">
-        <label className="flex items-center gap-2">
-          <input
-            type="radio"
-            checked={mode === "AUTO_RENDER"}
-            onChange={() => setMode("AUTO_RENDER")}
-          />
-          Compile with logo (recommended)
-        </label>
-        <label className="flex items-center gap-2">
-          <input
-            type="radio"
-            checked={mode === "ANALYZE_OPEN"}
-            onChange={() => setMode("ANALYZE_OPEN")}
-          />
-          Analyze only → add to timeline
-        </label>
-      </fieldset>
-
       {estimate ? (
         <div className="rounded-lg border border-zinc-800 bg-zinc-950/80 px-3 py-2 text-xs text-zinc-400">
           <p className="text-zinc-300">
@@ -242,7 +228,14 @@ export default function VideoEditorAiPanel({
       ) : null}
 
       {(error || status) && (
-        <p className={`text-sm ${error ? "text-red-400" : "text-zinc-400"}`}>{error || status}</p>
+        <div className="space-y-2">
+          <p className={`text-sm ${error ? "text-red-400" : "text-zinc-400"}`}>{error || status}</p>
+          {reviewLink && !error && (
+            <Link href={reviewLink} className="text-sm text-brand-300 underline hover:text-brand-200">
+              Review clips in Ad clips →
+            </Link>
+          )}
+        </div>
       )}
 
       <button
@@ -251,7 +244,7 @@ export default function VideoEditorAiPanel({
         onClick={() => void start()}
         className="rounded-lg bg-brand-600 px-5 py-2.5 text-sm font-medium text-white hover:bg-brand-500 disabled:opacity-50"
       >
-        {loading ? "Running…" : mode === "AUTO_RENDER" ? "Build & compile reel" : "Analyze & add clips"}
+        {loading ? "Running…" : "Run AI analysis"}
       </button>
     </div>
   );

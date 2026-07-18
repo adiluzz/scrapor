@@ -9,5 +9,8 @@ export const MAX_FULL_IMPORT_DURATION_SEC = 180; // 3 minutes
 /** Max length of a server-extracted editor clip. */
 export const MAX_EDITOR_CLIP_DURATION_SEC = 180;
 
+/** Max segment length when generating a GIF (keeps file size reasonable). */
+export const MAX_GIF_DURATION_SEC = 40;
+
 /** Default clip window when adding a long video to the timeline. */
 export const DEFAULT_PROXY_DURATION_SEC = 30;

@@ -53,8 +53,8 @@
 }
 
 /* Unified hit target: heatmap + seek bar (hover = preview, click/drag = seek).
-   Horizontal inset must match .vjs-progress-control padding so clicks map onto
-   the visible track — otherwise the far-right padding zone seeks to 100%. */
+   Horizontal position is synced to .vjs-progress-holder in VideoPlayer.tsx because
+   the root border + Video.js insets do not match fixed rem padding alone. */
 .video-player-root .video-player-timeline-zone {
   position: absolute;
   left: 0.75rem;

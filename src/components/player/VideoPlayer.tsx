@@ -568,6 +568,26 @@ export default forwardRef(function VideoPlayer(
       const progressControl = player.el().querySelector(".vjs-progress-control") as HTMLElement | null;
       if (!timelineZone || !seekBar || !progressControl) return;
 
+      /** Align custom hit zone + heatmap with the visible Video.js seek track (border/insets differ). */
+      const syncSeekTrackLayout = () => {
+        const rootRect = root.getBoundingClientRect();
+        const barRect = seekBar.getBoundingClientRect();
+        if (barRect.width <= 0) return;
+        const left = barRect.left - rootRect.left;
+        timelineZone.style.left = `${left}px`;
+        timelineZone.style.width = `${barRect.width}px`;
+        timelineZone.style.right = "auto";
+        const heatmap = heatmapRef.current;
+        if (heatmap) {
+          heatmap.style.left = `${left}px`;
+          heatmap.style.width = `${barRect.width}px`;
+          heatmap.style.right = "auto";
+          heatmap.style.paddingLeft = "0";
+          heatmap.style.paddingRight = "0";
+        }
+      };
+      syncSeekTrackLayout();
+
       let scrubbing = false;
 
       const setScrubbing = (active: boolean) => {
@@ -730,6 +750,13 @@ export default forwardRef(function VideoPlayer(
       timelineZone.addEventListener("touchcancel", onTouchEnd);
       window.addEventListener("mouseup", onMouseUp);
       document.addEventListener("mousemove", onMouseMove);
+      window.addEventListener("resize", syncSeekTrackLayout);
+      const ro =
+        typeof ResizeObserver !== "undefined"
+          ? new ResizeObserver(() => syncSeekTrackLayout())
+          : null;
+      ro?.observe(root);
+      ro?.observe(seekBar);
 
       const cleanup = () => {
         timelineZone.removeEventListener("mouseenter", onMouseEnter);
@@ -742,6 +769,19 @@ export default forwardRef(function VideoPlayer(
         timelineZone.removeEventListener("touchcancel", onTouchEnd);
         window.removeEventListener("mouseup", onMouseUp);
         document.removeEventListener("mousemove", onMouseMove);
+        window.removeEventListener("resize", syncSeekTrackLayout);
+        ro?.disconnect();
+        timelineZone.style.removeProperty("left");
+        timelineZone.style.removeProperty("width");
+        timelineZone.style.removeProperty("right");
+        const heatmap = heatmapRef.current;
+        if (heatmap) {
+          heatmap.style.removeProperty("left");
+          heatmap.style.removeProperty("width");
+          heatmap.style.removeProperty("right");
+          heatmap.style.removeProperty("padding-left");
+          heatmap.style.removeProperty("padding-right");
+        }
         setScrubbing(false);
         setPreview(null);
       };

@@ -7,7 +7,7 @@ import { enqueueVideoAgentRun } from "@/lib/video-agent-queue";
 import { resolveVideoAgentModel, DEFAULT_VIDEO_AGENT_MODEL } from "@/lib/video-agent-models";
 import { estimateVideoEditorCost } from "@/lib/video-editor-cost";
 import { resolveEditorExtractTargets } from "@/lib/video-editor-analyze";
-import { defaultEditorAnalysisPrompt } from "@/lib/video-editor-segment-filter";
+import { buildEditorAnalysisPrompt } from "@/lib/video-editor-segment-filter";
 import { logger } from "@/lib/logger";
 
 const schema = z.object({
@@ -63,10 +63,9 @@ export async function POST(request: Request) {
   });
 
   const agent = await ensureDefaultVideoAgent();
-  const userPrompt =
-    d.prompt?.trim() || defaultEditorAnalysisPrompt(targetDurationSec);
+  const userPrompt = buildEditorAnalysisPrompt(targetDurationSec, d.prompt);
 
-  const extractTargets = await resolveEditorExtractTargets(userPrompt, model.id, targetDurationSec);
+  const extractTargets = await resolveEditorExtractTargets(userPrompt, model.id);
 
   try {
     const run = await prisma.videoAgentRun.create({
@@ -89,7 +88,7 @@ export async function POST(request: Request) {
         siteId: d.siteId,
         sourceVideoIds: JSON.stringify(videos.map((v) => v.id)),
         title: d.title?.trim() || `Highlight · ${videos[0].title}`.slice(0, 200),
-        mode: d.mode === "AUTO_RENDER" ? "AUTO_RENDER" : "ANALYZE_OPEN",
+        mode: d.mode === "ANALYZE_OPEN" ? "ANALYZE_OPEN" : "AUTO_RENDER",
         status: "ANALYZING",
         analysisModel: model.id,
         targetDurationSec,

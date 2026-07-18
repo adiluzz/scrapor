@@ -27,7 +27,9 @@ Return JSON only with:
 - extractTargets: list of distinct events to locate (e.g. "piss drinking", "piss swallowing"). Each must be a specific visible action with continuous motion in live video footage.
 - reasoning: optional short note
 
-Never propose extractTargets for ads, sponsor cards, interstitials, still images, posters, thumbnails, title cards, or static screens. Small corner watermarks are OK to ignore.`;
+Never propose extractTargets for ads, sponsor cards, interstitials, still images, posters, thumbnails, title cards, or static screens. Small corner watermarks are OK to ignore.
+
+When the user is building a compiled highlight reel, extractTargets must describe distinct visible action moments spread across the video timeline (non-overlapping time ranges). The final output will be stitched with the site logo.`;
 
 function buildPrompt(userPrompt: string): string {
   return `${PARSE_INSTRUCTIONS}

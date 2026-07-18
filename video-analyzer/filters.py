@@ -54,7 +54,7 @@ def should_reject_detection(det: Detection) -> bool:
     full = _is_fullscreen_region(det.screen_w, det.screen_h)
     watermark = _is_likely_watermark(det.screen_w, det.screen_h)
 
-    if full and not watermark and det.start_sec < 20:
+    if full and not watermark and det.start_sec < 30:
         return True
     if full and not watermark and _GENERIC_HIGHLIGHT_RE.search(label):
         return True

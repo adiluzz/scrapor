@@ -48,7 +48,7 @@ export default function VideoEditorAiPanel({
   const [status, setStatus] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
-  const [mode, setMode] = useState<"ANALYZE_OPEN" | "AUTO_RENDER">("ANALYZE_OPEN");
+  const [mode, setMode] = useState<"ANALYZE_OPEN" | "AUTO_RENDER">("AUTO_RENDER");
 
   useEffect(() => {
     fetch("/api/video-agent/models")
@@ -149,12 +149,11 @@ export default function VideoEditorAiPanel({
     <div className={compact ? "space-y-3" : "space-y-4 rounded-xl border border-zinc-800 bg-zinc-900/50 p-5"}>
       {!compact && (
         <div>
-          <h2 className="text-sm font-medium text-zinc-200">AI highlight (Bedrock)</h2>
+          <h2 className="text-sm font-medium text-zinc-200">AI highlight reel</h2>
           <p className="mt-1 text-xs text-zinc-500">
-            Uses the videos you checked in Library (server-side from S3). Builds{" "}
-            {Math.ceil(targetDurationSec / 10)}–{Math.floor(targetDurationSec / 5)} clips of 5–10s
-            each (skips ads and still frames). Segments land on the timeline when analysis
-            completes.
+            Scans your selected library videos, finds non-overlapping 5–10s clips that fill your
+            target length (default 30s), skips ads and still frames, then compiles one short video
+            with the site logo.
           </p>
         </div>
       )}
@@ -179,7 +178,9 @@ export default function VideoEditorAiPanel({
       <label className="block space-y-1.5">
         <span className="text-sm text-zinc-400">Target length (seconds)</span>
         <p className="text-[11px] text-zinc-600">
-          Output is split into 5–10s moving-video clips (e.g. 30s → about 3–6 clips).
+          Default 30s — override to any length from 5–300s. AI picks{" "}
+          {Math.ceil(targetDurationSec / 10)}–{Math.floor(targetDurationSec / 5)} non-overlapping
+          clips of 5–10s each.
         </p>
         <input
           type="number"
@@ -206,18 +207,18 @@ export default function VideoEditorAiPanel({
         <label className="flex items-center gap-2">
           <input
             type="radio"
-            checked={mode === "ANALYZE_OPEN"}
-            onChange={() => setMode("ANALYZE_OPEN")}
+            checked={mode === "AUTO_RENDER"}
+            onChange={() => setMode("AUTO_RENDER")}
           />
-          Analyze → add to timeline
+          Compile with logo (recommended)
         </label>
         <label className="flex items-center gap-2">
           <input
             type="radio"
-            checked={mode === "AUTO_RENDER"}
-            onChange={() => setMode("AUTO_RENDER")}
+            checked={mode === "ANALYZE_OPEN"}
+            onChange={() => setMode("ANALYZE_OPEN")}
           />
-          Auto-render (FFmpeg + logo)
+          Analyze only → add to timeline
         </label>
       </fieldset>
 
@@ -250,7 +251,7 @@ export default function VideoEditorAiPanel({
         onClick={() => void start()}
         className="rounded-lg bg-brand-600 px-5 py-2.5 text-sm font-medium text-white hover:bg-brand-500 disabled:opacity-50"
       >
-        {loading ? "Running…" : mode === "AUTO_RENDER" ? "Analyze & auto-render" : "Analyze & add clips"}
+        {loading ? "Running…" : mode === "AUTO_RENDER" ? "Build & compile reel" : "Analyze & add clips"}
       </button>
     </div>
   );

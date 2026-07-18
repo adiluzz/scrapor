@@ -44,12 +44,36 @@ export function defaultEditorAnalysisPrompt(targetDurationSec: number): string {
   const clipCountLo = Math.max(1, Math.ceil(targetDurationSec / EDITOR_CLIP_MAX_SEC));
   const clipCountHi = Math.max(clipCountLo, Math.floor(targetDurationSec / EDITOR_CLIP_MIN_SEC));
   return [
-    `Build a ~${targetDurationSec}-second promo reel from ${clipCountLo}–${clipCountHi} clips.`,
-    `Each clip must be ${EDITOR_CLIP_MIN_SEC}–${EDITOR_CLIP_MAX_SEC} seconds of continuous video with clear motion.`,
-    "Prefer strong action peaks and compelling on-screen moments.",
-    "Skip preroll/interstitial ads, sponsor cards, end cards, and full-screen promotional screens (small corner watermarks are fine).",
-    "Skip still images, frozen frames, posters, thumbnails, title cards, and static screens — only moving video.",
+    `Build a ${targetDurationSec}-second compiled highlight reel for our site.`,
+    `Scan the full source video and pick ${clipCountLo}–${clipCountHi} separate, non-overlapping segments (${EDITOR_CLIP_MIN_SEC}–${EDITOR_CLIP_MAX_SEC}s each) that together fill ~${targetDurationSec}s of runtime.`,
+    "Each segment must come from a different time range — never overlap, duplicate, or reuse the same moment.",
+    "Only include continuous moving video with clear on-screen action.",
+    "Strictly avoid and exclude preroll ads, mid-roll ads, interstitials, sponsor cards, end cards, and full-screen promotional screens; trim around ads when you cannot skip them entirely.",
+    "Exclude still images, frozen frames, posters, thumbnails, title cards, and static screens.",
+    "Small corner watermarks on the main scene are fine — never treat ads or promo screens as highlights.",
+    "Spread picks across the timeline (beginning, middle, end) for variety.",
+    "Selected segments will be stitched into one short video with our site logo (brand intro/outro and corner logo on export).",
   ].join(" ");
+}
+
+export function buildEditorAnalysisPrompt(
+  targetDurationSec: number,
+  userDirection?: string | null
+): string {
+  const system = defaultEditorAnalysisPrompt(targetDurationSec);
+  const extra = userDirection?.trim();
+  if (!extra) return system;
+  return `${system}\n\nCreative direction: ${extra}`;
+}
+
+/** True when two segments from the same source video overlap in time. */
+export function editorSegmentsOverlap(
+  a: { videoId: string; startSec: number; endSec: number },
+  b: { videoId: string; startSec: number; endSec: number },
+  gapSec = 0.25
+): boolean {
+  if (a.videoId !== b.videoId) return false;
+  return a.startSec < b.endSec - gapSec && a.endSec > b.startSec + gapSec;
 }
 
 /** Drop ad-like and still-image detections before packing. */
@@ -63,7 +87,7 @@ export function shouldRejectEditorSegment(seg: EditorDetectionSegment): boolean 
   const watermark = isLikelyWatermarkRegion(seg.screenW, seg.screenH);
 
   // Full-frame bbox near the start is usually a preroll/sponsor card, not main content.
-  if (fullScreen && !watermark && seg.startSec < 20) return true;
+  if (fullScreen && !watermark && seg.startSec < 30) return true;
 
   // Generic "highlight" labels with a full-screen bbox are often mis-detected ads.
   if (fullScreen && !watermark && GENERIC_HIGHLIGHT_RE.test(label)) return true;

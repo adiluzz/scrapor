@@ -1,6 +1,5 @@
 import { parseUserPrompt } from "@/lib/video-agent/parse-prompt";
 import { logger } from "@/lib/logger";
-import { defaultEditorAnalysisPrompt } from "@/lib/video-editor-segment-filter";
 
 /** Concrete visible actions Nova can detect (not abstract slug keys). */
 const HIGHLIGHT_TARGET_FALLBACK = [
@@ -20,15 +19,16 @@ function normalizeTargets(targets: string[]): string[] {
 
 /**
  * Derive Bedrock detection targets from the editor prompt.
- * Uses the same parser as Video Agent, with highlight-friendly fallbacks.
+ * Expects the full prompt from {@link buildEditorAnalysisPrompt} (system + optional user direction).
  */
 export async function resolveEditorExtractTargets(
-  userPrompt: string,
-  analysisModelId: string,
-  targetDurationSec: number
+  fullPrompt: string,
+  analysisModelId: string
 ): Promise<string[]> {
-  const prompt =
-    userPrompt.trim() || defaultEditorAnalysisPrompt(targetDurationSec);
+  const prompt = fullPrompt.trim();
+  if (!prompt) {
+    return HIGHLIGHT_TARGET_FALLBACK;
+  }
 
   try {
     const parsed = await parseUserPrompt(prompt, analysisModelId);

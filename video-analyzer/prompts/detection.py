@@ -6,9 +6,11 @@ DETECTION_RULES = """
 Rules for every detection:
 - Each clip must span 5–10 seconds of continuous moving video with visible action.
 - Only detect segments with ongoing motion — not frozen frames, posters, thumbnails, title cards, or still images.
-- Do NOT detect preroll ads, interstitial ads, sponsor cards, end cards, or full-screen promotional screens.
+- Do NOT detect preroll ads, mid-roll ads, interstitial ads, sponsor cards, end cards, or full-screen promotional screens. Trim around ads when possible — never include ad footage in a highlight.
 - Small corner watermarks/logos are fine to ignore — never treat them as the main subject.
 - Prefer the most engaging action peaks in the actual scene footage.
+- Segments must NOT overlap in time — each detection must cover a distinct, separate moment in the video.
+- Spread detections across the timeline (early, middle, late) when building a highlight reel.
 """
 
 

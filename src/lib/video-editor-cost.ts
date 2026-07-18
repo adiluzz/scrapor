@@ -5,6 +5,7 @@ import {
 } from "@/lib/video-agent-models";
 import {
   EDITOR_CLIP_MIN_SEC,
+  editorSegmentsOverlap,
   normalizeEditorClipDuration,
   shouldRejectEditorSegment,
 } from "@/lib/video-editor-segment-filter";
@@ -79,7 +80,7 @@ export function estimateVideoEditorCost(input: {
     totalUsd,
     formula: `${formula} + planner $${plannerUsd.toFixed(2)} + render $0 (FFmpeg/OpenReel)`,
     wallTimeEstimate: wallTime,
-    note: `Cuts your source to ~${targetDurationSec}s in ${EDITOR_CLIP_MIN_SEC}–10s moving-video clips. Does not use Nova Reel generative pricing.`,
+    note: `Finds non-overlapping ${EDITOR_CLIP_MIN_SEC}–10s clips to fill ~${targetDurationSec}s, then compiles with site logo. Does not use Nova Reel generative pricing.`,
   };
 }
 
@@ -138,6 +139,7 @@ export function packSegmentsToDuration(
   for (const s of sorted) {
     if (used >= targetDurationSec) break;
     if (used + s.dur > targetDurationSec) continue;
+    if (out.some((picked) => editorSegmentsOverlap(picked, s))) continue;
     out.push({
       videoId: s.videoId,
       title: s.title,

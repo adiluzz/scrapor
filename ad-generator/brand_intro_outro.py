@@ -29,31 +29,57 @@ def _tagline_slug(tagline: str) -> str:
     return slug[:48] or "site"
 
 
-def ensure_brand_assets(tagline_domain: str | None = None) -> None:
-    """Build intro/outro MP4 templates if missing."""
+def _logo_slug(logo_path: str | None, lockup: Path) -> str:
+    if logo_path:
+        stem = Path(logo_path.lstrip("/")).stem
+        slug = _tagline_slug(stem)
+        if slug != "site":
+            return slug
+    return _tagline_slug(lockup.stem) or "default"
+
+
+def _resolve_png_lockup(logo_path: str | None, assets_dir: Path) -> Path | None:
+    """Resolve Site.logoPath (or default lockup) to a PNG usable by ffmpeg."""
+    from db import resolve_brand_lockup_path
+
+    lockup = resolve_brand_lockup_path(logo_path)
+    slug = _logo_slug(logo_path, lockup)
+    png_cache = assets_dir / f"lockup_{slug}.png"
+    if png_cache.exists():
+        return png_cache
+    if lockup.suffix.lower() == ".png" and lockup.exists():
+        return lockup
+    svg = lockup
+    if lockup.suffix.lower() != ".svg" or not lockup.exists():
+        svg = lockup.with_suffix(".svg")
+    if not svg.exists():
+        svg = Path(CONFIG.brand_lockup_path).with_suffix(".svg")
+    if not svg.exists():
+        svg = Path(CONFIG.brand_lockup_path).parent / "pisster-lockup.svg"
+    if svg.exists():
+        _svg_to_png(svg, png_cache)
+        if png_cache.exists():
+            return png_cache
+    return None
+
+
+def ensure_brand_assets(tagline_domain: str | None = None, logo_path: str | None = None) -> None:
+    """Build intro/outro MP4 templates for the selected site logo if missing."""
     assets_dir = Path(CONFIG.intro_path).parent
     assets_dir.mkdir(parents=True, exist_ok=True)
-    lockup = Path(CONFIG.brand_lockup_path)
-    svg_fallback = lockup.with_suffix(".svg")
-    if not svg_fallback.exists():
-        svg_fallback = lockup.parent / "pisster-lockup.svg"
+    png_path = _resolve_png_lockup(logo_path, assets_dir)
+    if not png_path:
+        log.warning("brand_lockup_missing logo_path=%s", logo_path)
+        return
 
-    png_path = lockup if lockup.suffix.lower() == ".png" else assets_dir / lockup.with_suffix(".png").name
-    if not png_path.exists():
-        if lockup.suffix.lower() == ".svg" and lockup.exists():
-            _svg_to_png(lockup, png_path)
-        elif svg_fallback.exists():
-            _svg_to_png(svg_fallback, png_path)
-        else:
-            log.warning("brand_lockup_missing path=%s svg=%s", lockup, svg_fallback)
-            return
-    elif lockup.suffix.lower() == ".png" and lockup.exists():
-        png_path = lockup
+    slug = _logo_slug(logo_path, png_path)
+    intro_path = assets_dir / f"intro_{slug}_1080p.mp4"
+    notag_path = assets_dir / f"outro_{slug}_notagline_1080p.mp4"
 
-    if not Path(CONFIG.intro_path).exists():
-        _render_intro(png_path, Path(CONFIG.intro_path))
-    if not Path(CONFIG.outro_path).exists():
-        _render_outro(png_path, Path(CONFIG.outro_path), show_tagline=False)
+    if not intro_path.exists():
+        _render_intro(png_path, intro_path)
+    if not notag_path.exists():
+        _render_outro(png_path, notag_path, show_tagline=False)
 
     tagline = (
         (tagline_domain or "").strip()
@@ -61,14 +87,8 @@ def ensure_brand_assets(tagline_domain: str | None = None) -> None:
         or os.environ.get("PRIMARY_DOMAIN")
         or ""
     ).strip()
-
-    outro_base = Path(CONFIG.outro_path).parent
-    notag_path = outro_base / "outro_notagline_1080p.mp4"
-    if not notag_path.exists():
-        _render_outro(png_path, notag_path, show_tagline=False)
-
     if tagline:
-        tagline_path = outro_base / f"outro_tagline_{_tagline_slug(tagline)}_1080p.mp4"
+        tagline_path = assets_dir / f"outro_{slug}_tagline_{_tagline_slug(tagline)}_1080p.mp4"
         if not tagline_path.exists():
             _render_outro(png_path, tagline_path, show_tagline=True, tagline_text=tagline)
 
@@ -138,10 +158,16 @@ def _render_outro(
 def intro_outro_paths(
     show_tagline: bool = True,
     tagline_domain: str | None = None,
+    logo_path: str | None = None,
 ) -> tuple[Path, Path]:
-    ensure_brand_assets(tagline_domain=tagline_domain)
-    intro = Path(CONFIG.intro_path)
-    outro_base = Path(CONFIG.outro_path).parent
+    ensure_brand_assets(tagline_domain=tagline_domain, logo_path=logo_path)
+    from db import resolve_brand_lockup_path
+
+    lockup = resolve_brand_lockup_path(logo_path)
+    slug = _logo_slug(logo_path, lockup)
+    assets_dir = Path(CONFIG.intro_path).parent
+    intro = assets_dir / f"intro_{slug}_1080p.mp4"
+
     if show_tagline:
         tagline = (
             (tagline_domain or "").strip()
@@ -150,9 +176,9 @@ def intro_outro_paths(
             or ""
         ).strip()
         if tagline:
-            outro = outro_base / f"outro_tagline_{_tagline_slug(tagline)}_1080p.mp4"
+            outro = assets_dir / f"outro_{slug}_tagline_{_tagline_slug(tagline)}_1080p.mp4"
         else:
-            outro = outro_base / "outro_notagline_1080p.mp4"
+            outro = assets_dir / f"outro_{slug}_notagline_1080p.mp4"
     else:
-        outro = outro_base / "outro_notagline_1080p.mp4"
+        outro = assets_dir / f"outro_{slug}_notagline_1080p.mp4"
     return intro, outro

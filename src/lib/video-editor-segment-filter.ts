@@ -52,7 +52,7 @@ export function defaultEditorAnalysisPrompt(targetDurationSec: number): string {
     "Exclude still images, frozen frames, posters, thumbnails, title cards, and static screens.",
     "Small corner watermarks on the main scene are fine — never treat ads or promo screens as highlights.",
     "Spread picks across the timeline (beginning, middle, end) for variety.",
-    "Selected segments will be stitched into one short video with our site logo (brand intro/outro and corner logo on export).",
+    "Selected segments will be stitched into one short video with the selected site logo (intro/outro on export).",
   ].join(" ");
 }
 

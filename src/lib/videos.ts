@@ -206,7 +206,10 @@ export async function upsertVideoWithMedia(input: {
     video = await prisma.video.update({ where: { id: video.id }, data: { slug } });
   }
 
-  const publishIds = [...new Set(input.publishSiteIds?.length ? input.publishSiteIds : [input.siteId])];
+  const publishIds =
+    input.publishSiteIds !== undefined
+      ? [...new Set(input.publishSiteIds)]
+      : [input.siteId];
   await prisma.videoSite.createMany({
     data: publishIds.map((siteId) => ({ videoId: video.id, siteId })),
     skipDuplicates: true,

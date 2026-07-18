@@ -18,6 +18,7 @@ const schema = z.object({
   analysisModelId: z.string().min(1).optional(),
   mode: z.enum(["ANALYZE_OPEN", "AUTO_RENDER"]).optional(),
   prompt: z.string().max(2000).optional(),
+  publishToSite: z.boolean().optional(),
 });
 
 export async function POST(request: Request) {
@@ -94,6 +95,7 @@ export async function POST(request: Request) {
         targetDurationSec,
         videoAgentRunId: run.id,
         estimatedCostUsd: estimate.totalUsd,
+        publishToSite: d.publishToSite === true,
         createdByUserId: userId,
       },
     });

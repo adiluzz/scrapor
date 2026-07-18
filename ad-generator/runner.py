@@ -41,7 +41,10 @@ def process_iteration(conn, iteration_id: str) -> None:
     set_iteration_status(conn, iteration_id, "GENERATING")
 
     try:
-        ensure_brand_assets(tagline_domain=model_params.get("taglineDomain"))
+        ensure_brand_assets(
+            tagline_domain=model_params.get("taglineDomain"),
+            logo_path=job.get("logoPath"),
+        )
         work_dir = Path(CONFIG.work_dir) / promo_ad_id / f"iter-{iteration_number}"
         work_dir.mkdir(parents=True, exist_ok=True)
 

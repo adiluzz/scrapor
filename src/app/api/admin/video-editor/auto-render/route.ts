@@ -30,8 +30,8 @@ const schema = z.object({
   title: z.string().max(200).optional(),
   jobId: z.string().optional(),
   segments: z.array(segmentSchema).min(1).max(40),
-  logoPosition: z.enum(["top-left", "top-right", "bottom-left", "bottom-right"]).optional(),
   maxBodySeconds: z.number().int().min(5).max(300).optional(),
+  publishToSite: z.boolean().optional(),
 });
 
 /**
@@ -114,10 +114,11 @@ export async function POST(request: Request) {
     const modelParams = stringifyModelParams(
       defaultModelParams("CLIP_COMPOSE", {
         maxBodySeconds: Math.min(300, Math.max(5, bodySec)),
-        logoPosition: d.logoPosition || "bottom-right",
-        logoOpacity: 0.85,
         crossfadeSec: 0.4,
         showTagline: true,
+        logoOverlay: false,
+        brandIntroOutro: true,
+        publishToSite: d.publishToSite === true,
         outputAspect,
       })
     );

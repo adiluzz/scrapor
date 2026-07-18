@@ -22,9 +22,7 @@ export default function VideoEditorSavePanel({
   compact?: boolean;
 }) {
   const [title, setTitle] = useState(defaultTitle || "Edited video");
-  const [logoPosition, setLogoPosition] = useState<
-    "top-left" | "top-right" | "bottom-left" | "bottom-right"
-  >("bottom-right");
+  const [publishToSite, setPublishToSite] = useState(false);
   const [status, setStatus] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [compiling, setCompiling] = useState(false);
@@ -67,7 +65,7 @@ export default function VideoEditorSavePanel({
             stopPolling();
             setCompiling(false);
             setCompiledDetectionId(data.detectionId ?? null);
-            setStatus(`Compiled video added to Ad clips: “${data.title}”.`);
+            setStatus(`Compiled video added to Ad clips: “${data.title}”.${data.publishToSite ? " Published on the public site." : " Not published to the site — review in Admin → Videos first."}`);
             return;
           }
           if (data.status === "ERROR") {
@@ -106,7 +104,7 @@ export default function VideoEditorSavePanel({
           siteId,
           title: title.trim() || "Edited video",
           jobId: jobId || undefined,
-          logoPosition,
+          publishToSite,
           segments: segmentsFromClips(validClips),
         }),
       });
@@ -201,8 +199,8 @@ export default function VideoEditorSavePanel({
         <div>
           <h2 className="text-sm font-medium text-zinc-200">Export</h2>
           <p className="mt-1 text-xs text-zinc-500">
-            Compile every timeline clip into one video (logo, crossfades, intro/outro) and add it to
-            Ad clips.
+            Compile every timeline clip into one video (selected site logo in intro/outro,
+            crossfades) and add it to Ad clips.
           </p>
         </div>
       )}
@@ -216,18 +214,20 @@ export default function VideoEditorSavePanel({
         />
       </label>
 
-      <label className="block space-y-1.5">
-        <span className="text-sm text-zinc-400">Logo position</span>
-        <select
-          value={logoPosition}
-          onChange={(e) => setLogoPosition(e.target.value as typeof logoPosition)}
-          className="w-full rounded-md border border-zinc-800 bg-zinc-900 px-2 py-1.5 text-sm text-white"
-        >
-          <option value="bottom-right">Bottom right</option>
-          <option value="bottom-left">Bottom left</option>
-          <option value="top-right">Top right</option>
-          <option value="top-left">Top left</option>
-        </select>
+      <label className="flex items-start gap-2 text-sm text-zinc-300">
+        <input
+          type="checkbox"
+          checked={publishToSite}
+          onChange={(e) => setPublishToSite(e.target.checked)}
+          className="mt-0.5"
+        />
+        <span>
+          Publish to the public site
+          <span className="mt-0.5 block text-[11px] text-zinc-600">
+            Leave unchecked to keep the compile in Ad clips only until you publish from Admin →
+            Videos.
+          </span>
+        </span>
       </label>
 
       {(error || status) && (

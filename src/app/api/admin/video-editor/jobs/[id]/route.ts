@@ -71,9 +71,10 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
         const modelParams = stringifyModelParams(
           defaultModelParams("CLIP_COMPOSE", {
             maxBodySeconds: job.targetDurationSec,
-            logoPosition: "bottom-right",
-            logoOpacity: 0.85,
             crossfadeSec: 0.4,
+            logoOverlay: false,
+            brandIntroOutro: true,
+            publishToSite: job.publishToSite,
           })
         );
 

@@ -7,6 +7,10 @@ export type PromoAdModelParams = {
   logoPosition?: "top-left" | "top-right" | "bottom-left" | "bottom-right";
   logoOpacity?: number;
   showTagline?: boolean;
+  /** Animated intro/outro with the site logo (default for CLIP_COMPOSE). */
+  brandIntroOutro?: boolean;
+  /** Corner watermark on the full video — off by default when intro/outro is used. */
+  logoOverlay?: boolean;
   /** Domain shown on outro tagline (e.g. fbbtube.com). */
   taglineDomain?: string;
   audioEnabled?: boolean;
@@ -15,6 +19,8 @@ export type PromoAdModelParams = {
   kenBurns?: boolean;
   removeSourceLogos?: boolean;
   logoRemovalMode?: "presets" | "auto" | "both";
+  /** When true, compiled output is linked on the public tube (VideoSite + READY). Default off for editor exports. */
+  publishToSite?: boolean;
   /** Output canvas aspect for CLIP_COMPOSE (from editor crop majority). */
   outputAspect?: "16:9" | "9:16";
 };
@@ -40,6 +46,9 @@ export function defaultModelParams(
     mode === "CLIP_COMPOSE"
       ? {
           showTagline: true,
+          brandIntroOutro: true,
+          logoOverlay: false,
+          publishToSite: false,
           maxBodySeconds: 60,
           logoOpacity: 0.9,
           crossfadeSec: 0.5,

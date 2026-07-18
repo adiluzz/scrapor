@@ -812,6 +812,8 @@ model VideoEditorJob {
   /// JSON segments: { videoId, title, startSec, endSec, confidence? }[]
   segmentsJson     String?
   estimatedCostUsd Float?
+  /// When true, finished compile is published on the public tube (VideoSite + READY).
+  publishToSite      Boolean              @default(false)
   error            String?
   createdByUserId  String?
   createdAt        DateTime             @default(now())

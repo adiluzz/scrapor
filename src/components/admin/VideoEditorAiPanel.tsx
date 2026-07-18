@@ -49,6 +49,7 @@ export default function VideoEditorAiPanel({
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [mode, setMode] = useState<"ANALYZE_OPEN" | "AUTO_RENDER">("AUTO_RENDER");
+  const [publishToSite, setPublishToSite] = useState(false);
 
   useEffect(() => {
     fetch("/api/video-agent/models")
@@ -97,7 +98,7 @@ export default function VideoEditorAiPanel({
       }
       if (data.job?.status === "DONE") {
         setLoading(false);
-        setStatus("DONE — compiled video added to Ad clips");
+        setStatus("DONE — added to Ad clips");
       }
       if (data.job?.status === "ERROR") {
         setError(data.job.error || "Job failed");
@@ -127,6 +128,7 @@ export default function VideoEditorAiPanel({
           targetDurationSec,
           analysisModelId: modelId,
           mode,
+          publishToSite,
           prompt: prompt.trim() || undefined,
         }),
       });
@@ -153,7 +155,7 @@ export default function VideoEditorAiPanel({
           <p className="mt-1 text-xs text-zinc-500">
             Scans your selected library videos, finds non-overlapping 5–10s clips that fill your
             target length (default 30s), skips ads and still frames, then compiles one short video
-            with the site logo.
+            with the selected site logo in intro/outro.
           </p>
         </div>
       )}
@@ -221,6 +223,24 @@ export default function VideoEditorAiPanel({
           Analyze only → add to timeline
         </label>
       </fieldset>
+
+      {mode === "AUTO_RENDER" && (
+        <label className="flex items-start gap-2 text-sm text-zinc-300">
+          <input
+            type="checkbox"
+            checked={publishToSite}
+            onChange={(e) => setPublishToSite(e.target.checked)}
+            className="mt-0.5"
+          />
+          <span>
+            Publish compiled video to the public site
+            <span className="mt-0.5 block text-[11px] text-zinc-600">
+              Off by default — reel still lands in Ad clips for review. Turn on to go live on the
+              tube immediately.
+            </span>
+          </span>
+        </label>
+      )}
 
       {estimate ? (
         <div className="rounded-lg border border-zinc-800 bg-zinc-950/80 px-3 py-2 text-xs text-zinc-400">

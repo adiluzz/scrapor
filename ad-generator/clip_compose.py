@@ -34,6 +34,8 @@ def compose_promo_ad(
 
     max_body = float(model_params.get("maxBodySeconds") or 60)
     show_tagline = model_params.get("showTagline", True) is not False
+    brand_intro = model_params.get("brandIntroOutro", True) is not False
+    logo_overlay = model_params.get("logoOverlay", False) is True
     tagline_domain = (
         (model_params.get("taglineDomain") or "").strip()
         or None
@@ -114,12 +116,16 @@ def compose_promo_ad(
     body_path = work / "body.mp4"
     apply_body_bookends(body_raw, body_path)
 
-    intro, outro = intro_outro_paths(show_tagline, tagline_domain=tagline_domain)
+    intro, outro = intro_outro_paths(
+        show_tagline,
+        tagline_domain=tagline_domain,
+        logo_path=logo_path,
+    )
     parts = []
-    if intro.exists():
+    if brand_intro and intro.exists():
         parts.append(intro)
     parts.append(body_path)
-    if outro.exists():
+    if brand_intro and outro.exists():
         parts.append(outro)
 
     raw_path = work / "raw_concat.mp4"
@@ -138,7 +144,7 @@ def compose_promo_ad(
             _svg_to_png(svg_fallback, lockup_png)
 
     final_path = work / "final.mp4"
-    if lockup_png.exists() and lockup_png.suffix.lower() == ".png":
+    if logo_overlay and lockup_png.exists() and lockup_png.suffix.lower() == ".png":
         overlay_logo(raw_path, final_path, lockup_png, logo_position, logo_opacity)
     else:
         final_path.write_bytes(raw_path.read_bytes())

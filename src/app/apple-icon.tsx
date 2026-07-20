@@ -3,6 +3,7 @@ import { headers } from "next/headers";
 import { readFile } from "fs/promises";
 import { join } from "path";
 import { getSiteByDomain, isAdminHost, PRIMARY_DOMAIN, ADMIN_BASE_DOMAIN } from "@/lib/site";
+import { faviconCanvasStyle, FAVICON_BG, GoldenDropFavicon } from "@/lib/favicon-mark";
 
 export const size = { width: 180, height: 180 };
 export const contentType = "image/png";
@@ -42,34 +43,19 @@ export default async function AppleIcon() {
       </svg>
     );
   } else {
-    inner = (
-      <svg width="100" height="120" viewBox="0 0 32 40" fill="none">
-        <defs>
-          <linearGradient id="g" x1="16" y1="2" x2="16" y2="38" gradientUnits="userSpaceOnUse">
-            <stop offset="0%" stopColor="#F5E6A3" />
-            <stop offset="45%" stopColor="#D4AF37" />
-            <stop offset="100%" stopColor="#9A7209" />
-          </linearGradient>
-        </defs>
-        <path
-          d="M16 3.5C16 3.5 6.5 18.5 6.5 26.5C6.5 32.47 10.75 37 16 37C21.25 37 25.5 32.47 25.5 26.5C25.5 18.5 16 3.5 16 3.5Z"
-          fill="url(#g)"
-        />
-      </svg>
-    );
+    inner = <GoldenDropFavicon width={142} height={178} gradId="pisster-apple" />;
   }
 
   return new ImageResponse(
     (
       <div
         style={{
-          width: "100%",
-          height: "100%",
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "center",
-          background: logoKey === "fbb-mark" ? "#000000" : "linear-gradient(145deg, #18181b 0%, #09090b 100%)",
-          borderRadius: logoKey === "fbb-mark" ? 0 : 36,
+          ...faviconCanvasStyle(),
+          background:
+            logoKey === "fbb-mark" || logoKey === "golden-drop"
+              ? FAVICON_BG
+              : "linear-gradient(145deg, #18181b 0%, #09090b 100%)",
+          borderRadius: logoKey === "sharlila-mark" ? 36 : 0,
         }}
       >
         {inner}

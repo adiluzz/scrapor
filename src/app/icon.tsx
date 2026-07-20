@@ -3,6 +3,7 @@ import { headers } from "next/headers";
 import { readFile } from "fs/promises";
 import { join } from "path";
 import { getSiteByDomain, isAdminHost, PRIMARY_DOMAIN, ADMIN_BASE_DOMAIN } from "@/lib/site";
+import { faviconCanvasStyle, GoldenDropFavicon } from "@/lib/favicon-mark";
 
 export const size = { width: 48, height: 48 };
 export const contentType = "image/png";
@@ -32,16 +33,7 @@ export default async function Icon() {
     const src = `data:image/png;base64,${buf.toString("base64")}`;
     return new ImageResponse(
       (
-        <div
-          style={{
-            width: "100%",
-            height: "100%",
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            background: "#000000",
-          }}
-        >
+        <div style={faviconCanvasStyle()}>
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img src={src} width={48} height={48} alt="" style={{ objectFit: "cover" }} />
         </div>
@@ -76,30 +68,8 @@ export default async function Icon() {
 
   return new ImageResponse(
     (
-      <div
-        style={{
-          width: "100%",
-          height: "100%",
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "center",
-          background: "#09090b",
-          borderRadius: 6,
-        }}
-      >
-        <svg width="30" height="36" viewBox="0 0 32 40" fill="none">
-          <defs>
-            <linearGradient id="g" x1="16" y1="2" x2="16" y2="38" gradientUnits="userSpaceOnUse">
-              <stop offset="0%" stopColor="#F5E6A3" />
-              <stop offset="45%" stopColor="#E8C547" />
-              <stop offset="100%" stopColor="#C9A227" />
-            </linearGradient>
-          </defs>
-          <path
-            d="M16 3.5C16 3.5 6.5 18.5 6.5 26.5C6.5 32.47 10.75 37 16 37C21.25 37 25.5 32.47 25.5 26.5C25.5 18.5 16 3.5 16 3.5Z"
-            fill="url(#g)"
-          />
-        </svg>
+      <div style={faviconCanvasStyle()}>
+        <GoldenDropFavicon width={42} height={52} gradId="pisster-favicon" />
       </div>
     ),
     { ...size },

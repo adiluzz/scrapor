@@ -40,6 +40,7 @@ const patchSchema = z.object({
   hilltopAdsSiteVerification: z.string().max(200).nullable().optional(),
   homeH1: z.string().max(300).nullable().optional(),
   homeIntroHtml: z.string().max(20000).nullable().optional(),
+  verifiedTagsIntroHtml: z.string().max(20000).nullable().optional(),
   gaMeasurementId: z
     .string()
     .max(40)
@@ -162,6 +163,8 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
         d.hilltopAdsSiteVerification === undefined ? undefined : d.hilltopAdsSiteVerification,
       homeH1: d.homeH1 === undefined ? undefined : d.homeH1,
       homeIntroHtml: d.homeIntroHtml === undefined ? undefined : d.homeIntroHtml,
+      verifiedTagsIntroHtml:
+        d.verifiedTagsIntroHtml === undefined ? undefined : d.verifiedTagsIntroHtml,
       gaMeasurementId:
         d.gaMeasurementId === undefined
           ? undefined

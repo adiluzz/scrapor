@@ -42,6 +42,8 @@ model Site {
   hilltopAdsSiteVerification String?
   homeH1         String?
   homeIntroHtml  String?
+  /// HTML blurb on /tags explaining verified badge tags (per-site).
+  verifiedTagsIntroHtml String?
   /// GA4 measurement id for this host (e.g. G-XXXXXXXX).
   gaMeasurementId String?
 

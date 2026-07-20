@@ -2,12 +2,19 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
+import TagIcon from "@/components/site/TagIcon";
 
-type Suggestion = { type: "pornstar" | "tag" | "search"; label: string; value: string };
+type Suggestion = {
+  type: "pornstar" | "tag" | "search";
+  label: string;
+  value: string;
+  icon?: string | null;
+  verified?: boolean;
+};
 
 /**
- * Autocomplete search box. Suggestions merge tags + pornstars + top past
- * searches. Submitting pushes the query into the URL (single source of truth).
+ * Autocomplete search box. Verified tags rank first and show their badge icon.
+ * Submitting pushes the query into the URL (single source of truth).
  */
 export default function SearchBar({ initial = "" }: { initial?: string }) {
   const router = useRouter();
@@ -62,7 +69,11 @@ export default function SearchBar({ initial = "" }: { initial?: string }) {
     } else if (e.key === "Escape") setOpen(false);
   }
 
-  const groupLabels: Record<string, string> = { pornstar: "Pornstars", tag: "Tags", search: "Searches" };
+  const groupLabels: Record<string, string> = {
+    pornstar: "Pornstars",
+    tag: "Tags",
+    search: "Searches",
+  };
 
   return (
     <div ref={boxRef} className="relative w-full min-w-0 max-w-xl">
@@ -98,11 +109,21 @@ export default function SearchBar({ initial = "" }: { initial?: string }) {
               <button
                 onMouseEnter={() => setActive(i)}
                 onClick={() => go(s.label, s)}
-                className={`flex w-full items-center justify-between px-4 py-2 text-left text-sm ${
+                className={`flex w-full items-center justify-between gap-3 px-4 py-2 text-left text-sm ${
                   active === i ? "bg-zinc-800 text-white" : "text-zinc-300"
                 }`}
               >
-                <span className="truncate">{s.label}</span>
+                <span className="flex min-w-0 items-center gap-2 truncate">
+                  {s.type === "tag" && s.verified && (
+                    <TagIcon icon={s.icon} slug={s.value} className="h-4 w-4 shrink-0" />
+                  )}
+                  <span className="truncate">{s.label}</span>
+                  {s.verified && (
+                    <span className="shrink-0 rounded bg-brand-500/15 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-brand-300">
+                      Verified
+                    </span>
+                  )}
+                </span>
                 <span className="ml-3 shrink-0 text-[10px] uppercase tracking-wide text-zinc-500">
                   {groupLabels[s.type]}
                 </span>

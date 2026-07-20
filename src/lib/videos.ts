@@ -2,7 +2,7 @@ import { prisma } from "@/lib/db";
 import { enrichPornstarFromTpdbInBackground } from "@/lib/enrich-pornstar-tpdb";
 import { slugify } from "@/lib/slug";
 import {
-  GOLDEN_DROP_ICON,
+  getVerifiedTagDefinition,
   PISS_SWALLOW_VERIFIED_NAME,
   PISS_SWALLOW_VERIFIED_SLUG,
 } from "@/lib/verified-tags";
@@ -53,14 +53,15 @@ export async function resolveAdminVideoSlug(
 
 /** Site-wide verified badge tag for AI-confirmed piss swallow content. */
 export async function ensurePissSwallowVerifiedTag(siteId: string) {
+  const def = getVerifiedTagDefinition(PISS_SWALLOW_VERIFIED_SLUG)!;
   return prisma.tag.upsert({
-    where: { siteId_slug: { siteId, slug: PISS_SWALLOW_VERIFIED_SLUG } },
-    update: { name: PISS_SWALLOW_VERIFIED_NAME, icon: GOLDEN_DROP_ICON },
+    where: { siteId_slug: { siteId, slug: def.slug } },
+    update: { name: def.name, icon: def.icon },
     create: {
       siteId,
-      slug: PISS_SWALLOW_VERIFIED_SLUG,
-      name: PISS_SWALLOW_VERIFIED_NAME,
-      icon: GOLDEN_DROP_ICON,
+      slug: def.slug,
+      name: def.name,
+      icon: def.icon,
     },
   });
 }
@@ -112,20 +113,21 @@ export async function linkTags(siteId: string, videoId: string, names: string[])
     if (!name) continue;
     const slug = slugify(name);
     if (!slug) continue;
+    const verifiedDef = getVerifiedTagDefinition(slug);
     const tag = await prisma.tag.upsert({
       where: { siteId_slug: { siteId, slug } },
-      update: { name },
+      update: { name, ...(verifiedDef ? { icon: verifiedDef.icon } : {}) },
       create: {
         siteId,
         slug,
         name,
-        ...(slug === PISS_SWALLOW_VERIFIED_SLUG ? { icon: GOLDEN_DROP_ICON } : {}),
+        ...(verifiedDef ? { icon: verifiedDef.icon } : {}),
       },
     });
-    if (slug === PISS_SWALLOW_VERIFIED_SLUG && !tag.icon) {
+    if (verifiedDef && !tag.icon) {
       await prisma.tag.update({
         where: { id: tag.id },
-        data: { icon: GOLDEN_DROP_ICON },
+        data: { icon: verifiedDef.icon },
       });
     }
     await prisma.videoTag.create({ data: { videoId, tagId: tag.id } }).catch(() => {});

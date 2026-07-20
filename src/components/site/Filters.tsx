@@ -1,6 +1,7 @@
 "use client";
 
 import { useQueryState } from "@/lib/useQueryState";
+import type { SortKey } from "@/lib/queries";
 
 const DURATIONS = [
   { label: "Any length", min: "", max: "" },
@@ -10,16 +11,17 @@ const DURATIONS = [
   { label: "40+ min", min: "2400", max: "" },
 ];
 
-const SORTS = [
+const SORTS: { label: string; value: SortKey }[] = [
+  { label: "Featured", value: "featured" },
   { label: "Newest", value: "newest" },
   { label: "Oldest", value: "oldest" },
   { label: "Most viewed", value: "popular" },
 ];
 
 /** URL-driven duration + sort controls. Every change updates the URL. */
-export default function Filters() {
+export default function Filters({ defaultSort = "newest" }: { defaultSort?: SortKey }) {
   const { get, setParams } = useQueryState();
-  const currentSort = get("sort") || "newest";
+  const currentSort = (get("sort") as SortKey) || defaultSort;
   const currentMin = get("min");
   const currentMax = get("max");
   const currentDur =

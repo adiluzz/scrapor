@@ -1,13 +1,20 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
-import { getCurrentSiteId, getSiteIdForAuth } from "@/lib/site";
+import { getSiteIdForAuth } from "@/lib/site";
 import { pornstarHasVideosOnSite } from "@/lib/pornstar-sites";
 import { tagHasVideosOnSite } from "@/lib/tag-sites";
 import { topSearches } from "@/lib/search";
 import { redis } from "@/lib/redis";
 import { guardApiRoute } from "@/lib/admin-guard";
+import { isVerifiedBadgeTag } from "@/lib/verified-tags";
 
-type Suggestion = { type: "pornstar" | "tag" | "search"; label: string; value: string };
+type Suggestion = {
+  type: "pornstar" | "tag" | "search";
+  label: string;
+  value: string;
+  icon?: string | null;
+  verified?: boolean;
+};
 
 const TOP_CACHE_TTL = 600; // seconds
 
@@ -53,9 +60,9 @@ export async function GET(request: Request) {
         ...tagHasVideosOnSite(siteId),
         name: { contains: q, mode: "insensitive" },
       },
-      select: { name: true, slug: true },
+      select: { name: true, slug: true, icon: true },
       distinct: ["slug"],
-      take: 4,
+      take: 12,
     }),
     getTopSearches(siteId),
   ]);
@@ -65,9 +72,26 @@ export async function GET(request: Request) {
     .slice(0, 5)
     .map<Suggestion>((s) => ({ type: "search", label: s.sample, value: s.normalized }));
 
+  const tagSuggestions = tags.map<Suggestion>((t) => ({
+    type: "tag",
+    label: t.name,
+    value: t.slug,
+    icon: t.icon,
+    verified: isVerifiedBadgeTag(t),
+  }));
+
+  tagSuggestions.sort((a, b) => {
+    if (a.verified !== b.verified) return a.verified ? -1 : 1;
+    return a.label.localeCompare(b.label);
+  });
+
+  const verifiedTags = tagSuggestions.filter((t) => t.verified).slice(0, 4);
+  const regularTags = tagSuggestions.filter((t) => !t.verified).slice(0, 4);
+
   const suggestions: Suggestion[] = [
+    ...verifiedTags,
+    ...regularTags,
     ...pornstars.map<Suggestion>((p) => ({ type: "pornstar", label: p.name, value: p.slug })),
-    ...tags.map<Suggestion>((t) => ({ type: "tag", label: t.name, value: t.slug })),
     ...searchHits,
   ].slice(0, 10);
 

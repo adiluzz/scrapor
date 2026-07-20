@@ -33,6 +33,7 @@ export default async function WebsiteSeoPage({ params }: { params: Promise<{ id:
           hilltopAdsSiteVerification: site.hilltopAdsSiteVerification,
           homeH1: site.homeH1,
           homeIntroHtml: site.homeIntroHtml,
+          verifiedTagsIntroHtml: site.verifiedTagsIntroHtml,
           gaMeasurementId: site.gaMeasurementId,
           seoVideoTitleTpl: site.seoVideoTitleTpl,
           seoVideoDescTpl: site.seoVideoDescTpl,

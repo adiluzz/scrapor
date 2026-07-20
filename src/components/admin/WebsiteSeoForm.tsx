@@ -16,6 +16,7 @@ type SeoFields = {
   hilltopAdsSiteVerification: string | null;
   homeH1: string | null;
   homeIntroHtml: string | null;
+  verifiedTagsIntroHtml: string | null;
   gaMeasurementId: string | null;
   seoVideoTitleTpl: string | null;
   seoVideoDescTpl: string | null;
@@ -54,6 +55,7 @@ export default function WebsiteSeoForm({
     hilltopAdsSiteVerification: initial.hilltopAdsSiteVerification || "",
     homeH1: initial.homeH1 || "",
     homeIntroHtml: initial.homeIntroHtml || "",
+    verifiedTagsIntroHtml: initial.verifiedTagsIntroHtml || "",
     gaMeasurementId: initial.gaMeasurementId || "",
     seoVideoTitleTpl: initial.seoVideoTitleTpl || "",
     seoVideoDescTpl: initial.seoVideoDescTpl || "",
@@ -102,6 +104,7 @@ export default function WebsiteSeoForm({
           hilltopAdsSiteVerification: nullIfEmpty(form.hilltopAdsSiteVerification),
           homeH1: nullIfEmpty(form.homeH1),
           homeIntroHtml: nullIfEmpty(form.homeIntroHtml),
+          verifiedTagsIntroHtml: nullIfEmpty(form.verifiedTagsIntroHtml),
           gaMeasurementId: form.gaMeasurementId.trim() || null,
           seoVideoTitleTpl: nullIfEmpty(form.seoVideoTitleTpl),
           seoVideoDescTpl: nullIfEmpty(form.seoVideoDescTpl),
@@ -237,6 +240,21 @@ export default function WebsiteSeoForm({
             onChange={(e) => set("homeIntroHtml", e.target.value)}
             className={`${inputClass} font-mono text-xs`}
           />
+        </label>
+
+        <label className="block space-y-1.5">
+          <span className="text-sm text-zinc-400">Verified tags intro HTML</span>
+          <textarea
+            rows={4}
+            value={form.verifiedTagsIntroHtml}
+            onChange={(e) => set("verifiedTagsIntroHtml", e.target.value)}
+            className={`${inputClass} font-mono text-xs`}
+            placeholder="Shown on /tags — explain what verified badge tags mean on this site."
+          />
+          <span className="text-xs text-zinc-500">
+            Public copy on the tags index page. Describe your verified tags (e.g. piss swallow, fbb
+            fuck) and what the badge icon means.
+          </span>
         </label>
       </fieldset>
 

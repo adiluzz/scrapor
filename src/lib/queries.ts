@@ -1,4 +1,4 @@
-import type { Prisma } from "@prisma/client";
+import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/db";
 import { thumbUrl, gridCardPreview } from "@/lib/media";
 import type { VideoCardPreviewData } from "@/components/site/VideoCardPreview";
@@ -6,7 +6,7 @@ import { formatDuration } from "@/lib/videos";
 
 export const PAGE_SIZE = 24;
 
-export type SortKey = "newest" | "oldest" | "popular";
+export type SortKey = "newest" | "oldest" | "popular" | "featured";
 
 /** Discovery params parsed from the URL query string (single source of truth). */
 export interface DiscoveryParams {
@@ -31,7 +31,9 @@ export function parseDiscoveryParams(
   };
   const sortRaw = get("sort");
   const sort: SortKey =
-    sortRaw === "oldest" || sortRaw === "popular" ? sortRaw : "newest";
+    sortRaw === "oldest" || sortRaw === "popular" || sortRaw === "featured"
+      ? sortRaw
+      : "newest";
   return {
     q: (get("q") || "").trim(),
     min: num("min"),
@@ -49,7 +51,7 @@ export function buildWhere(
   const where: Prisma.VideoWhereInput = {
     sites: { some: { siteId } },
     isDeleted: false,
-    status: "READY", // hide creator uploads still being processed (or failed)
+    status: "READY",
     ...extra,
   };
   if (params.q) {
@@ -117,12 +119,65 @@ export async function toCard(v: {
   };
 }
 
+/**
+ * Homepage default: most viewed, then most verified badge tags, then newest.
+ */
+async function listVideosFeatured(
+  siteId: string,
+  params: DiscoveryParams,
+  extra?: Prisma.VideoWhereInput
+): Promise<{ videos: VideoCardData[]; total: number; totalPages: number }> {
+  const where = buildWhere(siteId, params, extra);
+  const matching = await prisma.video.findMany({
+    where,
+    select: { id: true },
+  });
+  const ids = matching.map((v) => v.id);
+  if (ids.length === 0) {
+    return { videos: [], total: 0, totalPages: 1 };
+  }
+
+  const skip = (params.page - 1) * PAGE_SIZE;
+  const ranked = await prisma.$queryRaw<{ id: string }[]>`
+    SELECT v.id
+    FROM "Video" v
+    LEFT JOIN (
+      SELECT vt."videoId", COUNT(*)::int AS verified_count
+      FROM "VideoTag" vt
+      INNER JOIN "Tag" t ON t.id = vt."tagId" AND t.icon IS NOT NULL
+      GROUP BY vt."videoId"
+    ) vc ON vc."videoId" = v.id
+    WHERE v.id IN (${Prisma.join(ids)})
+    ORDER BY v."viewCount" DESC, COALESCE(vc.verified_count, 0) DESC, v."createdAt" DESC
+    LIMIT ${PAGE_SIZE} OFFSET ${skip}
+  `;
+
+  const total = ids.length;
+  const order = ranked.map((r) => r.id);
+  if (order.length === 0) {
+    return { videos: [], total, totalPages: Math.max(1, Math.ceil(total / PAGE_SIZE)) };
+  }
+
+  const rows = await prisma.video.findMany({
+    where: { id: { in: order } },
+    include: { pornstars: { include: { pornstar: true }, take: 3 } },
+  });
+  const byId = new Map(rows.map((r) => [r.id, r]));
+  const sorted = order.map((id) => byId.get(id)).filter(Boolean) as typeof rows;
+  const videos = await Promise.all(sorted.map(toCard));
+  return { videos, total, totalPages: Math.max(1, Math.ceil(total / PAGE_SIZE)) };
+}
+
 /** List videos for a discovery page + total count (for pagination). */
 export async function listVideos(
   siteId: string,
   params: DiscoveryParams,
   extra?: Prisma.VideoWhereInput
 ): Promise<{ videos: VideoCardData[]; total: number; totalPages: number }> {
+  if (params.sort === "featured") {
+    return listVideosFeatured(siteId, params, extra);
+  }
+
   const where = buildWhere(siteId, params, extra);
   const [rows, total] = await Promise.all([
     prisma.video.findMany({

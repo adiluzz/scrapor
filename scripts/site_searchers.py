@@ -466,14 +466,17 @@ def _html_search(source, query, count, min_duration, *, cursor,
                     clean = f"{parsed.scheme}://{parsed.netloc}{parsed.path}"
                 if clean in seen:
                     continue
-                seen.add(clean)
-                new_urls += 1
                 dur = _find_duration(a)
                 if dur and dur < min_duration:
+                    seen.add(clean)
                     continue
                 title = (a.get("title") or a.get("data-title")
                          or a.get_text(" ", strip=True) or "").strip()
-                out.append(_norm(clean, title or "Unknown", dur or None,
+                if not title or title.lower() == "unknown":
+                    continue
+                seen.add(clean)
+                new_urls += 1
+                out.append(_norm(clean, title, dur or None,
                                  thumbnail=_find_thumb(a)))
                 if len(out) >= count:
                     break
@@ -1110,28 +1113,53 @@ def _xnxx_parse_detail(html, url=""):
     }
 
 
+def _xnxx_length_filter(min_duration):
+    """Map scrape min-duration (seconds) to xnxx_api Length filter, or '' for none."""
+    from xnxx_api.modules.search_filters import Length
+
+    min_min = max(0, int(min_duration or 0) // 60)
+    if min_min >= 20:
+        return Length.X_20min_plus
+    if min_min >= 10:
+        return Length.X_10min_plus
+    if min_min > 0:
+        return Length.X_0_10min
+    return ""
+
+
+def _html_xnxx(query, count, cursor=0, min_duration=600, mode="query"):
+    if _is_category_mode(mode):
+        slug = _category_slug(query)
+        page_url = lambda q, n: (
+            f"https://www.xnxx.com/tags/{slug}/{n - 1}"
+            if n > 1 else f"https://www.xnxx.com/tags/{slug}"
+        )
+    else:
+        page_url = lambda q, n: (
+            f"https://www.xnxx.com/search/{q}/{n - 1}"
+            if n > 1 else f"https://www.xnxx.com/search/{q}/"
+        )
+    return _html_search(
+        "XNXX", query, count, min_duration, cursor=cursor,
+        domain="xnxx.com", base="https://www.xnxx.com",
+        page_url=page_url,
+        link_re=re.compile(r"^/video-[a-z0-9]+/"),
+        per_page=28,
+    )
+
+
 def search_xnxx(query, count, cursor=0, min_duration=600, mode="query"):
     # xnxx_api has no category browse; category mode uses /tags/{slug} listings.
     if _is_category_mode(mode):
-        slug = _category_slug(query)
-        return _html_search(
-            "XNXX", query, count, min_duration, cursor=cursor,
-            domain="xnxx.com", base="https://www.xnxx.com",
-            page_url=lambda q, n: (
-                f"https://www.xnxx.com/tags/{slug}/{n - 1}"
-                if n > 1 else f"https://www.xnxx.com/tags/{slug}"
-            ),
-            link_re=re.compile(r"^/video-[a-z0-9]+/"),
-            per_page=28,
-        )
+        return _html_xnxx(query, count, cursor, min_duration, mode=mode)
 
     offset = _offset_cursor(cursor)
 
     async def run(need):
         import xnxx_api
-        from xnxx_api.modules.search_filters import Length
         client = xnxx_api.Client()
-        res = await client.search(query, length=Length.X_10min_plus)
+        length = _xnxx_length_filter(min_duration)
+        res = await client.search(query, length=length)
         try:
             total_p = int(_sget(res, "total_pages", 1) or 1)
         except Exception:
@@ -1179,7 +1207,12 @@ def search_xnxx(query, count, cursor=0, min_duration=600, mode="query"):
 
         return await _fetch_until(collect_fn, need, 28)
 
-    return asyncio.run(_run_paginated("XNXX", run, offset, count))
+    batch, next_cursor, exhausted = asyncio.run(
+        _run_paginated("XNXX", run, offset, count)
+    )
+    if batch:
+        return batch, next_cursor, exhausted
+    return _html_xnxx(query, count, cursor, min_duration, mode=mode)
 
 
 # ── PornHub (phub) ────────────────────────────────────────────────────

@@ -69,7 +69,7 @@ export default async function AppleIcon() {
           alignItems: "center",
           justifyContent: "center",
           background: logoKey === "fbb-mark" ? "#000000" : "linear-gradient(145deg, #18181b 0%, #09090b 100%)",
-          borderRadius: logoKey === "fbb-mark" ? "50%" : 36,
+          borderRadius: logoKey === "fbb-mark" ? 0 : 36,
         }}
       >
         {inner}

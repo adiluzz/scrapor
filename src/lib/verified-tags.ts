@@ -54,6 +54,38 @@ export function verifiedTagDefinitionsForSite(domain: string): VerifiedTagDefini
   return VERIFIED_TAG_DEFINITIONS.filter((d) => !d.siteDomain || d.siteDomain === domain);
 }
 
+/** Union of verified tags applicable to any of the given site domains. */
+export function verifiedTagDefinitionsForDomains(domains: string[]): VerifiedTagDefinition[] {
+  const seen = new Set<string>();
+  const out: VerifiedTagDefinition[] = [];
+  for (const domain of domains) {
+    if (!domain) continue;
+    for (const def of verifiedTagDefinitionsForSite(domain)) {
+      if (seen.has(def.slug)) continue;
+      seen.add(def.slug);
+      out.push(def);
+    }
+  }
+  return out.length > 0 ? out : VERIFIED_TAG_DEFINITIONS;
+}
+
+export function tagListIncludesVerifiedName(tags: string[], name: string): boolean {
+  const want = name.trim().toLowerCase();
+  return tags.some((t) => t.trim().toLowerCase() === want);
+}
+
+/** Add or remove a verified tag name from a comma-separated tag field. */
+export function toggleVerifiedTagInList(tagsText: string, def: VerifiedTagDefinition): string {
+  const parts = tagsText
+    .split(/[\n,]/)
+    .map((s) => s.trim())
+    .filter(Boolean);
+  const has = tagListIncludesVerifiedName(parts, def.name);
+  const filtered = parts.filter((t) => t.trim().toLowerCase() !== def.name.toLowerCase());
+  if (!has) filtered.unshift(def.name);
+  return filtered.join(", ");
+}
+
 export function isPissSwallowVerificationLabel(label: string): boolean {
   return SWALLOW_LABEL_RE.test(label.trim());
 }

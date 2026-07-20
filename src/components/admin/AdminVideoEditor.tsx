@@ -5,8 +5,10 @@ import { useCallback, useEffect, useState } from "react";
 import TagBadge from "@/components/site/TagBadge";
 import PornstarPicker from "@/components/admin/PornstarPicker";
 import {
-  PISS_SWALLOW_VERIFIED_NAME,
-  PISS_SWALLOW_VERIFIED_SLUG,
+  tagListIncludesVerifiedName,
+  toggleVerifiedTagInList,
+  VERIFIED_TAG_DEFINITIONS,
+  type VerifiedTagDefinition,
 } from "@/lib/verified-tags";
 
 type VideoForm = {
@@ -25,6 +27,7 @@ type VideoForm = {
   pornstars: string[];
   categories: string[];
   tagDetails: { name: string; slug: string; icon: string | null }[];
+  sites: { id: string; name: string; domain: string; primaryColor: string }[];
   previewVersion: number | null;
   hasPreview: boolean;
   hasVideoSource: boolean;
@@ -54,6 +57,8 @@ export default function AdminVideoEditor({ videoId }: { videoId: string }) {
   const [taxonomyTags, setTaxonomyTags] = useState<string[]>([]);
   const [taxonomyStars, setTaxonomyStars] = useState<string[]>([]);
   const [taxonomyCategories, setTaxonomyCategories] = useState<string[]>([]);
+  const [verifiedTagDefs, setVerifiedTagDefs] = useState<VerifiedTagDefinition[]>([]);
+  const [sitePrimaryColor, setSitePrimaryColor] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -83,6 +88,7 @@ export default function AdminVideoEditor({ videoId }: { videoId: string }) {
         pornstars: v.pornstars ?? [],
         categories: v.categories ?? [],
         tagDetails: v.tagDetails ?? [],
+        sites: v.sites ?? [],
         previewVersion: v.previewVersion ?? null,
         hasPreview: Boolean(v.hasPreview),
         hasVideoSource: Boolean(v.hasVideoSource),
@@ -93,6 +99,9 @@ export default function AdminVideoEditor({ videoId }: { videoId: string }) {
       setTaxonomyTags((taxData.tags ?? []).map((t: { name: string }) => t.name));
       setTaxonomyStars((taxData.pornstars ?? []).map((p: { name: string }) => p.name));
       setTaxonomyCategories((taxData.categories ?? []).map((c: { name: string }) => c.name));
+      setVerifiedTagDefs(VERIFIED_TAG_DEFINITIONS);
+      const fbbSite = (v.sites ?? []).find((s: { domain: string }) => s.domain === "fbbtube.com");
+      setSitePrimaryColor(fbbSite?.primaryColor ?? (v.sites ?? [])[0]?.primaryColor ?? null);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Load failed");
     } finally {
@@ -104,21 +113,11 @@ export default function AdminVideoEditor({ videoId }: { videoId: string }) {
     load();
   }, [load]);
 
-  function toggleVerifiedTag() {
-    const has = tagsText
-      .split(",")
-      .map((s) => s.trim().toLowerCase())
-      .includes(PISS_SWALLOW_VERIFIED_NAME);
-    const parts = parseList(tagsText).filter(
-      (t) => t.toLowerCase() !== PISS_SWALLOW_VERIFIED_NAME
-    );
-    if (!has) parts.unshift(PISS_SWALLOW_VERIFIED_NAME);
-    setTagsText(parts.join(", "));
+  function toggleVerifiedTag(def: VerifiedTagDefinition) {
+    setTagsText((prev) => toggleVerifiedTagInList(prev, def));
   }
 
-  const hasVerifiedTag = parseList(tagsText).some(
-    (t) => t.toLowerCase() === PISS_SWALLOW_VERIFIED_NAME
-  );
+  const tagNames = parseList(tagsText);
 
   async function regeneratePreview() {
     if (!form) return;
@@ -361,26 +360,48 @@ export default function AdminVideoEditor({ videoId }: { videoId: string }) {
             ))}
           </datalist>
 
-          <div className="mt-3 flex flex-wrap items-center gap-3">
-            <button
-              type="button"
-              onClick={toggleVerifiedTag}
-              className={`rounded-lg border px-3 py-1.5 text-xs ${
-                hasVerifiedTag
-                  ? "border-brand-500/50 bg-brand-500/10 text-brand-200"
-                  : "border-zinc-700 text-zinc-400 hover:border-zinc-500"
-              }`}
-            >
-              {hasVerifiedTag ? "Remove" : "Add"} verified piss swallow
-            </button>
-            <TagBadge
-              name={PISS_SWALLOW_VERIFIED_NAME}
-              slug={PISS_SWALLOW_VERIFIED_SLUG}
-              icon="golden-drop"
-            />
+          <div className="mt-3 space-y-3">
+            <p className="text-xs font-medium uppercase tracking-wide text-zinc-500">
+              Verified badge tags
+            </p>
+            <div className="flex flex-wrap gap-3">
+              {verifiedTagDefs.map((def) => {
+                const active = tagListIncludesVerifiedName(tagNames, def.name);
+                return (
+                  <div
+                    key={def.slug}
+                    className="flex flex-wrap items-center gap-2 rounded-lg border border-zinc-800 bg-zinc-950/50 px-3 py-2"
+                  >
+                    <TagBadge
+                      name={def.name}
+                      slug={def.slug}
+                      icon={def.icon}
+                      primaryColor={sitePrimaryColor}
+                    />
+                    <button
+                      type="button"
+                      onClick={() => toggleVerifiedTag(def)}
+                      className={`rounded-lg border px-3 py-1.5 text-xs ${
+                        active
+                          ? "border-brand-500/50 bg-brand-500/10 text-brand-200"
+                          : "border-zinc-700 text-zinc-400 hover:border-zinc-500"
+                      }`}
+                    >
+                      {active ? "Remove" : "Add"}
+                    </button>
+                    {def.siteDomain ? (
+                      <span className="text-[10px] uppercase tracking-wide text-zinc-600">
+                        {def.siteDomain}
+                      </span>
+                    ) : null}
+                  </div>
+                );
+              })}
+            </div>
           </div>
-          <p className="mt-1 text-xs text-zinc-600">
-            Verified badge means the video contains piss swallow (AI-reviewed or admin-confirmed).
+          <p className="mt-2 text-xs text-zinc-600">
+            Verified badges mark admin- or AI-confirmed content themes. Site-specific tags (e.g.
+            FBB) only apply on their network site after save.
           </p>
         </div>
 

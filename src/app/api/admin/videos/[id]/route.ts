@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { prisma } from "@/lib/db";
 import { guardAdmin } from "@/lib/admin-guard";
+import { invalidateCdnVideoCache } from "@/lib/cdn-cache";
 import { linkTags, linkPornstars, linkCategories, resolveAdminVideoSlug } from "@/lib/videos";
 import { logger } from "@/lib/logger";
 
@@ -126,6 +127,10 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     },
   });
 
+  if (d.isDeleted !== undefined || d.status !== undefined) {
+    await invalidateCdnVideoCache(id);
+  }
+
   if (d.tags) {
     await prisma.videoTag.deleteMany({ where: { videoId: id } });
     await linkTags(video.siteId, id, d.tags);
@@ -153,6 +158,7 @@ export async function DELETE(_request: Request, { params }: { params: Promise<{ 
   if (!video) return NextResponse.json({ error: "Not found" }, { status: 404 });
 
   await prisma.video.update({ where: { id }, data: { isDeleted: true, deletedAt: new Date() } });
+  await invalidateCdnVideoCache(id);
   logger.info({ videoId: id }, "admin soft-deleted video");
   return NextResponse.json({ ok: true });
 }

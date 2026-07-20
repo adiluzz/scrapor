@@ -9,7 +9,7 @@ function base64url(buf: Buffer): string {
 }
 
 /**
- * Compute the nginx `secure_link_md5` signature.
+ * Compute the nginx `secure_link_md5` signature for IP-bound full streams.
  *
  * nginx config must use exactly:
  *   secure_link       $arg_s,$arg_e;
@@ -19,6 +19,18 @@ function base64url(buf: Buffer): string {
  */
 export function secureLinkSig(uri: string, expires: number, clientIp: string): string {
   const data = `${expires}${uri}${clientIp} ${SECRET}`;
+  return base64url(crypto.createHash("md5").update(data).digest());
+}
+
+/**
+ * Asset signatures omit client IP so hover previews / thumbs work across
+ * network changes and can be served from the shared nginx edge cache.
+ *
+ * nginx asset location must use:
+ *   secure_link_md5   "$secure_link_expires$uri ${CDN_SIGNING_SECRET}";
+ */
+export function secureLinkSigAsset(uri: string, expires: number): string {
+  const data = `${expires}${uri} ${SECRET}`;
   return base64url(crypto.createHash("md5").update(data).digest());
 }
 
@@ -45,6 +57,7 @@ export function verifyStreamToken(token: string):
   const [body, sig] = (token || "").split(".");
   if (!body || !sig) return null;
   const expected = base64url(crypto.createHmac("sha256", SECRET).update(body).digest());
+  if (sig.length !== expected.length) return null;
   if (!crypto.timingSafeEqual(Buffer.from(sig), Buffer.from(expected))) return null;
   try {
     const payload = JSON.parse(Buffer.from(body, "base64").toString());
@@ -83,17 +96,16 @@ export function mintStreamUrl(opts: {
 
 /**
  * Mint a lightweight (non ad-gated) signed URL for thumbnails/previews/storyboards.
- * `kind` maps to the CDN path segment.
+ * Not IP-bound so grid hover and CDN edge cache work reliably.
  */
 export function mintAssetUrl(opts: {
   videoId: string;
   file: "thumbnail.jpg" | "preview.mp4" | "storyboard.jpg" | "storyboard.vtt";
-  clientIp: string;
   ttlSeconds?: number;
 }): string {
   const ttl = opts.ttlSeconds ?? TTL;
   const expires = Math.floor(Date.now() / 1000) + ttl;
   const uri = `/a/${opts.videoId}/${opts.file}`;
-  const s = secureLinkSig(uri, expires, opts.clientIp);
+  const s = secureLinkSigAsset(uri, expires);
   return `${CDN_BASE_URL}${uri}?e=${expires}&s=${s}`;
 }

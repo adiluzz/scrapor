@@ -5,7 +5,7 @@ import { parseStoryboardVtt, type StoryboardCue } from "@/lib/storyboard";
 import { storyboardHoverFrameIndices, storyboardRowCount } from "@/lib/preview";
 import type { VideoCardPreviewData } from "@/components/site/VideoCardPreview";
 
-/** Best-effort client IP from proxy headers (for IP-bound signed URLs). */
+/** Best-effort client IP from proxy headers (for IP-bound stream URLs). */
 export async function getClientIp(): Promise<string> {
   const h = await headers();
   const xff = h.get("x-forwarded-for");
@@ -27,7 +27,7 @@ type VideoMediaFields = {
  */
 export async function thumbUrl(video: VideoMediaFields): Promise<string> {
   if (isS3Configured() && video.s3ThumbKey) {
-    return mintAssetUrl({ videoId: video.id, file: "thumbnail.jpg", clientIp: await getClientIp() });
+    return mintAssetUrl({ videoId: video.id, file: "thumbnail.jpg" });
   }
   return `/api/thumbnail-img/${video.id}`;
 }
@@ -35,19 +35,24 @@ export async function thumbUrl(video: VideoMediaFields): Promise<string> {
 /** Hover-preview clip URL (signed CDN — used by sitemap / external refs). */
 export async function previewUrl(video: VideoMediaFields): Promise<string> {
   if (isS3Configured() && video.s3PreviewKey) {
-    return mintAssetUrl({ videoId: video.id, file: "preview.mp4", clientIp: await getClientIp() });
+    return mintAssetUrl({ videoId: video.id, file: "preview.mp4" });
   }
   return `/api/thumbnail/${video.id}`;
 }
 
 /**
- * Grid card hover preview: same-origin MP4 (legacy + v2) with storyboard sprite fallback.
- * Avoids IP-bound CDN URLs that break in-browser video hover playback.
+ * Grid card hover preview: signed CDN preview MP4 (edge-cached) with storyboard
+ * sprite fallback. Assets are not IP-bound so hover playback stays reliable.
  */
 export async function gridCardPreview(
   video: VideoMediaFields & { durationSec?: number | null }
 ): Promise<VideoCardPreviewData> {
-  const previewMp4 = video.s3PreviewKey ? `/media/preview/${video.id}` : null;
+  const previewMp4 =
+    isS3Configured() && video.s3PreviewKey
+      ? mintAssetUrl({ videoId: video.id, file: "preview.mp4" })
+      : video.s3PreviewKey
+        ? `/media/preview/${video.id}`
+        : null;
   const previewSprite = video.s3StoryboardKey ? `/media/storyboard/${video.id}` : null;
   return {
     previewMp4,
@@ -64,10 +69,9 @@ export async function storyboardUrls(
   video: VideoMediaFields
 ): Promise<{ sprite: string; vtt: string } | null> {
   if (isS3Configured() && video.s3StoryboardKey && video.s3StoryboardVttKey) {
-    const ip = await getClientIp();
     return {
-      sprite: mintAssetUrl({ videoId: video.id, file: "storyboard.jpg", clientIp: ip }),
-      vtt: mintAssetUrl({ videoId: video.id, file: "storyboard.vtt", clientIp: ip }),
+      sprite: mintAssetUrl({ videoId: video.id, file: "storyboard.jpg" }),
+      vtt: mintAssetUrl({ videoId: video.id, file: "storyboard.vtt" }),
     };
   }
   return null;
@@ -87,10 +91,9 @@ export async function loadStoryboardData(
   if (!isS3Configured() || !video.s3StoryboardKey || !video.s3StoryboardVttKey) {
     return null;
   }
-  const ip = await getClientIp();
   const sprite = opts?.directS3
     ? await presignGet(s3Keys.storyboard(video.siteId, video.id), 3600)
-    : mintAssetUrl({ videoId: video.id, file: "storyboard.jpg", clientIp: ip });
+    : mintAssetUrl({ videoId: video.id, file: "storyboard.jpg" });
   try {
     const vttUrl = await presignGet(s3Keys.storyboardVtt(video.siteId, video.id), 120);
     const res = await fetch(vttUrl, { cache: "no-store" });

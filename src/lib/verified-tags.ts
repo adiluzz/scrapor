@@ -5,6 +5,8 @@ export const FBB_MARK_ICON = "fbb-mark";
 
 export const PISS_SWALLOW_VERIFIED_SLUG = "piss-swallow";
 export const PISS_SWALLOW_VERIFIED_NAME = "piss swallow";
+/** Pornstar profile badge when any of their videos has the verified piss swallow tag. */
+export const PISS_SWALLOWER_PORNSTAR_LABEL = "piss swallower";
 
 export const FBB_FUCK_VERIFIED_SLUG = "fbb-fuck";
 export const FBB_FUCK_VERIFIED_NAME = "fbb fuck";

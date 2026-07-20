@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/db";
+import { PISS_SWALLOW_VERIFIED_SLUG } from "@/lib/verified-tags";
 
 export type SiteVideoCount = {
   siteId: string;
@@ -81,4 +82,21 @@ export function pornstarHasVideosOnSite(siteId: string) {
       },
     },
   };
+}
+
+/** True when the pornstar has a READY video on this site with the verified piss swallow tag. */
+export async function pornstarHasVerifiedPissSwallowTag(
+  siteId: string,
+  pornstarSlug: string
+): Promise<boolean> {
+  const count = await prisma.video.count({
+    where: {
+      isDeleted: false,
+      status: "READY",
+      sites: { some: { siteId } },
+      pornstars: { some: { pornstar: { slug: pornstarSlug } } },
+      tags: { some: { tag: { siteId, slug: PISS_SWALLOW_VERIFIED_SLUG } } },
+    },
+  });
+  return count > 0;
 }

@@ -3,14 +3,20 @@ import { notFound } from "next/navigation";
 import { prisma } from "@/lib/db";
 import { getCurrentSite } from "@/lib/site";
 import { listVideos, parseDiscoveryParams } from "@/lib/queries";
-import { pornstarHasVideosOnSite } from "@/lib/pornstar-sites";
+import { pornstarHasVerifiedPissSwallowTag, pornstarHasVideosOnSite } from "@/lib/pornstar-sites";
 import VideoGridWithNativeAd from "@/components/ads/VideoGridWithNativeAd";
 import Filters from "@/components/site/Filters";
 import Pagination from "@/components/site/Pagination";
 import InPageSearch from "@/components/site/InPageSearch";
 import PornstarAvatar from "@/components/site/PornstarAvatar";
 import PornstarProfile from "@/components/site/PornstarProfile";
+import TagBadge from "@/components/site/TagBadge";
 import JsonLd from "@/components/site/JsonLd";
+import {
+  GOLDEN_DROP_ICON,
+  PISS_SWALLOWER_PORNSTAR_LABEL,
+  PISS_SWALLOW_VERIFIED_SLUG,
+} from "@/lib/verified-tags";
 import {
   buildOpenGraph,
   getSiteBaseUrl,
@@ -75,9 +81,12 @@ export default async function PornstarPage({
 
   const dp = parseDiscoveryParams(await searchParams);
   // Match by slug so duplicate per-site pornstar rows still surface all site videos.
-  const { videos, total, totalPages } = await listVideos(site.id, dp, {
-    pornstars: { some: { pornstar: { slug } } },
-  });
+  const [{ videos, total, totalPages }, isPissSwallower] = await Promise.all([
+    listVideos(site.id, dp, {
+      pornstars: { some: { pornstar: { slug } } },
+    }),
+    pornstarHasVerifiedPissSwallowTag(site.id, slug),
+  ]);
   const base = await getSiteBaseUrl();
 
   return (
@@ -102,7 +111,17 @@ export default async function PornstarPage({
       <div className="mb-8 flex flex-col items-center gap-5 sm:flex-row sm:items-start">
         <PornstarAvatar name={star.name} pornstar={star} size="2xl" className="ring-2 ring-zinc-800" />
         <div className="min-w-0 text-center sm:text-left">
-          <h1 className="text-2xl font-bold text-zinc-100">{star.name}</h1>
+          <div className="flex flex-wrap items-center justify-center gap-2 sm:justify-start">
+            <h1 className="text-2xl font-bold text-zinc-100">{star.name}</h1>
+            {isPissSwallower ? (
+              <TagBadge
+                name={PISS_SWALLOWER_PORNSTAR_LABEL}
+                slug={PISS_SWALLOW_VERIFIED_SLUG}
+                icon={GOLDEN_DROP_ICON}
+                href={`/tags/${PISS_SWALLOW_VERIFIED_SLUG}`}
+              />
+            ) : null}
+          </div>
           <p className="text-sm text-zinc-500">{total} videos</p>
           {star.bio && <p className="mt-1 max-w-2xl text-sm text-zinc-400">{star.bio}</p>}
           <PornstarProfile star={star} />

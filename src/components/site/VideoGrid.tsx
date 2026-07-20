@@ -27,12 +27,6 @@ function timeAgo(date: Date | string) {
   return `${Math.floor(days / 365)}y ago`;
 }
 
-function views(n: number) {
-  if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`;
-  if (n >= 1000) return `${(n / 1000).toFixed(1)}K`;
-  return String(n);
-}
-
 function Card({
   v,
   playing,
@@ -84,9 +78,7 @@ function Card({
             ? v.pornstars.map((p) => p.name).join(", ")
             : "\u00a0"}
         </p>
-        <p className="mt-1 text-[11px] leading-4 text-zinc-500">
-          {views(v.viewCount)} views · {timeAgo(v.createdAt)}
-        </p>
+        <p className="mt-1 text-[11px] leading-4 text-zinc-500">{timeAgo(v.createdAt)}</p>
       </div>
     </Link>
   );

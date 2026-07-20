@@ -56,9 +56,7 @@ export default async function DashboardPage() {
                       <span className="rounded bg-red-500/15 px-2 py-0.5 text-xs font-medium text-red-400">
                         Failed
                       </span>
-                    ) : (
-                      <span className="text-zinc-600">· {v.viewCount} views</span>
-                    )}
+                    ) : null}
                   </li>
                 ))}
               </ul>

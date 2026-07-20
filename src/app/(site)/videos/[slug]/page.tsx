@@ -202,10 +202,9 @@ export default async function VideoPage({
 
             <div className="mt-5">
               <h1 className="text-lg font-bold break-words text-zinc-100 sm:text-xl">{video.title}</h1>
-              <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-zinc-500">
-                <span>{video.viewCount.toLocaleString()} views</span>
-                {video.durationSec ? <span>· {formatDuration(video.durationSec)}</span> : null}
-              </div>
+              {video.durationSec ? (
+                <div className="mt-1 text-sm text-zinc-500">{formatDuration(video.durationSec)}</div>
+              ) : null}
 
               {video.pornstars.length > 0 && (
                 <div className="mt-3 flex flex-wrap gap-2">

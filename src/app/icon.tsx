@@ -39,12 +39,12 @@ export default async function Icon() {
             display: "flex",
             alignItems: "center",
             justifyContent: "center",
-            background: "#09090b",
-            borderRadius: 6,
+            background: "#000000",
+            borderRadius: "50%",
           }}
         >
           {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src={src} width={40} height={40} alt="" style={{ objectFit: "contain" }} />
+          <img src={src} width={46} height={46} alt="" style={{ objectFit: "cover" }} />
         </div>
       ),
       { ...size },

@@ -32,7 +32,7 @@ export default async function AppleIcon() {
     const src = `data:image/png;base64,${buf.toString("base64")}`;
     inner = (
       // eslint-disable-next-line @next/next/no-img-element
-      <img src={src} width={140} height={140} alt="" style={{ objectFit: "contain" }} />
+      <img src={src} width={168} height={168} alt="" style={{ objectFit: "cover" }} />
     );
   } else if (logoKey === "sharlila-mark") {
     inner = (
@@ -68,8 +68,8 @@ export default async function AppleIcon() {
           display: "flex",
           alignItems: "center",
           justifyContent: "center",
-          background: "linear-gradient(145deg, #18181b 0%, #09090b 100%)",
-          borderRadius: 36,
+          background: logoKey === "fbb-mark" ? "#000000" : "linear-gradient(145deg, #18181b 0%, #09090b 100%)",
+          borderRadius: logoKey === "fbb-mark" ? "50%" : 36,
         }}
       >
         {inner}

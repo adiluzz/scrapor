@@ -91,12 +91,29 @@ export async function pornstarHasVerifiedPissSwallowTag(
 ): Promise<boolean> {
   const count = await prisma.video.count({
     where: {
-      isDeleted: false,
-      status: "READY",
-      sites: { some: { siteId } },
+      ...verifiedPissSwallowVideoWhere(siteId),
       pornstars: { some: { pornstar: { slug: pornstarSlug } } },
-      tags: { some: { tag: { siteId, slug: PISS_SWALLOW_VERIFIED_SLUG } } },
     },
   });
   return count > 0;
+}
+
+const verifiedPissSwallowVideoWhere = (siteId: string) =>
+  ({
+    isDeleted: false,
+    status: "READY" as const,
+    sites: { some: { siteId } },
+    tags: { some: { tag: { siteId, slug: PISS_SWALLOW_VERIFIED_SLUG } } },
+  }) as const;
+
+/** Pornstar slugs with ≥1 verified piss swallow video on this site. */
+export async function pornstarSlugsWithVerifiedPissSwallowTag(siteId: string): Promise<Set<string>> {
+  const rows = await prisma.pornstar.findMany({
+    where: {
+      videos: { some: { video: verifiedPissSwallowVideoWhere(siteId) } },
+    },
+    select: { slug: true },
+    distinct: ["slug"],
+  });
+  return new Set(rows.map((r) => r.slug));
 }

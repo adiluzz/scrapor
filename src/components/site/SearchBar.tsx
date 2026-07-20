@@ -1,8 +1,9 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { useRouter } from "next/navigation";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import TagIcon from "@/components/site/TagIcon";
+import { headerSearchFromUrl } from "@/lib/search-bar-state";
 
 type Suggestion = {
   type: "pornstar" | "tag" | "search";
@@ -18,11 +19,21 @@ type Suggestion = {
  */
 export default function SearchBar({ initial = "" }: { initial?: string }) {
   const router = useRouter();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
+  const urlQ = searchParams.get("q") ?? "";
+
   const [value, setValue] = useState(initial);
   const [suggestions, setSuggestions] = useState<Suggestion[]>([]);
   const [open, setOpen] = useState(false);
   const [active, setActive] = useState(-1);
   const boxRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    setValue(headerSearchFromUrl(pathname, urlQ));
+    setOpen(false);
+    setActive(-1);
+  }, [pathname, urlQ]);
 
   useEffect(() => {
     const onClick = (e: MouseEvent) => {
@@ -52,18 +63,61 @@ export default function SearchBar({ initial = "" }: { initial?: string }) {
     return () => clearTimeout(t);
   }, [value]);
 
+  function resolveQuery(query: string, target?: Suggestion): string {
+    if (target?.type === "search") return target.label.trim();
+    return query.trim();
+  }
+
   function go(query: string, target?: Suggestion) {
     setOpen(false);
-    if (target?.type === "pornstar") router.push(`/pornstars/${target.value}`);
-    else if (target?.type === "tag") router.push(`/tags/${target.value}`);
-    else router.push(`/search?q=${encodeURIComponent(query.trim())}`);
+    setSuggestions([]);
+    setActive(-1);
+
+    if (target?.type === "pornstar") {
+      setValue("");
+      router.push(`/pornstars/${target.value}`);
+      return;
+    }
+    if (target?.type === "tag") {
+      setValue("");
+      router.push(`/tags/${target.value}`);
+      return;
+    }
+
+    const q = resolveQuery(query, target);
+    if (!q) return;
+    setValue(q);
+    router.push(`/search?q=${encodeURIComponent(q)}`);
+  }
+
+  function clearSearch() {
+    setValue("");
+    setOpen(false);
+    setSuggestions([]);
+    setActive(-1);
+
+    if (pathname === "/search" && urlQ) {
+      router.push("/search");
+      return;
+    }
+    if (pathname === "/" && urlQ) {
+      const params = new URLSearchParams(searchParams.toString());
+      params.delete("q");
+      params.delete("page");
+      const qs = params.toString();
+      router.push(qs ? `/?${qs}` : "/");
+    }
   }
 
   function onKeyDown(e: React.KeyboardEvent) {
     if (!open) return;
-    if (e.key === "ArrowDown") { e.preventDefault(); setActive((a) => Math.min(a + 1, suggestions.length - 1)); }
-    else if (e.key === "ArrowUp") { e.preventDefault(); setActive((a) => Math.max(a - 1, -1)); }
-    else if (e.key === "Enter") {
+    if (e.key === "ArrowDown") {
+      e.preventDefault();
+      setActive((a) => Math.min(a + 1, suggestions.length - 1));
+    } else if (e.key === "ArrowUp") {
+      e.preventDefault();
+      setActive((a) => Math.max(a - 1, -1));
+    } else if (e.key === "Enter") {
       if (active >= 0 && suggestions[active]) go(suggestions[active].label, suggestions[active]);
       else go(value);
     } else if (e.key === "Escape") setOpen(false);
@@ -78,18 +132,35 @@ export default function SearchBar({ initial = "" }: { initial?: string }) {
   return (
     <div ref={boxRef} className="relative w-full min-w-0 max-w-xl">
       <form
-        onSubmit={(e) => { e.preventDefault(); go(value); }}
+        onSubmit={(e) => {
+          e.preventDefault();
+          go(value);
+        }}
         className="flex min-w-0"
       >
-        <input
-          value={value}
-          onChange={(e) => setValue(e.target.value)}
-          onKeyDown={onKeyDown}
-          onFocus={() => suggestions.length && setOpen(true)}
-          placeholder="Search videos, pornstars, tags…"
-          aria-label="Search videos, pornstars, tags"
-          className="min-w-0 flex-1 rounded-l-full border border-zinc-700 bg-zinc-900 px-3 py-2 text-sm text-zinc-100 placeholder-zinc-500 focus:border-brand-500 focus:outline-none sm:px-5 sm:py-2.5"
-        />
+        <div className="relative min-w-0 flex-1">
+          <input
+            value={value}
+            onChange={(e) => setValue(e.target.value)}
+            onKeyDown={onKeyDown}
+            onFocus={() => suggestions.length && setOpen(true)}
+            placeholder="Search videos, pornstars, tags…"
+            aria-label="Search videos, pornstars, tags"
+            className="min-w-0 w-full rounded-l-full border border-zinc-700 bg-zinc-900 py-2 pl-3 pr-9 text-sm text-zinc-100 placeholder-zinc-500 focus:border-brand-500 focus:outline-none sm:py-2.5 sm:pl-5 sm:pr-10"
+          />
+          {value ? (
+            <button
+              type="button"
+              onClick={clearSearch}
+              aria-label="Clear search"
+              className="absolute right-2 top-1/2 -translate-y-1/2 rounded-full p-1 text-zinc-500 hover:bg-zinc-800 hover:text-zinc-200"
+            >
+              <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2} aria-hidden>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
+          ) : null}
+        </div>
         <button
           type="submit"
           aria-label="Search"
@@ -103,10 +174,12 @@ export default function SearchBar({ initial = "" }: { initial?: string }) {
       </form>
 
       {open && suggestions.length > 0 && (
-        <ul className="absolute z-40 mt-1 w-full rounded-xl border border-zinc-700 bg-zinc-900 shadow-2xl overflow-hidden">
+        <ul className="absolute z-40 mt-1 w-full overflow-hidden rounded-xl border border-zinc-700 bg-zinc-900 shadow-2xl">
           {suggestions.map((s, i) => (
             <li key={`${s.type}-${s.value}-${i}`}>
               <button
+                type="button"
+                onMouseDown={(e) => e.preventDefault()}
                 onMouseEnter={() => setActive(i)}
                 onClick={() => go(s.label, s)}
                 className={`flex w-full items-center justify-between gap-3 px-4 py-2 text-left text-sm ${

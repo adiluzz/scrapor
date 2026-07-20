@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { Suspense } from "react";
 import type { Site } from "@prisma/client";
 import SearchBar from "@/components/site/SearchBar";
 import SignOutButton from "@/components/auth/SignOutButton";
@@ -6,13 +7,7 @@ import Logo from "@/components/brand/Logo";
 import TubeMobileNav from "@/components/site/TubeMobileNav";
 import { getCurrentUser } from "@/lib/session";
 
-export default async function Header({
-  site,
-  initialQuery = "",
-}: {
-  site: Site;
-  initialQuery?: string;
-}) {
+export default async function Header({ site }: { site: Site }) {
   const user = await getCurrentUser();
   const isStudio = site.kind === "STUDIO";
 
@@ -34,7 +29,13 @@ export default async function Header({
 
         {!isStudio ? (
           <div className="min-w-0 w-full flex-1 md:px-6">
-            <SearchBar initial={initialQuery} />
+            <Suspense
+              fallback={
+                <div className="h-10 max-w-xl rounded-full border border-zinc-800 bg-zinc-900/80" />
+              }
+            >
+              <SearchBar />
+            </Suspense>
           </div>
         ) : (
           <div className="flex-1" />

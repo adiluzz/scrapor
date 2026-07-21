@@ -43,6 +43,16 @@ export function parseDiscoveryParams(
   };
 }
 
+/** When the URL has no explicit ?sort=, use featured ranking (views → verified tags → newest). */
+export function applyDefaultFeaturedSort(
+  params: DiscoveryParams,
+  sortParam: string | undefined
+): void {
+  if (!sortParam) {
+    params.sort = "featured";
+  }
+}
+
 export function buildWhere(
   siteId: string,
   params: DiscoveryParams,

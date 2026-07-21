@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import { getCurrentSite, getCurrentSiteId } from "@/lib/site";
-import { listVideos, parseDiscoveryParams } from "@/lib/queries";
+import { applyDefaultFeaturedSort, listVideos, parseDiscoveryParams } from "@/lib/queries";
 import { trackSearch } from "@/lib/search";
 import {
   buildOpenGraph,
@@ -57,7 +57,9 @@ export default async function SearchPage({
   searchParams: Promise<SearchParams>;
 }) {
   const sp = await searchParams;
+  const sortParam = Array.isArray(sp.sort) ? sp.sort[0] : sp.sort;
   const params = parseDiscoveryParams(sp);
+  applyDefaultFeaturedSort(params, sortParam);
   const siteId = await getCurrentSiteId();
 
   if (params.q) void trackSearch(siteId, params.q);
@@ -77,7 +79,7 @@ export default async function SearchPage({
           )}
           <span className="ml-2 text-sm font-normal text-zinc-500">{total} videos</span>
         </h1>
-        <Filters />
+        <Filters defaultSort="featured" />
       </div>
       <VideoGrid videos={videos} />
       <Pagination page={params.page} totalPages={totalPages} />

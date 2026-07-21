@@ -1,12 +1,12 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
-import { getSiteIdForAuth } from "@/lib/site";
+import { getCurrentSite, getSiteIdForAuth } from "@/lib/site";
 import { pornstarHasVideosOnSite } from "@/lib/pornstar-sites";
 import { tagHasVideosOnSite } from "@/lib/tag-sites";
 import { topSearches } from "@/lib/search";
 import { redis } from "@/lib/redis";
 import { guardApiRoute } from "@/lib/admin-guard";
-import { isVerifiedBadgeTag } from "@/lib/verified-tags";
+import { isVerifiedBadgeTag, verifiedTagDefinitionsForSite } from "@/lib/verified-tags";
 
 type Suggestion = {
   type: "pornstar" | "tag" | "search";
@@ -43,9 +43,16 @@ export async function GET(request: Request) {
   const q = (searchParams.get("q") || "").trim().toLowerCase();
   if (q.length < 2) return NextResponse.json({ suggestions: [] });
 
-  const siteId = await getSiteIdForAuth(auth);
+  const [siteId, site] = await Promise.all([getSiteIdForAuth(auth), getCurrentSite()]);
+  const verifiedSlugs = verifiedTagDefinitionsForSite(site.domain)
+    .filter(
+      (def) =>
+        def.name.toLowerCase().includes(q) ||
+        def.slug.includes(q.replace(/\s+/g, "-"))
+    )
+    .map((def) => def.slug);
 
-  const [pornstars, tags, top] = await Promise.all([
+  const [pornstars, verifiedTagsRows, regularTagsRows, top] = await Promise.all([
     prisma.pornstar.findMany({
       where: {
         ...pornstarHasVideosOnSite(siteId),
@@ -55,14 +62,26 @@ export async function GET(request: Request) {
       distinct: ["slug"],
       take: 4,
     }),
+    verifiedSlugs.length
+      ? prisma.tag.findMany({
+          where: {
+            slug: { in: verifiedSlugs },
+            ...tagHasVideosOnSite(siteId),
+          },
+          select: { name: true, slug: true, icon: true },
+          distinct: ["slug"],
+        })
+      : Promise.resolve([]),
     prisma.tag.findMany({
       where: {
         ...tagHasVideosOnSite(siteId),
+        ...(verifiedSlugs.length ? { slug: { notIn: verifiedSlugs } } : {}),
         name: { contains: q, mode: "insensitive" },
       },
       select: { name: true, slug: true, icon: true },
       distinct: ["slug"],
-      take: 12,
+      take: 8,
+      orderBy: { name: "asc" },
     }),
     getTopSearches(siteId),
   ]);
@@ -72,21 +91,25 @@ export async function GET(request: Request) {
     .slice(0, 5)
     .map<Suggestion>((s) => ({ type: "search", label: s.sample, value: s.normalized }));
 
-  const tagSuggestions = tags.map<Suggestion>((t) => ({
+  const verifiedTags = verifiedTagsRows.map<Suggestion>((t) => ({
     type: "tag",
     label: t.name,
     value: t.slug,
     icon: t.icon,
-    verified: isVerifiedBadgeTag(t),
+    verified: true,
   }));
+  verifiedTags.sort((a, b) => a.label.localeCompare(b.label));
 
-  tagSuggestions.sort((a, b) => {
-    if (a.verified !== b.verified) return a.verified ? -1 : 1;
-    return a.label.localeCompare(b.label);
-  });
-
-  const verifiedTags = tagSuggestions.filter((t) => t.verified).slice(0, 4);
-  const regularTags = tagSuggestions.filter((t) => !t.verified).slice(0, 4);
+  const regularTags = regularTagsRows
+    .filter((t) => !isVerifiedBadgeTag(t))
+    .slice(0, 4)
+    .map<Suggestion>((t) => ({
+      type: "tag",
+      label: t.name,
+      value: t.slug,
+      icon: t.icon,
+      verified: false,
+    }));
 
   const suggestions: Suggestion[] = [
     ...verifiedTags,

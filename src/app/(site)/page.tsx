@@ -4,7 +4,7 @@ import JsonLd from "@/components/site/JsonLd";
 import PopularLinksStrip from "@/components/site/PopularLinksStrip";
 import SiteSeoIntro from "@/components/site/SiteSeoIntro";
 import { listPopularTags } from "@/lib/popular-links";
-import { listVideos, parseDiscoveryParams } from "@/lib/queries";
+import { applyDefaultFeaturedSort, listVideos, parseDiscoveryParams } from "@/lib/queries";
 import { getCurrentSite, getCurrentSiteId } from "@/lib/site";
 import {
   buildOpenGraph,
@@ -141,10 +141,7 @@ export default async function HomePage({
   const params = parseDiscoveryParams(sp);
   const sortParam = Array.isArray(sp.sort) ? sp.sort[0] : sp.sort;
   const isSearch = Boolean(params.q);
-  // Homepage default: featured ranking (views → verified tags → newest).
-  if (!isSearch && !sortParam) {
-    params.sort = "featured";
-  }
+  applyDefaultFeaturedSort(params, sortParam);
   const [siteId, site, base] = await Promise.all([
     getCurrentSiteId(),
     getCurrentSite(),
@@ -184,7 +181,7 @@ export default async function HomePage({
                 site.homeH1 || site.name
               )}
             </h1>
-            <Filters defaultSort={isSearch ? "newest" : "featured"} />
+            <Filters defaultSort="featured" />
           </div>
           {!isSearch && (
             <PopularLinksStrip

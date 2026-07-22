@@ -81,15 +81,10 @@ services:
       PRIMARY_DOMAIN: ${PRIMARY_DOMAIN}
       ADMIN_SUBDOMAIN: ${ADMIN_SUBDOMAIN:-admin}
       ADMIN_BASE_DOMAIN: ${ADMIN_BASE_DOMAIN:-sharlila.com}
-      CDN_SIGNING_SECRET: ${CDN_SIGNING_SECRET}
-      # Space-separated Host names for the app server block (no CDN).
       SITE_SERVER_NAMES: ${SITE_SERVER_NAMES:-pisster.com www.pisster.com fbbtube.com www.fbbtube.com sharlila.com www.sharlila.com admin.sharlila.com}
-      # CDN valid_referers — apex + wildcards for every network site.
-      NETWORK_REFERERS: ${NETWORK_REFERERS:-pisster.com *.pisster.com fbbtube.com *.fbbtube.com sharlila.com *.sharlila.com}
     volumes:
       - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
       - ./nginx/templates:/etc/nginx/templates:ro
-      - nginx-cache:/var/cache/nginx
     networks:
       default: {}
       chiro_default:
@@ -124,7 +119,6 @@ volumes:
   redisdata:
   downloads:
   uploads:
-  nginx-cache:
 
 networks:
   # The default network compose creates for this project (web/postgres/redis/…).

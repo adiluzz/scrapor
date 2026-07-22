@@ -1,10 +1,9 @@
 # Rendered by the nginx image's envsubst at container start.
-# Variables: PRIMARY_DOMAIN, ADMIN_SUBDOMAIN, ADMIN_BASE_DOMAIN, SITE_SERVER_NAMES,
-#            CDN_SIGNING_SECRET, NETWORK_REFERERS
+# Variables: PRIMARY_DOMAIN, ADMIN_SUBDOMAIN, ADMIN_BASE_DOMAIN, SITE_SERVER_NAMES
 #
-# SITE_SERVER_NAMES — space-separated public + admin hosts (no CDN).
-# NETWORK_REFERERS — space-separated domains for CDN valid_referers.
-# CDN remains cdn.${PRIMARY_DOMAIN} (shared network CDN).
+# SITE_SERVER_NAMES — space-separated public + admin hosts.
+# Media (video, thumbs, previews) is served by CloudFront at cdn.${PRIMARY_DOMAIN}
+# (Route 53 alias → CloudFront → S3). This nginx only proxies the Next.js app.
 #
 # Do NOT pin `web` in a static upstream block — that caches the container IP at
 # nginx start/reload and returns 502 after `web` is recreated. Resolve via the
@@ -31,94 +30,5 @@ server {
         proxy_request_buffering off;
         proxy_read_timeout 3600s;
         proxy_send_timeout 3600s;
-    }
-}
-
-# ── Shared CDN edge (cdn.${PRIMARY_DOMAIN}) ───────────────────────────
-server {
-    listen 80;
-    server_name cdn.${PRIMARY_DOMAIN};
-
-    # Full video streams — IP-bound secure_link, ad-claim via auth_request.
-    # Not edge-cached (private/ad-gated content).
-    location ~ "^/v/(?<vid>[^/]+)/video\.mp4$" {
-        secure_link      $arg_s,$arg_e;
-        secure_link_md5  "$secure_link_expires$uri$remote_addr ${CDN_SIGNING_SECRET}";
-        if ($secure_link = "")  { return 403; }
-        if ($secure_link = "0") { return 410; }
-
-        valid_referers none blocked server_names ${NETWORK_REFERERS};
-
-        set               $stream_token $arg_t;
-
-        auth_request      /_authorize_stream;
-        auth_request_set  $s3url $upstream_http_x_s3_url;
-        auth_request_set  $s3host $upstream_http_x_s3_host;
-
-        proxy_http_version 1.1;
-        proxy_buffering    on;
-        proxy_buffer_size  128k;
-        proxy_buffers      8 256k;
-        proxy_read_timeout 3600s;
-        proxy_send_timeout 3600s;
-
-        add_header        Cache-Control "private, no-store" always;
-
-        proxy_set_header  Host $s3host;
-        proxy_set_header  Authorization "";
-        proxy_hide_header x-amz-id-2;
-        proxy_hide_header x-amz-request-id;
-        proxy_pass        $s3url;
-    }
-
-    # Thumbnails / previews / storyboards — expiry-only secure_link (no IP),
-    # nginx edge cache 12h. Range responses keyed separately to avoid 206 collisions.
-    location ~ "^/a/(?<vid>[^/]+)/(?<file>thumbnail\.jpg|preview\.mp4|storyboard\.jpg|storyboard\.vtt)$" {
-        secure_link      $arg_s,$arg_e;
-        secure_link_md5  "$secure_link_expires$uri ${CDN_SIGNING_SECRET}";
-        if ($secure_link = "")  { return 403; }
-        if ($secure_link = "0") { return 410; }
-
-        auth_request      /_authorize_asset;
-        auth_request_set  $s3url $upstream_http_x_s3_url;
-        auth_request_set  $s3host $upstream_http_x_s3_host;
-
-        proxy_cache              cdncache;
-        proxy_cache_valid        200 206 12h;
-        proxy_cache_key          "$uri$http_range";
-        proxy_cache_lock         on;
-        proxy_cache_use_stale    error timeout updating http_500 http_502 http_503 http_504;
-        proxy_http_version       1.1;
-        proxy_buffering         on;
-        proxy_buffer_size       128k;
-        proxy_buffers           8 256k;
-        proxy_read_timeout      300s;
-        proxy_send_timeout      300s;
-
-        add_header        X-Cache-Status $upstream_cache_status;
-        add_header        Cache-Control "public, max-age=43200" always;
-        add_header        Access-Control-Allow-Origin "*" always;
-
-        proxy_set_header  Host $s3host;
-        proxy_set_header  Authorization "";
-        proxy_pass        $s3url;
-    }
-
-    location = /_authorize_stream {
-        internal;
-        set $web_upstream http://web:3000;
-        proxy_pass              $web_upstream/api/cdn/authorize?videoId=$vid&t=$stream_token;
-        proxy_pass_request_body off;
-        proxy_set_header        Content-Length "";
-        proxy_set_header        X-Original-Host $http_host;
-        proxy_set_header        X-Real-IP $remote_addr;
-    }
-    location = /_authorize_asset {
-        internal;
-        set $web_upstream http://web:3000;
-        proxy_pass              $web_upstream/api/cdn/authorize?videoId=$vid&file=$file;
-        proxy_pass_request_body off;
-        proxy_set_header        Content-Length "";
-        proxy_set_header        X-Original-Host $http_host;
     }
 }

@@ -272,6 +272,8 @@ export default forwardRef(function VideoPlayer(
     muted = false,
     autoStart = false,
     invideoZoneId,
+    invideoExoFallbackZoneId,
+    invideoExoInsClass,
   }: {
     videoId: string;
     poster: string;
@@ -289,6 +291,9 @@ export default forwardRef(function VideoPlayer(
     autoStart?: boolean;
     /** Juicy in-video overlay zone — shows ~10s into playback, once per video. */
     invideoZoneId?: string | null;
+    /** Exo banner zone when Juicy invideo has no fill. */
+    invideoExoFallbackZoneId?: string | null;
+    invideoExoInsClass?: string | null;
   },
   ref
 ) {
@@ -994,14 +999,14 @@ export default forwardRef(function VideoPlayer(
 
   // In-video overlay: appears once per video, ~10s after content playback starts.
   useEffect(() => {
-    if (adminPreview || !invideoZoneId) return;
+    if (adminPreview || (!invideoZoneId && !invideoExoFallbackZoneId)) return;
     if (status !== "playing" || invideoDoneRef.current) return;
     const timer = setTimeout(() => {
       invideoDoneRef.current = true;
       setInvideoVisible(true);
     }, INVIDEO_AD_DELAY_MS);
     return () => clearTimeout(timer);
-  }, [status, adminPreview, invideoZoneId]);
+  }, [status, adminPreview, invideoZoneId, invideoExoFallbackZoneId]);
 
   useEffect(() => {
     if (adminPreview) return;
@@ -1290,12 +1295,17 @@ export default forwardRef(function VideoPlayer(
         </button>
       )}
 
-      {status === "playing" && invideoVisible && invideoZoneId && (
+      {status === "playing" && invideoVisible && (invideoZoneId || invideoExoFallbackZoneId) && (
         <div
           className="absolute inset-x-0 z-30 flex justify-center"
           style={{ bottom: "calc(var(--player-bar-height, 48px) + 8px)" }}
         >
-          <InVideoAd zoneId={invideoZoneId} onDismiss={() => setInvideoVisible(false)} />
+          <InVideoAd
+            zoneId={invideoZoneId}
+            exoFallbackZoneId={invideoExoFallbackZoneId}
+            exoInsClass={invideoExoInsClass}
+            onDismiss={() => setInvideoVisible(false)}
+          />
         </div>
       )}
 

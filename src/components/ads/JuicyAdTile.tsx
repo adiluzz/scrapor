@@ -1,54 +1,67 @@
 "use client";
 
-import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { useEffect, useId, useLayoutEffect, useRef, useState } from "react";
 import InGridAdShell from "@/components/ads/InGridAdShell";
-
-const JADS_SRC = "https://poweredby.jads.co/js/jads.js";
-
-declare global {
-  interface Window {
-    adsbyjuicy?: Array<{ adzone: number | string }>;
-  }
-}
+import { EXO_INS_CLASS, serveExoAds } from "@/lib/exo-click";
+import { watchAdFill } from "@/lib/ad-fill";
+import { pushJuicyZone } from "@/lib/juicy-ads";
 
 /**
- * In-grid Juicy ad matching a video card (16:9 media + fixed meta strip).
- * Cover-scales the fixed creative into the media box.
+ * In-grid Juicy ad with optional Exo native tile fallback on no-fill.
  */
 export default function JuicyAdTile({
   zoneId,
   enabled = true,
   width = 300,
   height = 250,
+  exoFallbackZoneId,
+  exoInsClass = EXO_INS_CLASS,
 }: {
   zoneId?: string | null;
   enabled?: boolean;
-  /** Declared Juicy creative size (must match the zone in Juicy Get Code). */
   width?: number;
   height?: number;
+  exoFallbackZoneId?: string | null;
+  exoInsClass?: string | null;
 }) {
+  const instanceId = useId().replace(/:/g, "");
   const mediaRef = useRef<HTMLDivElement>(null);
+  const juicyRef = useRef<HTMLModElement>(null);
+  const exoRef = useRef<HTMLModElement>(null);
+  const [mode, setMode] = useState<"juicy" | "exo" | "hidden">("juicy");
   const [scale, setScale] = useState(1);
+
+  const hasExoFallback = Boolean(exoFallbackZoneId);
 
   useEffect(() => {
     if (!enabled || !zoneId) return;
+    pushJuicyZone(zoneId);
+    let cancelled = false;
+    void watchAdFill(juicyRef.current, { timeoutMs: 8000, minHeight: 40 }).then((empty) => {
+      if (cancelled) return;
+      if (empty) setMode(hasExoFallback ? "exo" : "hidden");
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [enabled, zoneId, hasExoFallback]);
 
-    let script = document.querySelector<HTMLScriptElement>(`script[src="${JADS_SRC}"]`);
-    if (!script) {
-      script = document.createElement("script");
-      script.async = true;
-      script.setAttribute("data-cfasync", "false");
-      script.src = JADS_SRC;
-      document.body.appendChild(script);
-    }
-
-    window.adsbyjuicy = window.adsbyjuicy || [];
-    window.adsbyjuicy.push({ adzone: Number(zoneId) || zoneId });
-  }, [enabled, zoneId]);
+  useEffect(() => {
+    if (mode !== "exo" || !exoFallbackZoneId) return;
+    serveExoAds();
+    let cancelled = false;
+    void watchAdFill(exoRef.current, { timeoutMs: 8000, minHeight: 40 }).then((empty) => {
+      if (cancelled) return;
+      if (empty) setMode("hidden");
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [mode, exoFallbackZoneId]);
 
   useLayoutEffect(() => {
     const el = mediaRef.current;
-    if (!el || !enabled || !zoneId) return;
+    if (!el || mode === "hidden") return;
 
     const update = () => {
       const { width: w, height: h } = el.getBoundingClientRect();
@@ -61,16 +74,17 @@ export default function JuicyAdTile({
     ro.observe(el);
     const t1 = window.setTimeout(update, 400);
     const t2 = window.setTimeout(update, 1500);
-    const t3 = window.setTimeout(update, 4000);
     return () => {
       ro.disconnect();
       window.clearTimeout(t1);
       window.clearTimeout(t2);
-      window.clearTimeout(t3);
     };
-  }, [enabled, zoneId, width, height]);
+  }, [mode, width, height]);
 
-  if (!enabled || !zoneId) return null;
+  if (!enabled || (!zoneId && !hasExoFallback)) return null;
+  if (mode === "hidden") return null;
+
+  const resolvedClass = exoInsClass || EXO_INS_CLASS;
 
   return (
     <InGridAdShell>
@@ -83,12 +97,24 @@ export default function JuicyAdTile({
             transform: `translate(-50%, -50%) scale(${scale})`,
           }}
         >
-          <ins
-            id={zoneId}
-            data-width={width}
-            data-height={height}
-            style={{ display: "block", width, height }}
-          />
+          {mode === "juicy" && zoneId && (
+            <ins
+              ref={juicyRef}
+              id={`juicy-tile-${zoneId}-${instanceId}`}
+              data-adzone={zoneId}
+              data-width={width}
+              data-height={height}
+              style={{ display: "block", width, height }}
+            />
+          )}
+          {mode === "exo" && exoFallbackZoneId && (
+            <ins
+              ref={exoRef}
+              className={resolvedClass}
+              data-zoneid={exoFallbackZoneId}
+              style={{ display: "block", width, height }}
+            />
+          )}
         </div>
       </div>
     </InGridAdShell>

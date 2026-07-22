@@ -41,6 +41,7 @@ export default async function WebsiteAdsPage({ params }: { params: Promise<{ id:
           exoZoneMobileSticky: site.exoZoneMobileSticky,
           exoZonePopunder: site.exoZonePopunder,
           exoZoneMidList: site.exoZoneMidList,
+          exoZoneInvideo: site.exoZoneInvideo,
           juicyAdsSiteId: site.juicyAdsSiteId,
           juicyAdsZoneBanner: site.juicyAdsZoneBanner,
           juicyAdsZoneNative: site.juicyAdsZoneNative,

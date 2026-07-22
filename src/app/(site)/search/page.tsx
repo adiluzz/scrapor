@@ -8,7 +8,7 @@ import {
   searchPageDescription,
   searchPageTitle,
 } from "@/lib/seo";
-import VideoGrid from "@/components/site/VideoGrid";
+import VideoGridWithNativeAd from "@/components/ads/VideoGridWithNativeAd";
 import Filters from "@/components/site/Filters";
 import Pagination from "@/components/site/Pagination";
 
@@ -61,6 +61,7 @@ export default async function SearchPage({
   const params = parseDiscoveryParams(sp);
   applyDefaultFeaturedSort(params, sortParam);
   const siteId = await getCurrentSiteId();
+  const site = await getCurrentSite();
 
   if (params.q) void trackSearch(siteId, params.q);
 
@@ -81,7 +82,7 @@ export default async function SearchPage({
         </h1>
         <Filters defaultSort="featured" />
       </div>
-      <VideoGrid videos={videos} />
+      <VideoGridWithNativeAd videos={videos} site={site} />
       <Pagination page={params.page} totalPages={totalPages} />
     </>
   );

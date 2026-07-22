@@ -1,19 +1,10 @@
 "use client";
 
-import { useEffect } from "react";
-import { EXO_INS_CLASS, serveExoAds } from "@/lib/exo-click";
+import BannerAdSlot from "@/components/ads/BannerAdSlot";
+import { EXO_INS_CLASS } from "@/lib/exo-click";
 
 /**
- * ExoClick display ad slot (banner / native).
- *
- * ExoClick serves ads into an <ins> element identified by a per-account CSS
- * class plus the zone id. Pass `insClass` from `site.exoInsClass` when available;
- * it defaults to the legacy publisher class.
- *
- * The provider script (a.magsrv.com/ad-provider.js) is loaded once in the site
- * layout. `AdProvider.push({ serve: {} })` renders every not-yet-served <ins>
- * on the page; we call it on mount so it also works after client-side (SPA)
- * navigation. It is safe to call repeatedly.
+ * ExoClick display ad slot with optional JuicyAds fallback.
  */
 export default function AdZone({
   zoneId,
@@ -21,39 +12,32 @@ export default function AdZone({
   minHeight,
   label = true,
   insClass = EXO_INS_CLASS,
+  juicyFallbackZoneId,
+  juicyEnabled = true,
+  preferJuicy = false,
 }: {
   zoneId?: string | null;
   className?: string;
   minHeight?: number;
   label?: boolean;
-  /** ExoClick `<ins>` class; defaults to `eas6a97888e2`. */
   insClass?: string | null;
+  /** Juicy zone tried when Exo has no fill (or primary when preferJuicy). */
+  juicyFallbackZoneId?: string | null;
+  juicyEnabled?: boolean;
+  preferJuicy?: boolean;
 }) {
-  const resolvedClass = insClass || EXO_INS_CLASS;
-
-  useEffect(() => {
-    if (!zoneId) return;
-    serveExoAds();
-  }, [zoneId]);
-
-  // Nothing configured → render nothing (no empty gaps in the layout).
-  if (!zoneId) return null;
+  if (!zoneId && !(juicyEnabled && juicyFallbackZoneId)) return null;
 
   return (
-    <div className={`ad-slot ${className}`}>
-      {label && (
-        <span className="mb-1 text-[10px] uppercase tracking-wide text-zinc-600">Advertisement</span>
-      )}
-      {/*
-        Do not force width:100% on <ins> — Exo injects fixed-size creatives
-        (300x250, 728x90, etc.) into that box and they stick left. Let the
-        creative size itself; .ad-slot CSS centers whatever Exo injects.
-      */}
-      <ins
-        className={resolvedClass}
-        data-zoneid={zoneId}
-        style={{ display: "block", minHeight: minHeight ?? 90 }}
-      />
-    </div>
+    <BannerAdSlot
+      exoZoneId={zoneId}
+      juicyZoneId={juicyFallbackZoneId}
+      juicyEnabled={juicyEnabled}
+      insClass={insClass}
+      preferJuicy={preferJuicy}
+      minHeight={minHeight ?? 90}
+      label={label}
+      className={className}
+    />
   );
 }

@@ -278,6 +278,8 @@ export default function VideoGrid({
               key={`exo-${i}`}
               zoneId={adTileZoneId}
               insClass={adTileInsClass}
+              juicyFallbackZoneId={juicyTileZoneId}
+              juicyEnabled={juicyTileEnabled}
             />
           );
         }
@@ -287,6 +289,8 @@ export default function VideoGrid({
               key={`juicy-${i}`}
               zoneId={juicyTileZoneId}
               enabled={juicyTileEnabled}
+              exoFallbackZoneId={adTileZoneId}
+              exoInsClass={adTileInsClass}
             />
           );
         }

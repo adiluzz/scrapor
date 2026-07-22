@@ -25,7 +25,6 @@ import AdZone from "@/components/ads/AdZone";
 import ExoFullscreenOverlay from "@/components/ads/ExoFullscreenOverlay";
 import ExoPopunder from "@/components/ads/ExoPopunder";
 import FloatingCornerAd from "@/components/ads/FloatingCornerAd";
-import JuicyAdZone from "@/components/ads/JuicyAdZone";
 import StripchatWidget from "@/components/ads/StripchatWidget";
 import TagBadge from "@/components/site/TagBadge";
 
@@ -154,6 +153,8 @@ export default async function VideoPage({
           <FloatingCornerAd
             zoneId={site.juicyAdsZoneVidfloat}
             enabled={site.adsJuicyEnabled}
+            exoFallbackZoneId={site.exoZoneUnderPlayer ?? site.exoZoneHome}
+            exoInsClass={site.exoInsClass}
           />
         </>
       )}
@@ -198,6 +199,12 @@ export default async function VideoPage({
               storyboard={storyboard}
               heatmap={heatmap}
               invideoZoneId={site.adsJuicyEnabled && !adminPreview ? site.juicyAdsZoneInvideo : null}
+              invideoExoFallbackZoneId={
+                !adminPreview
+                  ? site.exoZoneInvideo ?? site.exoZoneUnderPlayer ?? site.exoZoneHome
+                  : null
+              }
+              invideoExoInsClass={site.exoInsClass}
             />
 
             <div className="mt-5">
@@ -268,8 +275,14 @@ export default async function VideoPage({
 
           <aside className="mx-auto w-full max-w-[300px] shrink-0 lg:mx-0 lg:w-[300px]">
             <div className="space-y-5 lg:sticky lg:top-20">
-              <AdZone zoneId={site.exoZoneUnderPlayer} insClass={site.exoInsClass} />
-              {site.adsJuicyEnabled && <JuicyAdZone zoneId={site.juicyAdsZoneBanner} enabled />}
+              <AdZone
+                zoneId={site.exoZoneUnderPlayer}
+                insClass={site.exoInsClass}
+                juicyFallbackZoneId={site.juicyAdsZoneBanner}
+                juicyEnabled={site.adsJuicyEnabled}
+                preferJuicy={site.adsJuicyEnabled}
+                minHeight={250}
+              />
             </div>
           </aside>
         </div>

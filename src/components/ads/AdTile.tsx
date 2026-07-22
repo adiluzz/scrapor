@@ -1,46 +1,68 @@
 "use client";
 
-import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { useEffect, useId, useLayoutEffect, useRef, useState } from "react";
 import InGridAdShell from "@/components/ads/InGridAdShell";
 import { EXO_INS_CLASS, serveExoAds } from "@/lib/exo-click";
+import { watchAdFill } from "@/lib/ad-fill";
+import { pushJuicyZone } from "@/lib/juicy-ads";
 
 /**
- * In-grid Exo ad matching a video card (16:9 media + fixed meta strip).
- * Cover-scales a 300×250 slot into the thumb. Keeps the card shell on
- * no-fill so the grid row does not collapse short.
+ * In-grid Exo ad with optional Juicy tile fallback on no-fill.
  */
 export default function AdTile({
   zoneId,
   insClass = EXO_INS_CLASS,
   width = 300,
   height = 250,
+  juicyFallbackZoneId,
+  juicyEnabled = true,
 }: {
   zoneId?: string | null;
   insClass?: string | null;
   width?: number;
   height?: number;
+  juicyFallbackZoneId?: string | null;
+  juicyEnabled?: boolean;
 }) {
+  const instanceId = useId().replace(/:/g, "");
   const resolvedClass = insClass || EXO_INS_CLASS;
   const mediaRef = useRef<HTMLDivElement>(null);
-  const insRef = useRef<HTMLModElement>(null);
-  const [empty, setEmpty] = useState(false);
+  const exoRef = useRef<HTMLModElement>(null);
+  const juicyRef = useRef<HTMLModElement>(null);
+  const [mode, setMode] = useState<"exo" | "juicy" | "hidden">("exo");
   const [scale, setScale] = useState(1);
+
+  const hasJuicyFallback = Boolean(juicyEnabled && juicyFallbackZoneId);
 
   useEffect(() => {
     if (!zoneId) return;
     serveExoAds();
-    const check = () => {
-      const el = insRef.current;
-      if (!el) return;
-      if (el.childElementCount === 0 || el.offsetHeight === 0) setEmpty(true);
+    let cancelled = false;
+    void watchAdFill(exoRef.current, { timeoutMs: 8000, minHeight: 40 }).then((empty) => {
+      if (cancelled) return;
+      if (empty) setMode(hasJuicyFallback ? "juicy" : "hidden");
+    });
+    return () => {
+      cancelled = true;
     };
-    const timer = setTimeout(check, 8000);
-    return () => clearTimeout(timer);
-  }, [zoneId]);
+  }, [zoneId, hasJuicyFallback]);
+
+  useEffect(() => {
+    if (mode !== "juicy" || !juicyFallbackZoneId) return;
+    pushJuicyZone(juicyFallbackZoneId);
+    let cancelled = false;
+    void watchAdFill(juicyRef.current, { timeoutMs: 8000, minHeight: 40 }).then((empty) => {
+      if (cancelled) return;
+      if (empty) setMode("hidden");
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [mode, juicyFallbackZoneId]);
 
   useLayoutEffect(() => {
     const el = mediaRef.current;
-    if (!el || !zoneId) return;
+    if (!el || mode === "hidden") return;
 
     const update = () => {
       const { width: w, height: h } = el.getBoundingClientRect();
@@ -53,23 +75,19 @@ export default function AdTile({
     ro.observe(el);
     const t1 = window.setTimeout(update, 400);
     const t2 = window.setTimeout(update, 1500);
-    const t3 = window.setTimeout(update, 4000);
     return () => {
       ro.disconnect();
       window.clearTimeout(t1);
       window.clearTimeout(t2);
-      window.clearTimeout(t3);
     };
-  }, [zoneId, width, height]);
+  }, [mode, width, height]);
 
-  if (!zoneId) return null;
+  if (!zoneId && !hasJuicyFallback) return null;
+  if (mode === "hidden") return null;
 
   return (
     <InGridAdShell>
-      <div
-        ref={mediaRef}
-        className={`absolute inset-0 overflow-hidden ${empty ? "opacity-40" : ""}`}
-      >
+      <div ref={mediaRef} className="absolute inset-0 overflow-hidden">
         <div
           className="ad-slot-tile-scale"
           style={{
@@ -78,12 +96,24 @@ export default function AdTile({
             transform: `translate(-50%, -50%) scale(${scale})`,
           }}
         >
-          <ins
-            ref={insRef}
-            className={resolvedClass}
-            data-zoneid={zoneId}
-            style={{ display: "block", width, height }}
-          />
+          {mode === "exo" && zoneId && (
+            <ins
+              ref={exoRef}
+              className={resolvedClass}
+              data-zoneid={zoneId}
+              style={{ display: "block", width, height }}
+            />
+          )}
+          {mode === "juicy" && juicyFallbackZoneId && (
+            <ins
+              ref={juicyRef}
+              id={`juicy-tile-${juicyFallbackZoneId}-${instanceId}`}
+              data-adzone={juicyFallbackZoneId}
+              data-width={width}
+              data-height={height}
+              style={{ display: "block", width, height }}
+            />
+          )}
         </div>
       </div>
     </InGridAdShell>

@@ -1,41 +1,68 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
+import { EXO_INS_CLASS, serveExoAds } from "@/lib/exo-click";
+import { watchAdFill } from "@/lib/ad-fill";
+import { pushJuicyZone } from "@/lib/juicy-ads";
 
-const JADS_SRC = "https://poweredby.jads.co/js/jads.js";
+type Mode = "juicy" | "exo" | "hidden";
 
 /**
- * Dismissible in-video overlay banner (Juicy "invideo" zone, 300x100 by
- * default). Rendered by the player anchored bottom-center over the content;
- * the player controls *when* it appears (~10s into playback, once per video).
+ * Dismissible in-video overlay: Juicy invideo zone first, Exo banner fallback.
  */
 export default function InVideoAd({
   zoneId,
+  exoFallbackZoneId,
+  exoInsClass = EXO_INS_CLASS,
   width = 300,
   height = 100,
   onDismiss,
 }: {
-  zoneId: string;
+  zoneId?: string | null;
+  exoFallbackZoneId?: string | null;
+  exoInsClass?: string | null;
   width?: number;
   height?: number;
   onDismiss: () => void;
 }) {
-  const [pushed, setPushed] = useState(false);
+  const instanceId = useId().replace(/:/g, "");
+  const juicyRef = useRef<HTMLModElement>(null);
+  const exoRef = useRef<HTMLModElement>(null);
+  const [mode, setMode] = useState<Mode>(() => (zoneId ? "juicy" : exoFallbackZoneId ? "exo" : "hidden"));
 
   useEffect(() => {
-    if (pushed) return;
-    let script = document.querySelector<HTMLScriptElement>(`script[src="${JADS_SRC}"]`);
-    if (!script) {
-      script = document.createElement("script");
-      script.async = true;
-      script.setAttribute("data-cfasync", "false");
-      script.src = JADS_SRC;
-      document.body.appendChild(script);
-    }
-    window.adsbyjuicy = window.adsbyjuicy || [];
-    window.adsbyjuicy.push({ adzone: Number(zoneId) || zoneId });
-    setPushed(true);
-  }, [pushed, zoneId]);
+    if (mode !== "juicy" || !zoneId) return;
+    pushJuicyZone(zoneId);
+    let cancelled = false;
+    void watchAdFill(juicyRef.current, { timeoutMs: 5000, minHeight: 30 }).then((empty) => {
+      if (cancelled) return;
+      if (empty) setMode(exoFallbackZoneId ? "exo" : "hidden");
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [mode, zoneId, exoFallbackZoneId]);
+
+  useEffect(() => {
+    if (mode !== "exo" || !exoFallbackZoneId) return;
+    serveExoAds();
+    let cancelled = false;
+    void watchAdFill(exoRef.current, { timeoutMs: 5000, minHeight: 30 }).then((empty) => {
+      if (cancelled) return;
+      if (empty) setMode("hidden");
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [mode, exoFallbackZoneId]);
+
+  useEffect(() => {
+    if (mode === "hidden") onDismiss();
+  }, [mode, onDismiss]);
+
+  if (mode === "hidden") return null;
+
+  const resolvedClass = exoInsClass || EXO_INS_CLASS;
 
   return (
     <div className="relative rounded-md bg-black/60 p-1 backdrop-blur-sm">
@@ -48,13 +75,25 @@ export default function InVideoAd({
         ✕
       </button>
       <div className="ad-slot">
-        <ins
-          id={zoneId}
-          data-width={width}
-          data-height={height}
-          className="ad-slot-fill inline-block max-w-full"
-          style={{ display: "block", width, height, maxWidth: "100%" }}
-        />
+        {mode === "juicy" && zoneId && (
+          <ins
+            ref={juicyRef}
+            id={`juicy-invideo-${zoneId}-${instanceId}`}
+            data-adzone={zoneId}
+            data-width={width}
+            data-height={height}
+            className="ad-slot-fill inline-block max-w-full"
+            style={{ display: "block", width, height, maxWidth: "100%" }}
+          />
+        )}
+        {mode === "exo" && exoFallbackZoneId && (
+          <ins
+            ref={exoRef}
+            className={resolvedClass}
+            data-zoneid={exoFallbackZoneId}
+            style={{ display: "block", width, height, maxWidth: "100%" }}
+          />
+        )}
       </div>
     </div>
   );

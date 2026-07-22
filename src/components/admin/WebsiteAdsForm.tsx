@@ -21,6 +21,7 @@ type AdsFields = {
   exoZoneMobileSticky: string | null;
   exoZonePopunder: string | null;
   exoZoneMidList: string | null;
+  exoZoneInvideo: string | null;
   juicyAdsSiteId: string | null;
   juicyAdsZoneBanner: string | null;
   juicyAdsZoneNative: string | null;
@@ -56,6 +57,7 @@ export default function WebsiteAdsForm({
     exoZoneMobileSticky: initial.exoZoneMobileSticky || "",
     exoZonePopunder: initial.exoZonePopunder || "",
     exoZoneMidList: initial.exoZoneMidList || "",
+    exoZoneInvideo: initial.exoZoneInvideo || "",
     juicyAdsSiteId: initial.juicyAdsSiteId || "",
     juicyAdsZoneBanner: initial.juicyAdsZoneBanner || "",
     juicyAdsZoneNative: initial.juicyAdsZoneNative || "",
@@ -100,6 +102,7 @@ export default function WebsiteAdsForm({
           exoZoneMobileSticky: empty(form.exoZoneMobileSticky),
           exoZonePopunder: empty(form.exoZonePopunder),
           exoZoneMidList: empty(form.exoZoneMidList),
+          exoZoneInvideo: empty(form.exoZoneInvideo),
           juicyAdsSiteId: empty(form.juicyAdsSiteId),
           juicyAdsZoneBanner: empty(form.juicyAdsZoneBanner),
           juicyAdsZoneNative: empty(form.juicyAdsZoneNative),
@@ -215,6 +218,7 @@ export default function WebsiteAdsForm({
             ["exoZoneVideoFullscreen", "Fullpage interstitial"],
             ["exoZoneGridNative", "In-grid native"],
             ["exoZoneMidList", "Mid-list native (optional; falls back to grid)"],
+            ["exoZoneInvideo", "In-video Exo fallback (banner over player when Juicy invideo is empty)"],
             ["exoZoneMobileSticky", "Mobile sticky banner"],
             ["exoZonePopunder", "Popunder (session-capped on first video play)"],
           ] as const
@@ -233,6 +237,17 @@ export default function WebsiteAdsForm({
           />
           Enable popunder (once per session on first video play)
         </label>
+      </fieldset>
+
+      <fieldset className="space-y-4 border-t border-zinc-800 pt-4">
+        <legend className="text-sm font-medium text-zinc-200">Automatic fallbacks</legend>
+        <p className="text-xs leading-relaxed text-zinc-500">
+          Banner slots try Exo first, then Juicy (or the reverse under the player). In-grid tiles
+          cross-fallback between Exo native and Juicy 300×250. In-video overlay tries Juicy invideo,
+          then Exo in-video zone (or under-player / home). Empty slots hide after ~6s so
+          &ldquo;new ad slot&rdquo; placeholders do not stay visible. VAST pre-roll already
+          waterfalls primary → backup → skip to content.
+        </p>
       </fieldset>
 
       <fieldset className="space-y-4 border-t border-zinc-800 pt-4">

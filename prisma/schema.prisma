@@ -78,6 +78,8 @@ model Site {
   exoZoneMobileSticky     String?
   exoZonePopunder         String?
   exoZoneMidList          String?
+  /// Exo banner zone for in-video overlay when Juicy invideo has no fill.
+  exoZoneInvideo          String?
   juicyAdsSiteId          String?
   juicyAdsZoneBanner      String?
   juicyAdsZoneNative      String?

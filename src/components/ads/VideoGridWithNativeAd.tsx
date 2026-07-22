@@ -1,7 +1,6 @@
 "use client";
 
 import AdZone from "@/components/ads/AdZone";
-import JuicyAdZone from "@/components/ads/JuicyAdZone";
 import VideoGrid from "@/components/site/VideoGrid";
 import type { VideoCardData } from "@/lib/queries";
 
@@ -9,14 +8,14 @@ type SiteAds = {
   exoInsClass?: string | null;
   exoZoneGridNative?: string | null;
   exoZoneMidList?: string | null;
+  exoZoneUnderPlayer?: string | null;
   juicyAdsZoneNative?: string | null;
   juicyAdsZoneBanner?: string | null;
   adsJuicyEnabled?: boolean;
 };
 
 /**
- * Mid-feed strip: three side-by-side banners (Exo mid / Exo grid / Juicy banner
- * when available; otherwise the mid zone is reused so the row stays full).
+ * Mid-feed strip: three side-by-side banners, each with Exo → Juicy fallback.
  */
 function MidBannerRow({
   midZone,
@@ -32,7 +31,6 @@ function MidBannerRow({
   insClass?: string | null;
 }) {
   const exoB = secondaryExo && secondaryExo !== midZone ? secondaryExo : midZone;
-  const useJuicy = Boolean(juicyOn && juicyBanner);
 
   return (
     <div className="my-1 w-full">
@@ -40,19 +38,31 @@ function MidBannerRow({
         Advertisement
       </p>
       <div className="grid grid-cols-1 items-start justify-items-center gap-3 sm:grid-cols-3">
-        <AdZone zoneId={midZone} insClass={insClass} minHeight={90} label={false} />
-        <AdZone zoneId={exoB} insClass={insClass} minHeight={90} label={false} />
-        {useJuicy ? (
-          <JuicyAdZone
-            zoneId={juicyBanner}
-            enabled={juicyOn}
-            label={false}
-            width={300}
-            height={250}
-          />
-        ) : (
-          <AdZone zoneId={midZone} insClass={insClass} minHeight={90} label={false} />
-        )}
+        <AdZone
+          zoneId={midZone}
+          insClass={insClass}
+          minHeight={90}
+          label={false}
+          juicyFallbackZoneId={juicyBanner}
+          juicyEnabled={juicyOn}
+        />
+        <AdZone
+          zoneId={exoB}
+          insClass={insClass}
+          minHeight={90}
+          label={false}
+          juicyFallbackZoneId={juicyBanner}
+          juicyEnabled={juicyOn}
+        />
+        <AdZone
+          zoneId={midZone}
+          insClass={insClass}
+          minHeight={90}
+          label={false}
+          juicyFallbackZoneId={juicyBanner}
+          juicyEnabled={juicyOn}
+          preferJuicy={juicyOn && Boolean(juicyBanner)}
+        />
       </div>
     </div>
   );
@@ -60,7 +70,6 @@ function MidBannerRow({
 
 /**
  * Video grid with in-feed 3-banner mid row + card-sized Exo/Juicy tiles.
- * Mid banners and in-grid tiles are placed on complete rows only.
  */
 export default function VideoGridWithNativeAd({
   videos,

@@ -169,7 +169,12 @@ export default async function HomePage({
       <div className="flex flex-col gap-5 lg:flex-row lg:items-start lg:gap-6">
         <aside className="lg:order-2 lg:w-[300px] lg:shrink-0">
           <div className="space-y-5 lg:sticky lg:top-20">
-            <AdZone zoneId={site.exoZoneHome ?? undefined} insClass={site.exoInsClass} />
+            <AdZone
+              zoneId={site.exoZoneHome ?? undefined}
+              insClass={site.exoInsClass}
+              juicyFallbackZoneId={site.juicyAdsZoneBanner}
+              juicyEnabled={site.adsJuicyEnabled}
+            />
           </div>
         </aside>
         <div className="min-w-0 flex-1 lg:order-1">

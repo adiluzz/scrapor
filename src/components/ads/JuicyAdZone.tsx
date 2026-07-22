@@ -1,18 +1,10 @@
 "use client";
 
-import { useEffect } from "react";
-
-const JADS_SRC = "https://poweredby.jads.co/js/jads.js";
-
-declare global {
-  interface Window {
-    adsbyjuicy?: Array<{ adzone: number | string }>;
-  }
-}
+import { useEffect, useId } from "react";
+import { pushJuicyZone } from "@/lib/juicy-ads";
 
 /**
- * JuicyAds v3 zone — loads jads.js once, renders `<ins id={zoneId}>`, and
- * queues `adsbyjuicy.push({ adzone })` (matches Juicy "Get Code" snippet).
+ * JuicyAds v3 zone — loads jads.js once, renders `<ins>`, queues adzone push.
  */
 export default function JuicyAdZone({
   zoneId,
@@ -26,24 +18,14 @@ export default function JuicyAdZone({
   enabled?: boolean;
   className?: string;
   label?: boolean;
-  /** Zone creative size from Juicy Get Code (default 300×250). */
   width?: number;
   height?: number;
 }) {
+  const instanceId = useId().replace(/:/g, "");
+
   useEffect(() => {
     if (!enabled || !zoneId) return;
-
-    let script = document.querySelector<HTMLScriptElement>(`script[src="${JADS_SRC}"]`);
-    if (!script) {
-      script = document.createElement("script");
-      script.async = true;
-      script.setAttribute("data-cfasync", "false");
-      script.src = JADS_SRC;
-      document.body.appendChild(script);
-    }
-
-    window.adsbyjuicy = window.adsbyjuicy || [];
-    window.adsbyjuicy.push({ adzone: Number(zoneId) || zoneId });
+    pushJuicyZone(zoneId);
   }, [enabled, zoneId]);
 
   if (!enabled || !zoneId) return null;
@@ -54,7 +36,8 @@ export default function JuicyAdZone({
         <span className="mb-1 text-[10px] uppercase tracking-wide text-zinc-600">Advertisement</span>
       )}
       <ins
-        id={zoneId}
+        id={`juicy-${zoneId}-${instanceId}`}
+        data-adzone={zoneId}
         data-width={width}
         data-height={height}
         className="ad-slot-fill inline-block max-w-full"

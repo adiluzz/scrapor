@@ -1,19 +1,18 @@
 "use client";
 
-import { useEffect, useId, useRef, useState } from "react";
-import { EXO_INS_CLASS, serveExoAds } from "@/lib/exo-click";
-import { watchAdFill } from "@/lib/ad-fill";
-import { pushJuicyZone } from "@/lib/juicy-ads";
-
-type Phase = "primary" | "fallback" | "hidden";
+import { EXO_INS_CLASS } from "@/lib/exo-click";
+import { buildBannerAdSteps } from "@/lib/ad-waterfall-steps";
+import { renderWaterfallIns } from "@/lib/render-waterfall-ins";
+import { useAdWaterfall } from "@/lib/use-ad-waterfall";
 
 /**
- * Banner slot with Exo ↔ Juicy waterfall. Hides the container when both networks
- * have no fill so empty "new ad slot" placeholders do not linger on the page.
+ * Banner slot with Exo ↔ Juicy waterfall (+ optional tertiary Exo zone).
+ * Hides completely when no network fills — no empty placeholders.
  */
 export default function BannerAdSlot({
   exoZoneId,
   juicyZoneId,
+  exoSecondaryZoneId,
   juicyEnabled = true,
   insClass = EXO_INS_CLASS,
   preferJuicy = false,
@@ -26,9 +25,9 @@ export default function BannerAdSlot({
 }: {
   exoZoneId?: string | null;
   juicyZoneId?: string | null;
+  exoSecondaryZoneId?: string | null;
   juicyEnabled?: boolean;
   insClass?: string | null;
-  /** When true, try Juicy first (sidebar under-player). Default: Exo first. */
   preferJuicy?: boolean;
   minHeight?: number;
   width?: number;
@@ -37,105 +36,34 @@ export default function BannerAdSlot({
   className?: string;
   fillTimeoutMs?: number;
 }) {
-  const instanceId = useId().replace(/:/g, "");
-  const exoRef = useRef<HTMLModElement>(null);
-  const juicyRef = useRef<HTMLModElement>(null);
-  const resolvedClass = insClass || EXO_INS_CLASS;
-
-  const hasExo = Boolean(exoZoneId);
-  const hasJuicy = Boolean(juicyEnabled && juicyZoneId);
-
-  const [phase, setPhase] = useState<Phase>(() => {
-    if (preferJuicy && hasJuicy) return "primary";
-    if (hasExo) return "primary";
-    if (hasJuicy) return "primary";
-    return "hidden";
+  const steps = buildBannerAdSteps({
+    exoZoneId,
+    juicyZoneId,
+    exoSecondaryZoneId,
+    juicyEnabled,
+    preferJuicy,
+    insClass,
+    width,
+    height: Math.max(height, minHeight),
   });
 
-  const primaryIsJuicy = preferJuicy && hasJuicy;
-  const fallbackIsJuicy = !preferJuicy && hasJuicy;
-  const hasCrossFallback =
-    (preferJuicy && hasExo) || (!preferJuicy && hasJuicy && hasExo);
+  const { instanceId, insRef, step, filled, hidden, stepIndex } = useAdWaterfall(steps, {
+    timeoutMs: fillTimeoutMs,
+  });
 
-  useEffect(() => {
-    if (phase !== "primary") return;
-
-    let cancelled = false;
-    const run = async () => {
-      if (primaryIsJuicy && juicyZoneId) {
-        pushJuicyZone(juicyZoneId);
-      } else if (exoZoneId) {
-        serveExoAds();
-      }
-
-      const el = primaryIsJuicy ? juicyRef.current : exoRef.current;
-      const empty = await watchAdFill(el, { timeoutMs: fillTimeoutMs, minHeight });
-      if (cancelled) return;
-      if (empty) {
-        setPhase(hasCrossFallback ? "fallback" : "hidden");
-      }
-    };
-
-    void run();
-    return () => {
-      cancelled = true;
-    };
-  }, [phase, primaryIsJuicy, exoZoneId, juicyZoneId, hasCrossFallback, fillTimeoutMs, minHeight]);
-
-  useEffect(() => {
-    if (phase !== "fallback") return;
-
-    let cancelled = false;
-    const run = async () => {
-      if (fallbackIsJuicy && juicyZoneId) {
-        pushJuicyZone(juicyZoneId);
-      } else if (exoZoneId) {
-        serveExoAds();
-      }
-
-      const el = fallbackIsJuicy ? juicyRef.current : exoRef.current;
-      const empty = await watchAdFill(el, { timeoutMs: fillTimeoutMs, minHeight });
-      if (cancelled) return;
-      if (empty) setPhase("hidden");
-    };
-
-    void run();
-    return () => {
-      cancelled = true;
-    };
-  }, [phase, fallbackIsJuicy, exoZoneId, juicyZoneId, fillTimeoutMs, minHeight]);
-
-  if (!hasExo && !hasJuicy) return null;
-  if (phase === "hidden") return null;
-
-  const showExo = (phase === "primary" && !primaryIsJuicy) || (phase === "fallback" && !fallbackIsJuicy);
-  const showJuicy = (phase === "primary" && primaryIsJuicy) || (phase === "fallback" && fallbackIsJuicy);
-  const juicyInsId = juicyZoneId ? `juicy-${juicyZoneId}-${instanceId}` : undefined;
+  if (steps.length === 0 || hidden) return null;
 
   return (
-    <div className={`ad-slot ${className}`}>
-      {label && (
+    <div
+      className={filled ? `ad-slot ${className}` : `pointer-events-none h-0 overflow-hidden opacity-0 ${className}`}
+      aria-hidden={!filled}
+    >
+      {filled && label && (
         <span className="mb-1 text-[10px] uppercase tracking-wide text-zinc-600">Advertisement</span>
       )}
-      {showExo && exoZoneId && (
-        <ins
-          ref={exoRef}
-          className={resolvedClass}
-          data-zoneid={exoZoneId}
-          style={{ display: "block", minHeight }}
-        />
-      )}
-      {showJuicy && juicyInsId && (
-        <ins
-          ref={juicyRef}
-          id={juicyInsId}
-          data-adzone={juicyZoneId!}
-          data-width={width}
-          data-height={height}
-          className="ad-slot-fill inline-block max-w-full"
-          style={{ display: "block", width, height, maxWidth: "100%", minHeight }}
-        />
-      )}
+      <div key={`${stepIndex}-${step?.kind}-${step?.zoneId}`}>
+        {renderWaterfallIns(step, insRef, instanceId)}
+      </div>
     </div>
   );
 }

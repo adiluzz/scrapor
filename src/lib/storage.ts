@@ -53,6 +53,8 @@ export const s3Keys = {
   preview: (siteId: string, videoId: string) => `sites/${siteId}/videos/${videoId}/preview.mp4`,
   storyboard: (siteId: string, videoId: string) => `sites/${siteId}/videos/${videoId}/storyboard.jpg`,
   storyboardVtt: (siteId: string, videoId: string) => `sites/${siteId}/videos/${videoId}/storyboard.vtt`,
+  hlsMaster: (siteId: string, videoId: string) => `sites/${siteId}/videos/${videoId}/hls/master.m3u8`,
+  hlsPrefix: (siteId: string, videoId: string) => `sites/${siteId}/videos/${videoId}/hls/`,
   pornstarImage: (siteId: string, pornstarId: string) => `sites/${siteId}/pornstars/${pornstarId}/image.jpg`,
   creatorAvatar: (siteId: string, creatorId: string) => `sites/${siteId}/creators/${creatorId}/avatar.jpg`,
 };

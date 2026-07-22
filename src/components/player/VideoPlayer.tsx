@@ -273,6 +273,8 @@ export default forwardRef(function VideoPlayer(
     autoStart = false,
     invideoZoneId,
     invideoExoFallbackZoneId,
+    invideoJuicyBannerZoneId,
+    invideoExoBannerZoneId,
     invideoExoInsClass,
   }: {
     videoId: string;
@@ -293,6 +295,10 @@ export default forwardRef(function VideoPlayer(
     invideoZoneId?: string | null;
     /** Exo banner zone when Juicy invideo has no fill. */
     invideoExoFallbackZoneId?: string | null;
+    /** Juicy 300×250 when invideo zones fail. */
+    invideoJuicyBannerZoneId?: string | null;
+    /** Last-resort Exo banner before hiding in-video ad. */
+    invideoExoBannerZoneId?: string | null;
     invideoExoInsClass?: string | null;
   },
   ref
@@ -999,14 +1005,26 @@ export default forwardRef(function VideoPlayer(
 
   // In-video overlay: appears once per video, ~10s after content playback starts.
   useEffect(() => {
-    if (adminPreview || (!invideoZoneId && !invideoExoFallbackZoneId)) return;
+    const hasInvideoAd =
+      invideoZoneId ||
+      invideoExoFallbackZoneId ||
+      invideoJuicyBannerZoneId ||
+      invideoExoBannerZoneId;
+    if (adminPreview || !hasInvideoAd) return;
     if (status !== "playing" || invideoDoneRef.current) return;
     const timer = setTimeout(() => {
       invideoDoneRef.current = true;
       setInvideoVisible(true);
     }, INVIDEO_AD_DELAY_MS);
     return () => clearTimeout(timer);
-  }, [status, adminPreview, invideoZoneId, invideoExoFallbackZoneId]);
+  }, [
+    status,
+    adminPreview,
+    invideoZoneId,
+    invideoExoFallbackZoneId,
+    invideoJuicyBannerZoneId,
+    invideoExoBannerZoneId,
+  ]);
 
   useEffect(() => {
     if (adminPreview) return;
@@ -1056,9 +1074,9 @@ export default forwardRef(function VideoPlayer(
         body: JSON.stringify({ adSessionId, outcome }),
       });
       if (!res.ok) throw new Error("grant failed");
-      const { url } = await res.json();
+      const { url, mimeType } = await res.json();
       const player = playerRef.current!;
-      player.src({ src: url, type: "video/mp4" });
+      player.src({ src: url, type: mimeType || "video/mp4" });
       attachContentTracking();
       await player.play()?.catch(() => {});
       setStatus("playing");
@@ -1117,9 +1135,9 @@ export default forwardRef(function VideoPlayer(
       if (adminPreview) {
         const res = await fetch(`/api/admin/videos/${videoId}/playback`, { method: "POST" });
         if (!res.ok) throw new Error("admin playback failed");
-        const { url } = await res.json();
+        const { url, mimeType } = await res.json();
         const player = playerRef.current!;
-        player.src({ src: url, type: "video/mp4" });
+        player.src({ src: url, type: mimeType || "video/mp4" });
         if (muted) player.muted(true);
         attachContentTracking();
         await player.play()?.catch(() => {});
@@ -1295,7 +1313,12 @@ export default forwardRef(function VideoPlayer(
         </button>
       )}
 
-      {status === "playing" && invideoVisible && (invideoZoneId || invideoExoFallbackZoneId) && (
+      {status === "playing" &&
+        invideoVisible &&
+        (invideoZoneId ||
+          invideoExoFallbackZoneId ||
+          invideoJuicyBannerZoneId ||
+          invideoExoBannerZoneId) && (
         <div
           className="absolute inset-x-0 z-30 flex justify-center"
           style={{ bottom: "calc(var(--player-bar-height, 48px) + 8px)" }}
@@ -1303,6 +1326,8 @@ export default forwardRef(function VideoPlayer(
           <InVideoAd
             zoneId={invideoZoneId}
             exoFallbackZoneId={invideoExoFallbackZoneId}
+            juicyBannerZoneId={invideoJuicyBannerZoneId}
+            exoBannerZoneId={invideoExoBannerZoneId}
             exoInsClass={invideoExoInsClass}
             onDismiss={() => setInvideoVisible(false)}
           />

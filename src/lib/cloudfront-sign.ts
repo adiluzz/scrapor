@@ -73,4 +73,45 @@ export function signCloudFrontCustom(opts: {
   });
 }
 
+/**
+ * Custom-policy signed URL for HLS: wildcard resource covers master.m3u8 + segments.
+ * VHS/hls.js propagate Policy/Signature/Key-Pair-Id query params to segment requests.
+ */
+export function signCloudFrontCustomWildcard(opts: {
+  /** Directory prefix, e.g. /sites/{siteId}/videos/{id}/hls/ */
+  objectPathPrefix: string;
+  /** Playlist object within prefix, default master.m3u8 */
+  playlistName?: string;
+  expiresEpochSec: number;
+  clientIp?: string;
+}): string {
+  const prefix = opts.objectPathPrefix.endsWith("/")
+    ? opts.objectPathPrefix
+    : `${opts.objectPathPrefix}/`;
+  const playlist = opts.playlistName || "master.m3u8";
+  const url = resourceUrl(`${prefix}${playlist}`);
+  const wildcardResource = `${CDN_BASE_URL}${prefix}*`;
+  const condition: Record<string, unknown> = {
+    DateLessThan: { "AWS:EpochTime": opts.expiresEpochSec },
+  };
+  const ip = (opts.clientIp || "").trim();
+  if (ip && ip !== "0.0.0.0") {
+    condition.IpAddress = { "AWS:SourceIp": `${ip}/32` };
+  }
+  const policy = JSON.stringify({
+    Statement: [
+      {
+        Resource: wildcardResource,
+        Condition: condition,
+      },
+    ],
+  });
+  return getSignedUrl({
+    url,
+    keyPairId: KEY_PAIR_ID,
+    privateKey: PRIVATE_KEY,
+    policy,
+  });
+}
+
 export { resourceUrl as cloudFrontResourceUrl, toUrlSafeBase64 };

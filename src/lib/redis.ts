@@ -38,6 +38,15 @@ export const SCRAPE_SEARCH_QUEUE_KEY = "scrape:search:queue";
 /** Redis queue for re-downloading a video from its source URL (Video ids). */
 export const REDOWNLOAD_QUEUE_KEY = "redownload:queue";
 
+/**
+ * Redis queue for normalizing existing S3 MP4s and packaging HLS (Video ids).
+ * Seeded on worker startup for catalog rows missing s3HlsMasterKey.
+ */
+export const HLS_BACKFILL_QUEUE_KEY = "hls:backfill:queue";
+
+/** Dedup set: video ids already enqueued for HLS backfill. */
+export const HLS_BACKFILL_SCHEDULED_KEY = "hls:backfill:scheduled";
+
 /** Pornstar ids awaiting ThePornDB profile/image enrichment. */
 export const PORNSTAR_TPDB_QUEUE_KEY = "pornstar:tpdb:queue";
 

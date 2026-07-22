@@ -3,6 +3,7 @@ import {
   isCloudFrontConfigured,
   signCloudFrontCanned,
   signCloudFrontCustom,
+  signCloudFrontCustomWildcard,
 } from "@/lib/cloudfront-sign";
 import { s3Keys } from "@/lib/storage";
 
@@ -85,7 +86,13 @@ function nginxAssetUrl(opts: { videoId: string; file: string; expires: number })
 
 /**
  * Mint signed playback URL after ad grant (CloudFront custom policy when configured).
+ * Prefers HLS when s3HlsMasterKey is set (segment-based seeking).
  */
+export type StreamGrant = {
+  url: string;
+  mimeType: "video/mp4" | "application/x-mpegURL";
+};
+
 export function mintStreamUrl(opts: {
   videoId: string;
   siteId: string;
@@ -93,20 +100,38 @@ export function mintStreamUrl(opts: {
   adSessionId: string;
   ttlSeconds?: number;
   adminPreview?: boolean;
-}): string {
+  s3HlsMasterKey?: string | null;
+}): StreamGrant {
   const ttl = opts.ttlSeconds ?? TTL;
   const expires = Math.floor(Date.now() / 1000) + ttl;
 
   if (isCloudFrontConfigured()) {
+    if (opts.s3HlsMasterKey) {
+      const prefix = opts.s3HlsMasterKey.replace(/master\.m3u8$/, "");
+      return {
+        url: signCloudFrontCustomWildcard({
+          objectPathPrefix: `/${prefix}`,
+          expiresEpochSec: expires,
+          clientIp: opts.clientIp,
+        }),
+        mimeType: "application/x-mpegURL",
+      };
+    }
     const objectPath = `/${s3Keys.video(opts.siteId, opts.videoId)}`;
-    return signCloudFrontCustom({
-      objectPath,
-      expiresEpochSec: expires,
-      clientIp: opts.clientIp,
-    });
+    return {
+      url: signCloudFrontCustom({
+        objectPath,
+        expiresEpochSec: expires,
+        clientIp: opts.clientIp,
+      }),
+      mimeType: "video/mp4",
+    };
   }
 
-  return nginxStreamUrl({ ...opts, expires });
+  return {
+    url: nginxStreamUrl({ ...opts, expires }),
+    mimeType: "video/mp4",
+  };
 }
 
 export type CdnAssetFile = "thumbnail.jpg" | "preview.mp4" | "storyboard.jpg" | "storyboard.vtt";

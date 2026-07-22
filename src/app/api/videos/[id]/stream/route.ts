@@ -30,15 +30,16 @@ export async function GET(
     "0.0.0.0";
 
   if (!isS3Configured()) {
-    return NextResponse.json({ url: `/api/video/${video.id}` });
+    return NextResponse.json({ url: `/api/video/${video.id}`, mimeType: "video/mp4" });
   }
 
-  const url = mintStreamUrl({
+  const grant = mintStreamUrl({
     videoId: video.id,
     siteId: video.siteId,
     clientIp: ip,
     adSessionId: "api-key",
+    s3HlsMasterKey: video.s3HlsMasterKey,
   });
 
-  return NextResponse.json({ url, videoId: video.id, title: video.title });
+  return NextResponse.json({ ...grant, videoId: video.id, title: video.title });
 }

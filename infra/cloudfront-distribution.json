@@ -51,7 +51,7 @@
     "ForwardedValues": {
       "QueryString": true,
       "Cookies": { "Forward": "none" },
-      "Headers": { "Quantity": 0 },
+      "Headers": { "Quantity": 1, "Items": ["Origin"] },
       "QueryStringCacheKeys": { "Quantity": 0 }
     },
     "MinTTL": 0,

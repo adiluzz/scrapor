@@ -23,16 +23,17 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     request.headers.get("x-real-ip") ||
     "0.0.0.0";
 
-  const url = mintStreamUrl({
+  const grant = mintStreamUrl({
     videoId: video.id,
     siteId: video.siteId,
     clientIp: ip,
     adSessionId: "admin-preview",
     adminPreview: true,
+    s3HlsMasterKey: video.s3HlsMasterKey,
   });
 
-  logger.info({ videoId: video.id, isDeleted: video.isDeleted }, "admin preview stream granted");
+  logger.info({ videoId: video.id, isDeleted: video.isDeleted, format: grant.mimeType }, "admin preview stream granted");
 
-  const fallback = !isS3Configured() ? `/api/video/${video.id}` : null;
-  return NextResponse.json({ url: fallback || url });
+  const fallback = !isS3Configured() ? { url: `/api/video/${video.id}`, mimeType: "video/mp4" as const } : null;
+  return NextResponse.json(fallback || grant);
 }

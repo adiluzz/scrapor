@@ -4,11 +4,14 @@ Queue-consuming media worker.
 
 Consumes two Redis queues:
   • `scrape:queue`  — ScrapeRun ids: searches admin-selected sources, dedups by
-    sourceUrl, downloads new videos, generates preview/thumbnail/storyboard,
+    sourceUrl, downloads new videos, normalizes to MP4 + HLS, generates
+    preview/thumbnail/storyboard,
     uploads to S3, links pornstars/tags, updates per-site + run totals.
   • `creator:queue` — Video ids for creator uploads the web app streamed to the
-    shared `uploads` volume: normalize to MP4, generate the same media assets,
+    shared `uploads` volume: normalize to MP4 + HLS, generate the same media assets,
     upload to S3 under the video id, then flip the video to READY.
+  • `hls:backfill:queue` — Video ids for catalog backfill: download existing S3 MP4,
+    normalize + HLS-pack, re-upload. Seeded on worker startup (lowest priority).
 
 Run modes:
   python worker/worker.py                 # long-running queue consumer (container)
@@ -116,6 +119,15 @@ PREVIEW_QUEUE_KEY = "preview:queue"
 REDOWNLOAD_QUEUE_KEY = "redownload:queue"
 SCRAPE_SEARCH_QUEUE_KEY = "scrape:search:queue"
 PORNSTAR_TPDB_QUEUE_KEY = "pornstar:tpdb:queue"
+HLS_BACKFILL_QUEUE_KEY = "hls:backfill:queue"
+HLS_BACKFILL_SCHEDULED_KEY = "hls:backfill:scheduled"
+HLS_BACKFILL_LOCK_PREFIX = "hls:backfill:lock:"
+HLS_BACKFILL_ENABLED = os.environ.get("HLS_BACKFILL_ENABLED", "true").lower() not in (
+    "0", "false", "no",
+)
+HLS_BACKFILL_DELAY_SEC = float(os.environ.get("HLS_BACKFILL_DELAY_SEC", "30"))
+HLS_BACKFILL_LOCK_SEC = int(os.environ.get("HLS_BACKFILL_LOCK_SEC", "7200"))
+HLS_BACKFILL_RESCAN_SEC = int(os.environ.get("HLS_BACKFILL_RESCAN_SEC", "1800"))
 SCRAPE_SEARCH_RESULT_PREFIX = "scrape:search:result:"
 # Shared volume the web app writes creator uploads to (see docker-compose).
 UPLOAD_DIR = os.environ.get("UPLOAD_DIR", os.path.join(ROOT, "uploads"))
@@ -573,6 +585,7 @@ def _process_one(run, source_site, video) -> ProcessOutcome:
             return ProcessOutcome("fail", str(reason)[:500], "download")
 
         video_path = os.path.join(tmp_dir, "video.mp4")
+        _normalize_downloaded_video(video_path)
         duration = video.get("duration_sec") or media.probe_duration(video_path)
         if not duration:
             _log_video_fail("probe_duration", video, run, source_site,
@@ -602,7 +615,7 @@ def _process_one(run, source_site, video) -> ProcessOutcome:
             if db.video_exists(conn, url):
                 return ProcessOutcome("skip", "Already in catalog", "catalog")
 
-            keys = dict(v=None, t=None, p=None, sb=None, vtt=None)
+            keys = dict(v=None, t=None, p=None, sb=None, vtt=None, hls=None)
             # site_id = run storage/origin (S3 paths); VideoSite covers all publish targets.
             vid, slug, new_pornstar_ids = db.create_video(
                 conn, site_id=site_id, source_url=url, title=video["title"],
@@ -630,11 +643,12 @@ def _process_one(run, source_site, video) -> ProcessOutcome:
                     keys["sb"] = storage.upload(sprite, storage.key_storyboard(site_id, vid), "image/jpeg")
                 if os.path.exists(vtt):
                     keys["vtt"] = storage.upload(vtt, storage.key_storyboard_vtt(site_id, vid), "text/vtt")
+                keys["hls"] = _package_and_upload_hls(site_id, vid, video_path, tmp_dir)
                 with conn.cursor() as cur:
                     cur.execute(
                         'UPDATE "Video" SET "s3VideoKey"=%s,"s3ThumbKey"=%s,"s3PreviewKey"=%s,'
-                        '"s3StoryboardKey"=%s,"s3StoryboardVttKey"=%s,"previewVersion"=%s WHERE id=%s',
-                        (keys["v"], keys["t"], keys["p"], keys["sb"], keys["vtt"], media.PREVIEW_VERSION, vid),
+                        '"s3StoryboardKey"=%s,"s3StoryboardVttKey"=%s,"s3HlsMasterKey"=%s,"previewVersion"=%s WHERE id=%s',
+                        (keys["v"], keys["t"], keys["p"], keys["sb"], keys["vtt"], keys["hls"], media.PREVIEW_VERSION, vid),
                     )
             else:
                 local = os.path.join(ROOT, "downloads", vid)
@@ -664,6 +678,189 @@ def _process_one(run, source_site, video) -> ProcessOutcome:
         shutil.rmtree(tmp_dir, ignore_errors=True)
 
 
+def _normalize_downloaded_video(video_path: str) -> None:
+    """Re-encode to web-friendly MP4 (2s GOP, faststart). In-place on success."""
+    normalized = f"{video_path}.norm.mp4"
+    if media.transcode_to_mp4(video_path, normalized):
+        os.replace(normalized, video_path)
+
+
+def _package_and_upload_hls(site_id: str, video_id: str, video_path: str, tmp_dir: str) -> str | None:
+    hls_dir = os.path.join(tmp_dir, "hls")
+    if not media.package_hls_from_mp4(video_path, hls_dir):
+        return None
+    if storage.configured():
+        return storage.upload_hls_dir(hls_dir, site_id, video_id)
+    return None
+
+
+def _hls_backfill_queue_contains(r, video_id: str) -> bool:
+    """True when video id is already waiting in the backfill queue."""
+    try:
+        pos = r.execute_command("LPOS", HLS_BACKFILL_QUEUE_KEY, video_id)
+        return pos is not None
+    except Exception:
+        return False
+
+
+def _reconcile_stale_hls_keys(conn) -> int:
+    """Clear s3HlsMasterKey when the S3 playlist object no longer exists."""
+    cleared = 0
+    for row in db.list_videos_with_hls_key(conn):
+        hls_key = row.get("s3HlsMasterKey")
+        if hls_key and not storage.object_exists(hls_key):
+            db.clear_video_hls_master_key(conn, row["id"])
+            cleared += 1
+    return cleared
+
+
+def _prune_hls_backfill_scheduled(r, pending_ids: set[str]) -> int:
+    """Drop scheduled markers for videos that finished backfill."""
+    removed = 0
+    try:
+        scheduled = r.smembers(HLS_BACKFILL_SCHEDULED_KEY)
+    except Exception:
+        return 0
+    for raw in scheduled or []:
+        vid = raw.decode() if isinstance(raw, bytes) else raw
+        if vid not in pending_ids:
+            if r.srem(HLS_BACKFILL_SCHEDULED_KEY, vid):
+                removed += 1
+    return removed
+
+
+def seed_hls_backfill_queue(conn, r, *, force: bool = False) -> int:
+    """
+    Ensure every legacy (MP4-only) catalog video is queued for HLS backfill.
+
+    Called on worker startup and periodically while idle. Safe across restarts:
+    re-enqueues pending rows that are not locked and not already in the queue.
+    """
+    if not HLS_BACKFILL_ENABLED or not storage.configured():
+        return 0
+
+    stale = _reconcile_stale_hls_keys(conn)
+    if stale:
+        _event("info", "hls_backfill_stale_cleared", count=stale)
+
+    pending_rows = db.list_videos_needing_hls_backfill(conn)
+    pending_ids = {row["id"] for row in pending_rows}
+    _prune_hls_backfill_scheduled(r, pending_ids)
+
+    enqueued = 0
+    skipped_no_mp4 = 0
+    skipped_locked = 0
+    skipped_queued = 0
+
+    for row in pending_rows:
+        vid = row["id"]
+        site_id = row["siteId"]
+        if force:
+            r.srem(HLS_BACKFILL_SCHEDULED_KEY, vid)
+
+        lock_key = f"{HLS_BACKFILL_LOCK_PREFIX}{vid}"
+        if r.exists(lock_key):
+            skipped_locked += 1
+            continue
+
+        mp4_key = storage.resolve_video_key(site_id, vid, row.get("s3VideoKey"))
+        if not storage.object_exists(mp4_key):
+            skipped_no_mp4 += 1
+            continue
+
+        if _hls_backfill_queue_contains(r, vid):
+            skipped_queued += 1
+            r.sadd(HLS_BACKFILL_SCHEDULED_KEY, vid)
+            continue
+
+        r.sadd(HLS_BACKFILL_SCHEDULED_KEY, vid)
+        r.rpush(HLS_BACKFILL_QUEUE_KEY, vid)
+        enqueued += 1
+
+    if enqueued or stale or force:
+        _event(
+            "info", "hls_backfill_seeded",
+            enqueued=enqueued, pending=len(pending_rows), staleCleared=stale,
+            skippedLocked=skipped_locked, skippedQueued=skipped_queued,
+            skippedNoMp4=skipped_no_mp4,
+        )
+    return enqueued
+
+
+def process_hls_backfill(conn, video_id: str, r) -> None:
+    """
+    Download an existing S3 MP4, normalize (2s GOP + faststart), package HLS,
+    re-upload to S3, and set s3HlsMasterKey.
+    """
+    v = db.load_video_hls_backfill(conn, video_id)
+    if not v:
+        _event("warning", "hls_backfill_not_found", videoId=video_id)
+        return
+    if v.get("s3HlsMasterKey"):
+        if storage.object_exists(v["s3HlsMasterKey"]):
+            return
+        db.clear_video_hls_master_key(conn, video_id)
+        _event("warning", "hls_backfill_stale_key", videoId=video_id)
+
+    site_id = v["siteId"]
+    s3_key = storage.resolve_video_key(site_id, video_id, v.get("s3VideoKey"))
+    if not s3_key:
+        _event("warning", "hls_backfill_no_source", videoId=video_id)
+        return
+    if not storage.object_exists(s3_key):
+        _event("warning", "hls_backfill_mp4_missing", videoId=video_id, s3Key=s3_key)
+        return
+
+    lock_key = f"{HLS_BACKFILL_LOCK_PREFIX}{video_id}"
+    if not r.set(lock_key, "1", nx=True, ex=HLS_BACKFILL_LOCK_SEC):
+        _event("info", "hls_backfill_skip_locked", videoId=video_id)
+        return
+
+    tmp_dir = tempfile.mkdtemp(prefix="hls_backfill_")
+    failed = False
+    try:
+        free_mb = _disk_free_mb(tmp_dir)
+        if free_mb and free_mb < 4096:
+            _event("warning", "hls_backfill_disk_low", videoId=video_id, freeMb=free_mb)
+            failed = True
+            return
+
+        video_path = os.path.join(tmp_dir, "video.mp4")
+        _event("info", "hls_backfill_start", videoId=video_id, s3Key=s3_key)
+        if not storage.download(s3_key, video_path):
+            _event("warning", "hls_backfill_download_failed", videoId=video_id)
+            failed = True
+            return
+
+        _normalize_downloaded_video(video_path)
+
+        if not storage.upload(video_path, storage.key_video(site_id, video_id), "video/mp4"):
+            _event("warning", "hls_backfill_upload_mp4_failed", videoId=video_id)
+            failed = True
+            return
+
+        hls_master = _package_and_upload_hls(site_id, video_id, video_path, tmp_dir)
+        if not hls_master:
+            _event("warning", "hls_backfill_hls_failed", videoId=video_id)
+            failed = True
+            return
+
+        db.update_video_hls_backfill(conn, video_id, s3_hls_master_key=hls_master)
+        r.srem(HLS_BACKFILL_SCHEDULED_KEY, video_id)
+        _event("info", "hls_backfill_done", videoId=video_id, hlsKey=hls_master)
+    except Exception as e:  # noqa: BLE001
+        failed = True
+        _event(
+            "warning", "hls_backfill_failed", videoId=video_id, reason=str(e)[:500],
+            errorType=type(e).__name__, traceback=traceback.format_exc()[-800:],
+        )
+    finally:
+        shutil.rmtree(tmp_dir, ignore_errors=True)
+        r.delete(lock_key)
+        if failed:
+            r.srem(HLS_BACKFILL_SCHEDULED_KEY, video_id)
+
+
 def process_creator_upload(conn, video_id: str):
     """
     Process a creator upload that the web app streamed to the shared volume:
@@ -690,6 +887,7 @@ def process_creator_upload(conn, video_id: str):
             # Fallback: keep the original bytes if transcode failed but the file
             # is likely already a playable mp4.
             shutil.copy(src, video_path)
+            _normalize_downloaded_video(video_path)
         duration = v.get("durationSec") or media.probe_duration(video_path)
 
         preview = os.path.join(tmp_dir, "preview.mp4")
@@ -700,7 +898,7 @@ def process_creator_upload(conn, video_id: str):
         media.make_thumbnail(video_path, thumb, "")
         media.make_storyboard(video_path, sprite, vtt, duration or 0)
 
-        keys = dict(v=None, t=None, p=None, sb=None, vtt=None)
+        keys = dict(v=None, t=None, p=None, sb=None, vtt=None, hls=None)
         if storage.configured():
             keys["v"] = storage.upload(video_path, storage.key_video(site_id, video_id), "video/mp4")
             if os.path.exists(thumb):
@@ -711,6 +909,7 @@ def process_creator_upload(conn, video_id: str):
                 keys["sb"] = storage.upload(sprite, storage.key_storyboard(site_id, video_id), "image/jpeg")
             if os.path.exists(vtt):
                 keys["vtt"] = storage.upload(vtt, storage.key_storyboard_vtt(site_id, video_id), "text/vtt")
+            keys["hls"] = _package_and_upload_hls(site_id, video_id, video_path, tmp_dir)
         else:
             # Dev fallback: keep files under downloads/{id}/ for local API routes.
             local = os.path.join(ROOT, "downloads", video_id)
@@ -723,6 +922,7 @@ def process_creator_upload(conn, video_id: str):
             conn, video_id,
             s3_video_key=keys["v"], s3_thumb_key=keys["t"], s3_preview_key=keys["p"],
             s3_storyboard_key=keys["sb"], s3_storyboard_vtt_key=keys["vtt"],
+            s3_hls_master_key=keys["hls"],
             duration_sec=duration, status="READY",
             preview_version=media.PREVIEW_VERSION,
         )
@@ -891,6 +1091,7 @@ def process_redownload(conn, video_id: str):
             return
 
         video_path = os.path.join(tmp_dir, "video.mp4")
+        _normalize_downloaded_video(video_path)
         duration = video.get("duration_sec") or media.probe_duration(video_path)
         if not duration:
             _event("warning", "redownload_failed", videoId=video_id, stage="probe_duration",
@@ -919,6 +1120,7 @@ def process_redownload(conn, video_id: str):
             "p": v.get("s3PreviewKey"),
             "sb": v.get("s3StoryboardKey"),
             "vtt": v.get("s3StoryboardVttKey"),
+            "hls": v.get("s3HlsMasterKey"),
         }
         if storage.configured():
             keys["v"] = storage.upload(video_path, storage.key_video(site_id, video_id), "video/mp4") or keys["v"]
@@ -929,6 +1131,7 @@ def process_redownload(conn, video_id: str):
             if storyboard_ok:
                 keys["sb"] = storage.upload(sprite, storage.key_storyboard(site_id, video_id), "image/jpeg") or keys["sb"]
                 keys["vtt"] = storage.upload(vtt, storage.key_storyboard_vtt(site_id, video_id), "text/vtt") or keys["vtt"]
+            keys["hls"] = _package_and_upload_hls(site_id, video_id, video_path, tmp_dir) or keys["hls"]
         else:
             local = os.path.join(ROOT, "downloads", video_id)
             os.makedirs(local, exist_ok=True)
@@ -949,6 +1152,7 @@ def process_redownload(conn, video_id: str):
             s3_preview_key=keys["p"],
             s3_storyboard_key=keys["sb"] if storyboard_ok else v.get("s3StoryboardKey"),
             s3_storyboard_vtt_key=keys["vtt"] if storyboard_ok else v.get("s3StoryboardVttKey"),
+            s3_hls_master_key=keys["hls"],
             duration_sec=duration,
             status="READY",
             preview_version=media.PREVIEW_VERSION,
@@ -1422,9 +1626,36 @@ def main():
         default=0.4,
         help="Seconds between TPDB requests during backfill (default 0.4)",
     )
+    parser.add_argument(
+        "--seed-hls-backfill",
+        action="store_true",
+        help="Enqueue all catalog videos missing HLS (respects HLS_BACKFILL_ENABLED)",
+    )
+    parser.add_argument(
+        "--seed-hls-backfill-force",
+        action="store_true",
+        help="Re-enqueue all pending HLS backfill jobs (clears scheduled dedup set)",
+    )
+    parser.add_argument(
+        "--hls-backfill",
+        help="Normalize + HLS-pack one Video id from existing S3 MP4, then exit",
+    )
     args = parser.parse_args()
 
     conn = db.connect()
+
+    if args.hls_backfill:
+        import redis as redis_lib
+        r = redis_lib.from_url(os.environ.get("REDIS_URL", "redis://localhost:6379"))
+        process_hls_backfill(conn, args.hls_backfill, r)
+        return
+
+    if args.seed_hls_backfill or args.seed_hls_backfill_force:
+        import redis as redis_lib
+        r = redis_lib.from_url(os.environ.get("REDIS_URL", "redis://localhost:6379"))
+        n = seed_hls_backfill_queue(conn, r, force=args.seed_hls_backfill_force)
+        log.info(_j(f"hls backfill seed: enqueued {n} video(s)"))
+        return
 
     if args.regenerate_preview:
         process_regenerate_preview(conn, args.regenerate_preview)
@@ -1457,8 +1688,15 @@ def main():
     except Exception as e:  # noqa: BLE001
         log.error(_j(f"resume scan failed: {e}"))
 
+    try:
+        seed_hls_backfill_queue(conn, r)
+        log.info(_j("hls backfill startup scan complete"))
+    except Exception as e:  # noqa: BLE001
+        log.error(_j(f"hls backfill seed failed: {e}"))
+
     log.info(_j("worker started, waiting for jobs"))
     # Search / TPDB enrich must not wait behind long scrape/creator jobs.
+    # HLS backfill is lowest priority — runs when other queues are idle.
     queue_priority = [
         SCRAPE_SEARCH_QUEUE_KEY,
         PORNSTAR_TPDB_QUEUE_KEY,
@@ -1466,11 +1704,23 @@ def main():
         REDOWNLOAD_QUEUE_KEY,
         CREATOR_QUEUE_KEY,
         QUEUE_KEY,
+        HLS_BACKFILL_QUEUE_KEY,
     ]
+    last_hls_rescan = time.time()
     while True:
         try:
             item = r.blpop(queue_priority, timeout=5)
             if not item:
+                if (
+                    HLS_BACKFILL_ENABLED
+                    and HLS_BACKFILL_RESCAN_SEC > 0
+                    and time.time() - last_hls_rescan >= HLS_BACKFILL_RESCAN_SEC
+                ):
+                    try:
+                        seed_hls_backfill_queue(conn, r)
+                        last_hls_rescan = time.time()
+                    except Exception as e:  # noqa: BLE001
+                        log.error(_j(f"hls backfill periodic scan failed: {e}"))
                 continue
             queue = item[0].decode() if isinstance(item[0], bytes) else item[0]
             job_id = item[1].decode() if isinstance(item[1], bytes) else item[1]
@@ -1484,6 +1734,10 @@ def main():
                 _run_background("redownload", process_redownload, job_id)
             elif queue == CREATOR_QUEUE_KEY:
                 _run_background("creator", process_creator_upload, job_id)
+            elif queue == HLS_BACKFILL_QUEUE_KEY:
+                process_hls_backfill(conn, job_id, r)
+                if HLS_BACKFILL_DELAY_SEC > 0:
+                    time.sleep(HLS_BACKFILL_DELAY_SEC)
             else:
                 _run_background("scrape-run", process_run, job_id)
         except Exception as e:

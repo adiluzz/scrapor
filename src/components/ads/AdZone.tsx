@@ -4,7 +4,7 @@ import BannerAdSlot from "@/components/ads/BannerAdSlot";
 import { EXO_INS_CLASS } from "@/lib/exo-click";
 
 /**
- * ExoClick display ad slot with optional JuicyAds fallback.
+ * ExoClick display ad slot with optional JuicyAds + tertiary Exo fallback.
  */
 export default function AdZone({
   zoneId,
@@ -13,6 +13,7 @@ export default function AdZone({
   label = true,
   insClass = EXO_INS_CLASS,
   juicyFallbackZoneId,
+  exoSecondaryZoneId,
   juicyEnabled = true,
   preferJuicy = false,
 }: {
@@ -21,8 +22,9 @@ export default function AdZone({
   minHeight?: number;
   label?: boolean;
   insClass?: string | null;
-  /** Juicy zone tried when Exo has no fill (or primary when preferJuicy). */
   juicyFallbackZoneId?: string | null;
+  /** Extra Exo zone (e.g. home banner) when under-player + Juicy both empty. */
+  exoSecondaryZoneId?: string | null;
   juicyEnabled?: boolean;
   preferJuicy?: boolean;
 }) {
@@ -32,6 +34,7 @@ export default function AdZone({
     <BannerAdSlot
       exoZoneId={zoneId}
       juicyZoneId={juicyFallbackZoneId}
+      exoSecondaryZoneId={exoSecondaryZoneId}
       juicyEnabled={juicyEnabled}
       insClass={insClass}
       preferJuicy={preferJuicy}

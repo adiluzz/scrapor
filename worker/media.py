@@ -6,6 +6,10 @@ import os
 import subprocess
 import urllib.request
 
+# ── Web playback ───────────────────────────────────────────────────────
+GOP_SEC = 2.0
+HLS_SEGMENT_SEC = 2.0
+
 # ── Preview (grid hover) ──────────────────────────────────────────────
 PREVIEW_VERSION = 2
 PREVIEW_TARGET_SEC = 4.0
@@ -35,17 +39,50 @@ def probe_duration(video_path: str) -> int:
 def transcode_to_mp4(src: str, dest: str, timeout=7200) -> bool:
     """
     Normalize an arbitrary uploaded file (mov/webm/avi/mp4/...) into a
-    web-friendly, streamable MP4 (H.264 + AAC, faststart). Returns True on
-    success. Callers should fall back to the raw source if this fails.
+    web-friendly, streamable MP4 (H.264 + AAC, faststart, ~2s keyframes).
+    Returns True on success. Callers should fall back to the raw source if
+    this fails.
     """
-    cmd = ["ffmpeg", "-y", "-i", src,
-           "-c:v", "libx264", "-preset", "veryfast", "-crf", "23",
-           "-pix_fmt", "yuv420p",
-           "-c:a", "aac", "-b:a", "128k",
-           "-movflags", "+faststart", dest]
+    cmd = [
+        "ffmpeg", "-y", "-i", src,
+        "-c:v", "libx264", "-preset", "veryfast", "-crf", "23",
+        "-pix_fmt", "yuv420p",
+        "-force_key_frames", f"expr:gte(t,n_forced*{GOP_SEC})",
+        "-g", "120", "-keyint_min", "24", "-sc_threshold", "0",
+        "-c:a", "aac", "-b:a", "128k",
+        "-movflags", "+faststart", dest,
+    ]
     try:
         r = subprocess.run(cmd, capture_output=True, timeout=timeout)
         return r.returncode == 0 and os.path.exists(dest) and os.path.getsize(dest) > 10_000
+    except Exception:
+        return False
+
+
+def package_hls_from_mp4(src: str, out_dir: str, segment_sec: float = HLS_SEGMENT_SEC, timeout=7200) -> bool:
+    """
+    Package a normalized MP4 into VOD HLS (master.m3u8 + MPEG-TS segments).
+    Expects src to already have regular keyframes (~segment_sec apart).
+    """
+    os.makedirs(out_dir, exist_ok=True)
+    master = os.path.join(out_dir, "master.m3u8")
+    seg_pattern = os.path.join(out_dir, "seg_%04d.ts")
+    cmd = [
+        "ffmpeg", "-y", "-i", src,
+        "-c", "copy",
+        "-bsf:v", "h264_mp4toannexb",
+        "-hls_time", str(segment_sec),
+        "-hls_playlist_type", "vod",
+        "-hls_segment_filename", seg_pattern,
+        master,
+    ]
+    try:
+        r = subprocess.run(cmd, capture_output=True, timeout=timeout)
+        return (
+            r.returncode == 0
+            and os.path.exists(master)
+            and os.path.getsize(master) > 20
+        )
     except Exception:
         return False
 

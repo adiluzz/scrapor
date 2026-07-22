@@ -297,7 +297,8 @@ def load_video_redownload(conn, video_id: str):
     with conn.cursor() as cur:
         cur.execute(
             'SELECT id,"siteId","sourceUrl","sourceSite",title,description,"durationSec",'
-            '"s3VideoKey","s3ThumbKey","s3PreviewKey","s3StoryboardKey","s3StoryboardVttKey" '
+            '"s3VideoKey","s3ThumbKey","s3PreviewKey","s3StoryboardKey","s3StoryboardVttKey",'
+            '"s3HlsMasterKey" '
             'FROM "Video" WHERE id=%s',
             (video_id,),
         )
@@ -317,6 +318,7 @@ def load_video_redownload(conn, video_id: str):
         "s3PreviewKey": row[9],
         "s3StoryboardKey": row[10],
         "s3StoryboardVttKey": row[11],
+        "s3HlsMasterKey": row[12],
     }
 
 
@@ -384,18 +386,83 @@ def set_video_status(conn, video_id: str, status: str):
 
 
 def update_video_media(conn, video_id, *, s3_video_key, s3_thumb_key, s3_preview_key,
-                       s3_storyboard_key, s3_storyboard_vtt_key, duration_sec, status,
-                       preview_version=None):
+                       s3_storyboard_key, s3_storyboard_vtt_key, s3_hls_master_key,
+                       duration_sec, status, preview_version=None):
     """Write generated S3 keys + duration and flip status (READY/FAILED)."""
     with conn.cursor() as cur:
         cur.execute(
             'UPDATE "Video" SET "s3VideoKey"=%s,"s3ThumbKey"=%s,"s3PreviewKey"=%s,'
-            '"s3StoryboardKey"=%s,"s3StoryboardVttKey"=%s,'
+            '"s3StoryboardKey"=%s,"s3StoryboardVttKey"=%s,"s3HlsMasterKey"=%s,'
             '"durationSec"=COALESCE("durationSec",%s),status=%s,'
             '"previewVersion"=COALESCE(%s,"previewVersion"),"updatedAt"=now() '
             'WHERE id=%s',
             (s3_video_key, s3_thumb_key, s3_preview_key, s3_storyboard_key,
-             s3_storyboard_vtt_key, duration_sec, status, preview_version, video_id),
+             s3_storyboard_vtt_key, s3_hls_master_key, duration_sec, status,
+             preview_version, video_id),
+        )
+
+
+def list_videos_needing_hls_backfill(conn):
+    """
+    READY catalog rows still on legacy progressive MP4 (no HLS master key).
+    Includes rows with implicit S3 layout (s3VideoKey null but file at default path).
+    """
+    with conn.cursor() as cur:
+        cur.execute(
+            'SELECT id,"siteId","s3VideoKey" FROM "Video" '
+            'WHERE "s3HlsMasterKey" IS NULL AND "isDeleted" = false AND status = %s '
+            'ORDER BY "createdAt" ASC',
+            ("READY",),
+        )
+        return [
+            {"id": row[0], "siteId": row[1], "s3VideoKey": row[2]}
+            for row in cur.fetchall()
+        ]
+
+
+def list_videos_with_hls_key(conn):
+    """Rows that claim HLS — used to detect stale DB keys after failed uploads."""
+    with conn.cursor() as cur:
+        cur.execute(
+            'SELECT id,"s3HlsMasterKey" FROM "Video" '
+            'WHERE "s3HlsMasterKey" IS NOT NULL AND "isDeleted" = false AND status = %s',
+            ("READY",),
+        )
+        return [{"id": row[0], "s3HlsMasterKey": row[1]} for row in cur.fetchall()]
+
+
+def clear_video_hls_master_key(conn, video_id: str):
+    with conn.cursor() as cur:
+        cur.execute(
+            'UPDATE "Video" SET "s3HlsMasterKey"=NULL,"updatedAt"=now() WHERE id=%s',
+            (video_id,),
+        )
+
+
+def load_video_hls_backfill(conn, video_id: str):
+    with conn.cursor() as cur:
+        cur.execute(
+            'SELECT id,"siteId","s3VideoKey","s3HlsMasterKey","durationSec" '
+            'FROM "Video" WHERE id=%s',
+            (video_id,),
+        )
+        row = cur.fetchone()
+    if not row:
+        return None
+    return {
+        "id": row[0],
+        "siteId": row[1],
+        "s3VideoKey": row[2],
+        "s3HlsMasterKey": row[3],
+        "durationSec": row[4],
+    }
+
+
+def update_video_hls_backfill(conn, video_id: str, *, s3_hls_master_key: str):
+    with conn.cursor() as cur:
+        cur.execute(
+            'UPDATE "Video" SET "s3HlsMasterKey"=%s,"updatedAt"=now() WHERE id=%s',
+            (s3_hls_master_key, video_id),
         )
 
 

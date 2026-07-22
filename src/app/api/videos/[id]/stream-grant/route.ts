@@ -47,16 +47,17 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     request.headers.get("x-real-ip") ||
     "0.0.0.0";
 
-  const url = mintStreamUrl({
+  const grant = mintStreamUrl({
     videoId: video.id,
     siteId: video.siteId,
     clientIp: ip,
     adSessionId: session.id,
+    s3HlsMasterKey: video.s3HlsMasterKey,
   });
 
-  logger.info({ videoId: video.id, outcome, s3: isS3Configured() }, "stream granted");
+  logger.info({ videoId: video.id, outcome, s3: isS3Configured(), format: grant.mimeType }, "stream granted");
 
   // In local dev (no S3/CDN) fall back to the local file stream so playback works.
-  const fallback = !isS3Configured() ? `/api/video/${video.id}` : null;
-  return NextResponse.json({ url: fallback || url });
+  const fallback = !isS3Configured() ? { url: `/api/video/${video.id}`, mimeType: "video/mp4" as const } : null;
+  return NextResponse.json(fallback || grant);
 }

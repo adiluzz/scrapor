@@ -154,6 +154,7 @@ export default async function VideoPage({
             zoneId={site.juicyAdsZoneVidfloat}
             enabled={site.adsJuicyEnabled}
             exoFallbackZoneId={site.exoZoneUnderPlayer ?? site.exoZoneHome}
+            juicyBannerZoneId={site.juicyAdsZoneBanner}
             exoInsClass={site.exoInsClass}
           />
         </>
@@ -203,6 +204,12 @@ export default async function VideoPage({
                 !adminPreview
                   ? site.exoZoneInvideo ?? site.exoZoneUnderPlayer ?? site.exoZoneHome
                   : null
+              }
+              invideoJuicyBannerZoneId={
+                !adminPreview && site.adsJuicyEnabled ? site.juicyAdsZoneBanner : null
+              }
+              invideoExoBannerZoneId={
+                !adminPreview ? site.exoZoneUnderPlayer ?? site.exoZoneHome : null
               }
               invideoExoInsClass={site.exoInsClass}
             />
@@ -279,6 +286,7 @@ export default async function VideoPage({
                 zoneId={site.exoZoneUnderPlayer}
                 insClass={site.exoInsClass}
                 juicyFallbackZoneId={site.juicyAdsZoneBanner}
+                exoSecondaryZoneId={site.exoZoneHome}
                 juicyEnabled={site.adsJuicyEnabled}
                 preferJuicy={site.adsJuicyEnabled}
                 minHeight={250}

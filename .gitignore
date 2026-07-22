@@ -75,3 +75,4 @@ coverage/
 # ── OS junk ───────────────────────────────────────────────────────────
 .DS_Store
 Thumbs.db
+.cloudfront-keys/

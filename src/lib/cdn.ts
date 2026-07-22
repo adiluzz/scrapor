@@ -1,4 +1,10 @@
 import crypto from "crypto";
+import {
+  isCloudFrontConfigured,
+  signCloudFrontCanned,
+  signCloudFrontCustom,
+} from "@/lib/cloudfront-sign";
+import { s3Keys } from "@/lib/storage";
 
 const SECRET = process.env.CDN_SIGNING_SECRET || "dev-cdn-secret-change-me";
 const CDN_BASE_URL = process.env.CDN_BASE_URL || "http://localhost:8080";
@@ -8,42 +14,25 @@ function base64url(buf: Buffer): string {
   return buf.toString("base64").replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
 }
 
-/**
- * Compute the nginx `secure_link_md5` signature for IP-bound full streams.
- *
- * nginx config must use exactly:
- *   secure_link       $arg_s,$arg_e;
- *   secure_link_md5   "$secure_link_expires$uri$remote_addr $CDN_SIGNING_SECRET";
- *
- * so the signed string is `${expires}${uri}${clientIp} ${SECRET}`.
- */
+/** Legacy nginx secure_link (local / pre-CloudFront). */
 export function secureLinkSig(uri: string, expires: number, clientIp: string): string {
   const data = `${expires}${uri}${clientIp} ${SECRET}`;
   return base64url(crypto.createHash("md5").update(data).digest());
 }
 
-/**
- * Asset signatures omit client IP so hover previews / thumbs work across
- * network changes and can be served from the shared nginx edge cache.
- *
- * nginx asset location must use:
- *   secure_link_md5   "$secure_link_expires$uri ${CDN_SIGNING_SECRET}";
- */
 export function secureLinkSigAsset(uri: string, expires: number): string {
   const data = `${expires}${uri} ${SECRET}`;
   return base64url(crypto.createHash("md5").update(data).digest());
 }
 
 /**
- * App-level ad-claim / integrity token, validated by /api/cdn/authorize.
- * HMAC over the fields the server vouches for so it cannot be forged client-side.
+ * App-level stream token — kept for nginx authorize during rollback; unused by CloudFront path.
  */
 export function makeStreamToken(payload: {
   videoId: string;
   siteId: string;
   exp: number;
   adSessionId: string;
-  /** Set when an admin previews a soft-deleted or hidden video. */
   adminPreview?: boolean;
 }): string {
   const body = base64url(Buffer.from(JSON.stringify(payload)));
@@ -68,9 +57,34 @@ export function verifyStreamToken(token: string):
   }
 }
 
+function nginxStreamUrl(opts: {
+  videoId: string;
+  siteId: string;
+  clientIp: string;
+  adSessionId: string;
+  expires: number;
+  adminPreview?: boolean;
+}): string {
+  const uri = `/v/${opts.videoId}/video.mp4`;
+  const s = secureLinkSig(uri, opts.expires, opts.clientIp);
+  const t = makeStreamToken({
+    videoId: opts.videoId,
+    siteId: opts.siteId,
+    exp: opts.expires,
+    adSessionId: opts.adSessionId,
+    adminPreview: opts.adminPreview,
+  });
+  return `${CDN_BASE_URL}${uri}?e=${opts.expires}&s=${s}&t=${encodeURIComponent(t)}`;
+}
+
+function nginxAssetUrl(opts: { videoId: string; file: string; expires: number }): string {
+  const uri = `/a/${opts.videoId}/${opts.file}`;
+  const s = secureLinkSigAsset(uri, opts.expires);
+  return `${CDN_BASE_URL}${uri}?e=${opts.expires}&s=${s}`;
+}
+
 /**
- * Mint the full short-lived, IP-bound signed CDN URL for a video stream.
- * Only called server-side after an ad session is granted (section 4).
+ * Mint signed playback URL after ad grant (CloudFront custom policy when configured).
  */
 export function mintStreamUrl(opts: {
   videoId: string;
@@ -82,30 +96,45 @@ export function mintStreamUrl(opts: {
 }): string {
   const ttl = opts.ttlSeconds ?? TTL;
   const expires = Math.floor(Date.now() / 1000) + ttl;
-  const uri = `/v/${opts.videoId}/video.mp4`;
-  const s = secureLinkSig(uri, expires, opts.clientIp);
-  const t = makeStreamToken({
-    videoId: opts.videoId,
-    siteId: opts.siteId,
-    exp: expires,
-    adSessionId: opts.adSessionId,
-    adminPreview: opts.adminPreview,
-  });
-  return `${CDN_BASE_URL}${uri}?e=${expires}&s=${s}&t=${encodeURIComponent(t)}`;
+
+  if (isCloudFrontConfigured()) {
+    const objectPath = `/${s3Keys.video(opts.siteId, opts.videoId)}`;
+    return signCloudFrontCustom({
+      objectPath,
+      expiresEpochSec: expires,
+      clientIp: opts.clientIp,
+    });
+  }
+
+  return nginxStreamUrl({ ...opts, expires });
 }
 
+export type CdnAssetFile = "thumbnail.jpg" | "preview.mp4" | "storyboard.jpg" | "storyboard.vtt";
+
+const assetFileToKey = {
+  "thumbnail.jpg": s3Keys.thumb,
+  "preview.mp4": s3Keys.preview,
+  "storyboard.jpg": s3Keys.storyboard,
+  "storyboard.vtt": s3Keys.storyboardVtt,
+} as const;
+
 /**
- * Mint a lightweight (non ad-gated) signed URL for thumbnails/previews/storyboards.
- * Not IP-bound so grid hover and CDN edge cache work reliably.
+ * Mint signed URL for thumbs / previews / storyboards.
+ * CloudFront: canned policy to real S3 key (requires siteId).
  */
 export function mintAssetUrl(opts: {
   videoId: string;
-  file: "thumbnail.jpg" | "preview.mp4" | "storyboard.jpg" | "storyboard.vtt";
+  siteId: string;
+  file: CdnAssetFile;
   ttlSeconds?: number;
 }): string {
   const ttl = opts.ttlSeconds ?? TTL;
   const expires = Math.floor(Date.now() / 1000) + ttl;
-  const uri = `/a/${opts.videoId}/${opts.file}`;
-  const s = secureLinkSigAsset(uri, expires);
-  return `${CDN_BASE_URL}${uri}?e=${expires}&s=${s}`;
+
+  if (isCloudFrontConfigured()) {
+    const objectPath = `/${assetFileToKey[opts.file](opts.siteId, opts.videoId)}`;
+    return signCloudFrontCanned({ objectPath, expiresEpochSec: expires });
+  }
+
+  return nginxAssetUrl({ videoId: opts.videoId, file: opts.file, expires });
 }

@@ -1,0 +1,62 @@
+{
+  "CallerReference": "pisster-cdn-2026-07-22",
+  "Comment": "Pisster media CDN (S3 OAC, signed URLs)",
+  "Enabled": true,
+  "PriceClass": "PriceClass_100",
+  "HttpVersion": "http2and3",
+  "IsIPV6Enabled": false,
+  "Aliases": {
+    "Quantity": 1,
+    "Items": ["cdn.pisster.com"]
+  },
+  "ViewerCertificate": {
+    "ACMCertificateArn": "arn:aws:acm:us-east-1:339712788589:certificate/85614934-d066-490c-9938-d9421fbf942a",
+    "SSLSupportMethod": "sni-only",
+    "MinimumProtocolVersion": "TLSv1.2_2021"
+  },
+  "Origins": {
+    "Quantity": 1,
+    "Items": [
+      {
+        "Id": "S3-pisster-media",
+        "DomainName": "pisster-media.s3.us-east-1.amazonaws.com",
+        "OriginAccessControlId": "E369ADWQIE0A4P",
+        "S3OriginConfig": {
+          "OriginAccessIdentity": ""
+        }
+      }
+    ]
+  },
+  "DefaultCacheBehavior": {
+    "TargetOriginId": "S3-pisster-media",
+    "ViewerProtocolPolicy": "redirect-to-https",
+    "AllowedMethods": {
+      "Quantity": 3,
+      "Items": ["GET", "HEAD", "OPTIONS"],
+      "CachedMethods": {
+        "Quantity": 2,
+        "Items": ["GET", "HEAD"]
+      }
+    },
+    "Compress": true,
+    "TrustedKeyGroups": {
+      "Enabled": true,
+      "Quantity": 1,
+      "Items": ["aee9ba2d-087a-4072-96b6-7d68e5b5b54d"]
+    },
+    "TrustedSigners": {
+      "Enabled": false,
+      "Quantity": 0
+    },
+    "ForwardedValues": {
+      "QueryString": true,
+      "Cookies": { "Forward": "none" },
+      "Headers": { "Quantity": 0 },
+      "QueryStringCacheKeys": { "Quantity": 0 }
+    },
+    "MinTTL": 0,
+    "DefaultTTL": 43200,
+    "MaxTTL": 86400
+  },
+  "DefaultRootObject": ""
+}

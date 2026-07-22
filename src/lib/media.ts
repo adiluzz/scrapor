@@ -15,6 +15,7 @@ export async function getClientIp(): Promise<string> {
 
 type VideoMediaFields = {
   id: string;
+  siteId: string;
   s3ThumbKey?: string | null;
   s3PreviewKey?: string | null;
   s3StoryboardKey?: string | null;
@@ -27,7 +28,7 @@ type VideoMediaFields = {
  */
 export async function thumbUrl(video: VideoMediaFields): Promise<string> {
   if (isS3Configured() && video.s3ThumbKey) {
-    return mintAssetUrl({ videoId: video.id, file: "thumbnail.jpg" });
+    return mintAssetUrl({ videoId: video.id, siteId: video.siteId, file: "thumbnail.jpg" });
   }
   return `/api/thumbnail-img/${video.id}`;
 }
@@ -35,7 +36,7 @@ export async function thumbUrl(video: VideoMediaFields): Promise<string> {
 /** Hover-preview clip URL (signed CDN — used by sitemap / external refs). */
 export async function previewUrl(video: VideoMediaFields): Promise<string> {
   if (isS3Configured() && video.s3PreviewKey) {
-    return mintAssetUrl({ videoId: video.id, file: "preview.mp4" });
+    return mintAssetUrl({ videoId: video.id, siteId: video.siteId, file: "preview.mp4" });
   }
   return `/api/thumbnail/${video.id}`;
 }
@@ -49,7 +50,7 @@ export async function gridCardPreview(
 ): Promise<VideoCardPreviewData> {
   const previewMp4 =
     isS3Configured() && video.s3PreviewKey
-      ? mintAssetUrl({ videoId: video.id, file: "preview.mp4" })
+      ? mintAssetUrl({ videoId: video.id, siteId: video.siteId, file: "preview.mp4" })
       : video.s3PreviewKey
         ? `/media/preview/${video.id}`
         : null;
@@ -70,8 +71,8 @@ export async function storyboardUrls(
 ): Promise<{ sprite: string; vtt: string } | null> {
   if (isS3Configured() && video.s3StoryboardKey && video.s3StoryboardVttKey) {
     return {
-      sprite: mintAssetUrl({ videoId: video.id, file: "storyboard.jpg" }),
-      vtt: mintAssetUrl({ videoId: video.id, file: "storyboard.vtt" }),
+      sprite: mintAssetUrl({ videoId: video.id, siteId: video.siteId, file: "storyboard.jpg" }),
+      vtt: mintAssetUrl({ videoId: video.id, siteId: video.siteId, file: "storyboard.vtt" }),
     };
   }
   return null;
@@ -93,7 +94,7 @@ export async function loadStoryboardData(
   }
   const sprite = opts?.directS3
     ? await presignGet(s3Keys.storyboard(video.siteId, video.id), 3600)
-    : mintAssetUrl({ videoId: video.id, file: "storyboard.jpg" });
+    : mintAssetUrl({ videoId: video.id, siteId: video.siteId, file: "storyboard.jpg" });
   try {
     const vttUrl = await presignGet(s3Keys.storyboardVtt(video.siteId, video.id), 120);
     const res = await fetch(vttUrl, { cache: "no-store" });

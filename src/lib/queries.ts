@@ -106,6 +106,7 @@ export interface VideoCardData {
 
 export async function toCard(v: {
   id: string;
+  siteId: string;
   slug: string;
   title: string;
   durationSec: number | null;

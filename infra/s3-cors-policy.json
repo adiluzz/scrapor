@@ -5,6 +5,10 @@
     "AllowedOrigins": [
       "https://pisster.com",
       "https://www.pisster.com",
+      "https://fbbtube.com",
+      "https://www.fbbtube.com",
+      "https://sharlila.com",
+      "https://www.sharlila.com",
       "https://admin.sharlila.com",
       "http://localhost:3000"
     ],

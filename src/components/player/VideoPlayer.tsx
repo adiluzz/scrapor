@@ -1065,6 +1065,16 @@ export default forwardRef(function VideoPlayer(
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [adminPreview, status]);
 
+  function attachPlaybackFallback(player: Player, mp4FallbackUrl?: string | null) {
+    if (!mp4FallbackUrl) return;
+    const onError = () => {
+      player.off("error", onError);
+      player.src({ src: mp4FallbackUrl, type: "video/mp4" });
+      void player.play()?.catch(() => setStatus("error"));
+    };
+    player.one("error", onError);
+  }
+
   async function grantAndPlay(adSessionId: string, outcome: string) {
     setStatus("loading");
     try {
@@ -1074,9 +1084,10 @@ export default forwardRef(function VideoPlayer(
         body: JSON.stringify({ adSessionId, outcome }),
       });
       if (!res.ok) throw new Error("grant failed");
-      const { url, mimeType } = await res.json();
+      const { url, mimeType, mp4FallbackUrl } = await res.json();
       const player = playerRef.current!;
       player.src({ src: url, type: mimeType || "video/mp4" });
+      attachPlaybackFallback(player, mp4FallbackUrl);
       attachContentTracking();
       await player.play()?.catch(() => {});
       setStatus("playing");
@@ -1135,9 +1146,10 @@ export default forwardRef(function VideoPlayer(
       if (adminPreview) {
         const res = await fetch(`/api/admin/videos/${videoId}/playback`, { method: "POST" });
         if (!res.ok) throw new Error("admin playback failed");
-        const { url, mimeType } = await res.json();
+        const { url, mimeType, mp4FallbackUrl } = await res.json();
         const player = playerRef.current!;
         player.src({ src: url, type: mimeType || "video/mp4" });
+        attachPlaybackFallback(player, mp4FallbackUrl);
         if (muted) player.muted(true);
         attachContentTracking();
         await player.play()?.catch(() => {});

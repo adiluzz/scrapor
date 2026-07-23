@@ -91,7 +91,40 @@ function nginxAssetUrl(opts: { videoId: string; file: string; expires: number })
 export type StreamGrant = {
   url: string;
   mimeType: "video/mp4" | "application/x-mpegURL";
+  /** Progressive MP4 URL when primary is HLS (browser fallback if HLS fails). */
+  mp4FallbackUrl?: string;
 };
+
+/** HLS in the browser requires CDN CORS (see infra/s3-cors-policy.json). Off by default. */
+export function isHlsPlaybackEnabled(): boolean {
+  return process.env.HLS_PLAYBACK_ENABLED === "true";
+}
+
+function mintMp4StreamUrl(opts: {
+  videoId: string;
+  siteId: string;
+  clientIp: string;
+  adSessionId: string;
+  expires: number;
+  adminPreview?: boolean;
+}): string {
+  if (isCloudFrontConfigured()) {
+    const objectPath = `/${s3Keys.video(opts.siteId, opts.videoId)}`;
+    return signCloudFrontCustom({
+      objectPath,
+      expiresEpochSec: opts.expires,
+      clientIp: opts.clientIp,
+    });
+  }
+  return nginxStreamUrl({
+    videoId: opts.videoId,
+    siteId: opts.siteId,
+    clientIp: opts.clientIp,
+    adSessionId: opts.adSessionId,
+    expires: opts.expires,
+    adminPreview: opts.adminPreview,
+  });
+}
 
 export function mintStreamUrl(opts: {
   videoId: string;
@@ -101,35 +134,33 @@ export function mintStreamUrl(opts: {
   ttlSeconds?: number;
   adminPreview?: boolean;
   s3HlsMasterKey?: string | null;
+  /** Force progressive MP4 even when HLS is available. */
+  forceMp4?: boolean;
 }): StreamGrant {
   const ttl = opts.ttlSeconds ?? TTL;
   const expires = Math.floor(Date.now() / 1000) + ttl;
+  const mp4Url = mintMp4StreamUrl({ ...opts, expires });
 
-  if (isCloudFrontConfigured()) {
-    if (opts.s3HlsMasterKey) {
-      const prefix = opts.s3HlsMasterKey.replace(/master\.m3u8$/, "");
-      return {
-        url: signCloudFrontCustomWildcard({
-          objectPathPrefix: `/${prefix}`,
-          expiresEpochSec: expires,
-          clientIp: opts.clientIp,
-        }),
-        mimeType: "application/x-mpegURL",
-      };
-    }
-    const objectPath = `/${s3Keys.video(opts.siteId, opts.videoId)}`;
+  if (
+    isCloudFrontConfigured() &&
+    !opts.forceMp4 &&
+    isHlsPlaybackEnabled() &&
+    opts.s3HlsMasterKey
+  ) {
+    const prefix = opts.s3HlsMasterKey.replace(/master\.m3u8$/, "");
     return {
-      url: signCloudFrontCustom({
-        objectPath,
+      url: signCloudFrontCustomWildcard({
+        objectPathPrefix: `/${prefix}`,
         expiresEpochSec: expires,
         clientIp: opts.clientIp,
       }),
-      mimeType: "video/mp4",
+      mimeType: "application/x-mpegURL",
+      mp4FallbackUrl: mp4Url,
     };
   }
 
   return {
-    url: nginxStreamUrl({ ...opts, expires }),
+    url: mp4Url,
     mimeType: "video/mp4",
   };
 }

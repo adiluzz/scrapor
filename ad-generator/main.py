@@ -14,7 +14,7 @@ import redis
 
 from config import CONFIG
 from db import connect, list_active_iterations
-from runner import process_iteration
+from runner import process_iteration, purge_work_root
 
 logging.basicConfig(
     level=logging.INFO,
@@ -30,6 +30,13 @@ def _j(msg: dict) -> str:
 def main() -> None:
     r = redis.from_url(os.environ.get("REDIS_URL", "redis://localhost:6379"))
     conn = connect()
+
+    try:
+        purged = purge_work_root()
+        if purged:
+            log.info(_j({"event": "work_dir_purged", "removed": purged, "path": CONFIG.work_dir}))
+    except Exception as e:  # noqa: BLE001
+        log.error(_j({"event": "work_dir_purge_failed", "error": str(e)}))
 
     try:
         resumable = list_active_iterations(conn)

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import shutil
 import traceback
 from pathlib import Path
 
@@ -24,6 +25,41 @@ from providers import get_provider
 log = logging.getLogger("ad-generator.runner")
 
 
+def iteration_work_dir(promo_ad_id: str, iteration_number: int) -> Path:
+    return Path(CONFIG.work_dir) / promo_ad_id / f"iter-{iteration_number}"
+
+
+def cleanup_iteration_work_dir(promo_ad_id: str, iteration_number: int) -> None:
+    """Remove local scratch for one iteration after upload/failure (outputs live on S3)."""
+    work_dir = iteration_work_dir(promo_ad_id, iteration_number)
+    shutil.rmtree(work_dir, ignore_errors=True)
+    parent = Path(CONFIG.work_dir) / promo_ad_id
+    try:
+        if parent.is_dir() and not any(parent.iterdir()):
+            parent.rmdir()
+    except OSError:
+        pass
+
+
+def purge_work_root() -> int:
+    """Wipe leftover scratch on startup (crash remnants). Returns removed top-level count."""
+    root = Path(CONFIG.work_dir)
+    if not root.exists():
+        root.mkdir(parents=True, exist_ok=True)
+        return 0
+    removed = 0
+    for child in list(root.iterdir()):
+        try:
+            if child.is_dir():
+                shutil.rmtree(child, ignore_errors=True)
+            else:
+                child.unlink(missing_ok=True)
+            removed += 1
+        except OSError as e:
+            log.warning("work_purge_failed path=%s err=%s", child, e)
+    return removed
+
+
 def process_iteration(conn, iteration_id: str) -> None:
     job = load_iteration(conn, iteration_id)
     if not job:
@@ -39,13 +75,13 @@ def process_iteration(conn, iteration_id: str) -> None:
         model_params["taglineDomain"] = job["siteDomain"]
 
     set_iteration_status(conn, iteration_id, "GENERATING")
+    work_dir = iteration_work_dir(promo_ad_id, iteration_number)
 
     try:
         ensure_brand_assets(
             tagline_domain=model_params.get("taglineDomain"),
             logo_path=job.get("logoPath"),
         )
-        work_dir = Path(CONFIG.work_dir) / promo_ad_id / f"iter-{iteration_number}"
         work_dir.mkdir(parents=True, exist_ok=True)
 
         if generation_mode == "CLIP_COMPOSE":
@@ -134,3 +170,5 @@ def process_iteration(conn, iteration_id: str) -> None:
             traceback.format_exc()[-600:],
         )
         fail_iteration(conn, iteration_id, promo_ad_id, str(e))
+    finally:
+        cleanup_iteration_work_dir(promo_ad_id, iteration_number)

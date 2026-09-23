@@ -135,6 +135,11 @@ SCRAPE_SEARCH_RESULT_PREFIX = "scrape:search:result:"
 # behind the VPN proxy and blocking the dispatcher for over a day).
 SCRAPE_SEARCH_TIMEOUT_SEC = int(os.environ.get("SCRAPE_SEARCH_TIMEOUT_SEC", "600"))
 SCRAPE_SEARCH_SCRIPT = os.path.join(ROOT, "scripts", "scrape_search.py")
+# How many scrape runs may download at once. Each run fans out to
+# SCRAPE_DOWNLOAD_CONCURRENCY ffmpeg encodes; on the 2-vCPU / 8GB host, running
+# several at once pegs the CPU and OOM-kills the web process. Default 1: the
+# next QUEUED run starts when the current one finishes.
+SCRAPE_RUN_CONCURRENCY = max(1, int(os.environ.get("SCRAPE_RUN_CONCURRENCY", "1")))
 # How often the dispatcher re-checks Postgres for QUEUED runs missing from the
 # Redis list (lost enqueue, Redis restart, ...) and puts them back.
 SCRAPE_QUEUE_RESCAN_SEC = int(os.environ.get("SCRAPE_QUEUE_RESCAN_SEC", "60"))
@@ -1469,6 +1474,11 @@ def _release_run(run_id: str) -> None:
         _ACTIVE_RUNS.discard(run_id)
 
 
+def _scrape_slots_full() -> bool:
+    with _ACTIVE_RUNS_LOCK:
+        return len(_ACTIVE_RUNS) >= SCRAPE_RUN_CONCURRENCY
+
+
 def _start_scrape_run(run_id: str) -> None:
     if not _claim_run(run_id):
         _event("info", "run_already_active", runId=run_id)
@@ -1842,9 +1852,13 @@ def main():
     last_queue_rescan = time.time()
     while True:
         try:
-            keys = queue_priority
+            keys = list(queue_priority)
             if hls_busy.is_set():
-                keys = [k for k in queue_priority if k != HLS_BACKFILL_QUEUE_KEY]
+                keys = [k for k in keys if k != HLS_BACKFILL_QUEUE_KEY]
+            # Leave queued scrape runs on the list until a slot frees, so they
+            # start when the running one finishes instead of all at once.
+            if _scrape_slots_full():
+                keys = [k for k in keys if k != QUEUE_KEY]
             item = r.blpop(keys, timeout=5)
             now = time.time()
             if (

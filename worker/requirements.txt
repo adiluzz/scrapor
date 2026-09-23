@@ -13,6 +13,10 @@ xnxx-api==2.1
 xvideos-api==2.2.2
 youporn-api==1.5.2
 hqporner-api==2.1.1
+# Shared base of all the above. They pull it in unpinned, and 4.x removed
+# `setup_logger`, which makes every one of them fail to import — pin the last
+# compatible release so a rebuild can't silently disable the API searchers.
+eaf-base-api==3.3.2
 # HTML scraping for sources without a working API (Eporner, RedTube, SpankBang).
 curl_cffi>=0.7.0
 beautifulsoup4>=4.12.0

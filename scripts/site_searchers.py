@@ -223,6 +223,8 @@ _HTML_HEADERS = {
     "Accept-Language": "en-US,en;q=0.9",
 }
 _DUR_RE = re.compile(r"\b(\d{1,2}):([0-5]\d)(?::([0-5]\d))?\b")
+# XNXX-style listings print "24min" / "1h 12min" instead of mm:ss.
+_DUR_MIN_RE = re.compile(r"\b(?:(\d{1,2})\s*h\s*)?(\d{1,3})\s*min\b", re.I)
 
 
 def _scrape_proxy():
@@ -408,11 +410,15 @@ def _find_duration(node):
     for _ in range(4):
         if node is None or not hasattr(node, "get_text"):
             break
-        m = _DUR_RE.search(node.get_text(" ", strip=True))
+        text = node.get_text(" ", strip=True)
+        m = _DUR_RE.search(text)
         if m:
             if m.group(3):
                 return int(m.group(1)) * 3600 + int(m.group(2)) * 60 + int(m.group(3))
             return int(m.group(1)) * 60 + int(m.group(2))
+        m = _DUR_MIN_RE.search(text)
+        if m:
+            return int(m.group(1) or 0) * 3600 + int(m.group(2)) * 60
         node = getattr(node, "parent", None)
     return 0
 
@@ -470,6 +476,12 @@ def _html_search(source, query, count, min_duration, *, cursor,
             soup = BeautifulSoup(html, "html.parser")
             matching = 0
             new_urls = 0
+            anchors = []
+            # Listings usually have two anchors per video: a thumbnail anchor
+            # (img, no text) and a title anchor (text, no img) in a sibling
+            # branch. Index thumbnails by video URL first so the title anchor
+            # can pick up the image it doesn't contain itself.
+            thumbs_by_url: dict[str, str] = {}
             for a in soup.find_all("a", href=True):
                 full = urljoin(base, a["href"])
                 parsed = urlparse(full)
@@ -477,12 +489,18 @@ def _html_search(source, query, count, min_duration, *, cursor,
                     continue
                 if not link_re.search(parsed.path):
                     continue
-                matching += 1
                 # Keep query string when it carries the video id (Pornhub viewkey).
                 if parsed.query and re.search(r"(?:^|&)(?:viewkey|v)=", parsed.query, re.I):
                     clean = f"{parsed.scheme}://{parsed.netloc}{parsed.path}?{parsed.query}"
                 else:
                     clean = f"{parsed.scheme}://{parsed.netloc}{parsed.path}"
+                anchors.append((a, clean))
+                if clean not in thumbs_by_url:
+                    thumb = _find_thumb(a)
+                    if thumb:
+                        thumbs_by_url[clean] = thumb
+            for a, clean in anchors:
+                matching += 1
                 if clean in seen:
                     continue
                 dur = _find_duration(a)
@@ -495,7 +513,7 @@ def _html_search(source, query, count, min_duration, *, cursor,
                 seen.add(clean)
                 new_urls += 1
                 out.append(_norm(clean, title, dur or None,
-                                 thumbnail=_find_thumb(a)))
+                                 thumbnail=thumbs_by_url.get(clean) or _find_thumb(a)))
                 if len(out) >= count:
                     break
             if matching == 0:

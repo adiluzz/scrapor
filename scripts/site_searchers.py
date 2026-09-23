@@ -431,6 +431,25 @@ def _find_thumb(node):
     return ""
 
 
+def _looks_like_duration(text):
+    return bool(_DUR_RE.fullmatch((text or "").strip()))
+
+
+def _anchor_title(a):
+    """Best-effort title for a search-result anchor. Thumbnail anchors (e.g. on
+    YouPorn) often contain only the duration overlay as text; the real title
+    then lives in the thumbnail img's alt attribute."""
+    candidates = [a.get("title"), a.get("data-title"), a.get_text(" ", strip=True)]
+    img = a.find("img") if hasattr(a, "find") else None
+    if img is not None:
+        candidates.append(img.get("alt"))
+    for cand in candidates:
+        cand = str(cand or "").strip()
+        if cand and cand.lower() != "unknown" and not _looks_like_duration(cand):
+            return cand
+    return ""
+
+
 def _html_search(source, query, count, min_duration, *, cursor,
                  domain, base, page_url, link_re, per_page=36):
     """HTML search starting at page `cursor`. Returns (results, next_page, exhausted)."""
@@ -470,9 +489,8 @@ def _html_search(source, query, count, min_duration, *, cursor,
                 if dur and dur < min_duration:
                     seen.add(clean)
                     continue
-                title = (a.get("title") or a.get("data-title")
-                         or a.get_text(" ", strip=True) or "").strip()
-                if not title or title.lower() == "unknown":
+                title = _anchor_title(a)
+                if not title:
                     continue
                 seen.add(clean)
                 new_urls += 1
@@ -1159,7 +1177,11 @@ def search_xnxx(query, count, cursor=0, min_duration=600, mode="query"):
         import xnxx_api
         client = xnxx_api.Client()
         length = _xnxx_length_filter(min_duration)
-        res = await client.search(query, length=length)
+        # xnxx_api's search() is sync in newer versions (returns Search directly)
+        # and async in older ones — support both.
+        res = client.search(query, length=length)
+        if inspect.isawaitable(res):
+            res = await res
         try:
             total_p = int(_sget(res, "total_pages", 1) or 1)
         except Exception:

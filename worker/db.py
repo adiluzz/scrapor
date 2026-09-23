@@ -513,6 +513,17 @@ def list_active_runs(conn):
         return [r[0] for r in cur.fetchall()]
 
 
+def list_queued_runs(conn):
+    """Run ids still waiting to start, oldest first (used to heal a Redis queue
+    that lost entries while the worker was up)."""
+    with conn.cursor() as cur:
+        cur.execute(
+            "SELECT id FROM \"ScrapeRun\" WHERE status = 'QUEUED' "
+            'ORDER BY "createdAt" ASC'
+        )
+        return [r[0] for r in cur.fetchall()]
+
+
 def load_run_persisted_totals(conn, run_id: str) -> dict:
     """Totals derived from persisted videos + outcomes (survive worker restarts)."""
     with conn.cursor() as cur:

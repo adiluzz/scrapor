@@ -43,7 +43,7 @@ import storage  # noqa: E402
 import media  # noqa: E402
 import tpdb  # noqa: E402
 from site_searchers import SEARCHERS  # noqa: E402
-from scrape_search import apply_download_urls, refresh_download_urls, resolve_urls, search_candidates  # noqa: E402
+from scrape_search import apply_download_urls, refresh_download_urls, resolve_urls  # noqa: E402
 
 logging.basicConfig(
     level=logging.INFO,
@@ -129,6 +129,15 @@ HLS_BACKFILL_DELAY_SEC = float(os.environ.get("HLS_BACKFILL_DELAY_SEC", "30"))
 HLS_BACKFILL_LOCK_SEC = int(os.environ.get("HLS_BACKFILL_LOCK_SEC", "7200"))
 HLS_BACKFILL_RESCAN_SEC = int(os.environ.get("HLS_BACKFILL_RESCAN_SEC", "1800"))
 SCRAPE_SEARCH_RESULT_PREFIX = "scrape:search:result:"
+# Hard wall-clock cap for one interactive search/URL-resolve request. The search
+# runs in a child process so a hung HTTP call inside a searcher can be killed
+# instead of wedging the worker (curl_cffi was seen ignoring its own timeout
+# behind the VPN proxy and blocking the dispatcher for over a day).
+SCRAPE_SEARCH_TIMEOUT_SEC = int(os.environ.get("SCRAPE_SEARCH_TIMEOUT_SEC", "600"))
+SCRAPE_SEARCH_SCRIPT = os.path.join(ROOT, "scripts", "scrape_search.py")
+# How often the dispatcher re-checks Postgres for QUEUED runs missing from the
+# Redis list (lost enqueue, Redis restart, ...) and puts them back.
+SCRAPE_QUEUE_RESCAN_SEC = int(os.environ.get("SCRAPE_QUEUE_RESCAN_SEC", "60"))
 # Shared volume the web app writes creator uploads to (see docker-compose).
 UPLOAD_DIR = os.environ.get("UPLOAD_DIR", os.path.join(ROOT, "uploads"))
 # Optional HTTP(S) proxy for source downloads (or use docker-compose.vpn.yml).
@@ -1269,32 +1278,67 @@ def _process_selected(conn, run, candidates, totals) -> str:
     return "stopped" if stopped else "done"
 
 
+def _parse_search_output(stdout: str) -> dict:
+    """scrape_search.py prints one JSON object; tolerate stray library prints."""
+    text = (stdout or "").strip()
+    try:
+        return json.loads(text)
+    except ValueError:
+        for line in reversed(text.splitlines()):
+            line = line.strip()
+            if line.startswith("{"):
+                return json.loads(line)
+        raise
+
+
+def _run_scrape_search_isolated(payload_json: str) -> dict:
+    """Run one search request in a child process with a hard deadline."""
+    try:
+        proc = subprocess.run(
+            [sys.executable, SCRAPE_SEARCH_SCRIPT],
+            input=payload_json,
+            capture_output=True,
+            text=True,
+            timeout=SCRAPE_SEARCH_TIMEOUT_SEC,
+        )
+    except subprocess.TimeoutExpired:
+        return {"ok": False, "error": f"Search timed out after {SCRAPE_SEARCH_TIMEOUT_SEC}s"}
+    except Exception as e:  # noqa: BLE001
+        return {"ok": False, "error": f"Search process failed to start: {e!s}"[:500]}
+    if proc.returncode != 0:
+        err = (proc.stderr or proc.stdout or "search process failed").strip()
+        return {"ok": False, "error": err[-500:]}
+    try:
+        result = _parse_search_output(proc.stdout)
+    except ValueError:
+        return {"ok": False, "error": "Search returned invalid output"}
+    if not isinstance(result, dict):
+        return {"ok": False, "error": "Search returned invalid output"}
+    return {"ok": True, **result}
+
+
 def process_scrape_search(r, payload_json: str):
-    """Handle interactive scrape preview search requests from the web app."""
-    req = json.loads(payload_json)
+    """Handle interactive scrape preview search requests from the web app.
+
+    Runs from a background thread (never the dispatcher loop) and delegates the
+    actual site scraping to a killable child process, so neither a slow search
+    nor a hung HTTP call can stop queued scrape runs from being dispatched.
+    """
+    try:
+        req = json.loads(payload_json)
+    except ValueError:
+        _event("warning", "scrape_search_bad_payload", payload=payload_json[:200])
+        return
     rid = req.get("id") or ""
     result_key = f"{SCRAPE_SEARCH_RESULT_PREFIX}{rid}"
-    try:
-        if req.get("urls"):
-            result = resolve_urls(req["urls"])
-        else:
-            result = search_candidates(
-                query=req["query"],
-                sources=req["sources"],
-                min_duration_sec=int(req.get("minDurationSec", 600)),
-                cursors=req.get("cursors"),
-                limit=int(req.get("limit", 50)),
-                exclude_urls=req.get("excludeUrls"),
-                skip=int(req.get("skip", 0) or 0),
-                search_mode=str(req.get("searchMode") or "query"),
-            )
-        payload = {"ok": True, **result}
-    except Exception as e:  # noqa: BLE001
-        payload = {"ok": False, "error": str(e)[:500]}
+    started = time.time()
+    payload = _run_scrape_search_isolated(payload_json)
     # Keep result long enough for the web app's 30-minute poll window.
     r.set(result_key, json.dumps(payload), ex=3600)
-    _event("info", "scrape_search_done", requestId=rid, videos=len(payload.get("videos") or []),
-           ok=payload.get("ok", True))
+    _event("info" if payload.get("ok", True) else "warning", "scrape_search_done",
+           requestId=rid, videos=len(payload.get("videos") or []),
+           ok=payload.get("ok", True), error=payload.get("error"),
+           elapsedSec=round(time.time() - started, 1))
 
 
 def _redis():
@@ -1373,23 +1417,84 @@ def backfill_pornstar_tpdb(conn, limit: int | None = None, delay_sec: float = 0.
     _event("info", "pornstar_tpdb_backfill_done", ok=ok, fail=fail, total=len(rows))
 
 
-def _run_background(job_name: str, fn, *args):
-    """Run a long job in a thread so the queue loop can still handle search requests."""
+def _run_background(job_name: str, fn, *args, on_done=None, with_conn: bool = True):
+    """Run a job in a thread so the dispatcher loop never blocks on it.
+
+    `fn` receives a fresh DB connection as its first argument when `with_conn`
+    is set. `on_done` (if given) always runs after `fn`, even on failure.
+    """
 
     def _wrapper():
-        conn = db.connect()
+        conn = db.connect() if with_conn else None
         try:
-            fn(conn, *args)
+            if conn is not None:
+                fn(conn, *args)
+            else:
+                fn(*args)
         except Exception as e:  # noqa: BLE001
             _event("error", "background_job_failed", job=job_name, reason=str(e)[:500],
                    traceback=traceback.format_exc()[-800:])
         finally:
-            try:
-                conn.close()
-            except Exception:
-                pass
+            if conn is not None:
+                try:
+                    conn.close()
+                except Exception:
+                    pass
+            if on_done is not None:
+                try:
+                    on_done()
+                except Exception:  # noqa: BLE001
+                    pass
 
     threading.Thread(target=_wrapper, name=f"worker-{job_name}", daemon=True).start()
+
+
+# Scrape runs currently being processed by this worker. Guards against the same
+# run id being started twice when it appears more than once on the Redis list
+# (startup resume + orphan rescan + admin re-queue can all push the same id).
+_ACTIVE_RUNS: set[str] = set()
+_ACTIVE_RUNS_LOCK = threading.Lock()
+
+
+def _claim_run(run_id: str) -> bool:
+    with _ACTIVE_RUNS_LOCK:
+        if run_id in _ACTIVE_RUNS:
+            return False
+        _ACTIVE_RUNS.add(run_id)
+        return True
+
+
+def _release_run(run_id: str) -> None:
+    with _ACTIVE_RUNS_LOCK:
+        _ACTIVE_RUNS.discard(run_id)
+
+
+def _start_scrape_run(run_id: str) -> None:
+    if not _claim_run(run_id):
+        _event("info", "run_already_active", runId=run_id)
+        return
+    _run_background("scrape-run", process_run, run_id, on_done=lambda: _release_run(run_id))
+
+
+def _requeue_orphaned_runs(conn, r) -> int:
+    """Push QUEUED runs that are neither on the Redis list nor already being
+    processed back onto the queue. Covers lost enqueues (Redis restart, a failed
+    RPUSH after the web app flipped the row to QUEUED, a job popped by a worker
+    that died before marking it RUNNING)."""
+    queued = db.list_queued_runs(conn)
+    if not queued:
+        return 0
+    on_list = set()
+    for raw in r.lrange(QUEUE_KEY, 0, -1):
+        on_list.add(raw.decode() if isinstance(raw, bytes) else raw)
+    with _ACTIVE_RUNS_LOCK:
+        active = set(_ACTIVE_RUNS)
+    missing = [rid for rid in queued if rid not in on_list and rid not in active]
+    for rid in missing:
+        r.rpush(QUEUE_KEY, rid)
+    if missing:
+        _event("warning", "scrape_runs_requeued", count=len(missing), runIds=missing)
+    return len(missing)
 
 
 def _process_source(conn, run, source, min_dur, max_per_site, seen, totals) -> str:
@@ -1688,15 +1793,42 @@ def main():
     except Exception as e:  # noqa: BLE001
         log.error(_j(f"resume scan failed: {e}"))
 
-    try:
-        seed_hls_backfill_queue(conn, r)
-        log.info(_j("hls backfill startup scan complete"))
-    except Exception as e:  # noqa: BLE001
-        log.error(_j(f"hls backfill seed failed: {e}"))
+    # HLS backfill stays one-at-a-time and lowest priority, but runs in its own
+    # thread: while a job (or the S3-heavy seed scan) is in flight the dispatcher
+    # simply stops popping that queue instead of blocking on it.
+    hls_busy = threading.Event()
+    hls_seed_busy = threading.Event()
+
+    def _seed_hls_in_background(label: str):
+        if hls_seed_busy.is_set():
+            return
+        hls_seed_busy.set()
+
+        def _seed(seed_conn):
+            seed_hls_backfill_queue(seed_conn, r)
+            log.info(_j(f"hls backfill {label} scan complete"))
+
+        _run_background("hls-seed", _seed, on_done=hls_seed_busy.clear)
+
+    def _hls_backfill_in_background(video_id: str):
+        hls_busy.set()
+
+        def _job(job_conn):
+            try:
+                process_hls_backfill(job_conn, video_id, r)
+            finally:
+                if HLS_BACKFILL_DELAY_SEC > 0:
+                    time.sleep(HLS_BACKFILL_DELAY_SEC)
+
+        _run_background("hls-backfill", _job, on_done=hls_busy.clear)
+
+    if HLS_BACKFILL_ENABLED:
+        _seed_hls_in_background("startup")
 
     log.info(_j("worker started, waiting for jobs"))
-    # Search / TPDB enrich must not wait behind long scrape/creator jobs.
-    # HLS backfill is lowest priority — runs when other queues are idle.
+    # The dispatcher loop must never run site/network/media work itself — every
+    # job is handed to a thread so a slow or hung job cannot starve the others.
+    # Search / TPDB enrich are listed first so they are picked before long jobs.
     queue_priority = [
         SCRAPE_SEARCH_QUEUE_KEY,
         PORNSTAR_TPDB_QUEUE_KEY,
@@ -1707,25 +1839,38 @@ def main():
         HLS_BACKFILL_QUEUE_KEY,
     ]
     last_hls_rescan = time.time()
+    last_queue_rescan = time.time()
     while True:
         try:
-            item = r.blpop(queue_priority, timeout=5)
-            if not item:
-                if (
-                    HLS_BACKFILL_ENABLED
-                    and HLS_BACKFILL_RESCAN_SEC > 0
-                    and time.time() - last_hls_rescan >= HLS_BACKFILL_RESCAN_SEC
-                ):
+            keys = queue_priority
+            if hls_busy.is_set():
+                keys = [k for k in queue_priority if k != HLS_BACKFILL_QUEUE_KEY]
+            item = r.blpop(keys, timeout=5)
+            now = time.time()
+            if (
+                HLS_BACKFILL_ENABLED
+                and HLS_BACKFILL_RESCAN_SEC > 0
+                and now - last_hls_rescan >= HLS_BACKFILL_RESCAN_SEC
+            ):
+                last_hls_rescan = now
+                _seed_hls_in_background("periodic")
+            if SCRAPE_QUEUE_RESCAN_SEC > 0 and now - last_queue_rescan >= SCRAPE_QUEUE_RESCAN_SEC:
+                last_queue_rescan = now
+                try:
+                    _requeue_orphaned_runs(conn, r)
+                except Exception as e:  # noqa: BLE001
+                    log.error(_j(f"scrape queue rescan failed: {e}"))
                     try:
-                        seed_hls_backfill_queue(conn, r)
-                        last_hls_rescan = time.time()
-                    except Exception as e:  # noqa: BLE001
-                        log.error(_j(f"hls backfill periodic scan failed: {e}"))
+                        conn.close()
+                    except Exception:  # noqa: BLE001
+                        pass
+                    conn = db.connect()
+            if not item:
                 continue
             queue = item[0].decode() if isinstance(item[0], bytes) else item[0]
             job_id = item[1].decode() if isinstance(item[1], bytes) else item[1]
             if queue == SCRAPE_SEARCH_QUEUE_KEY:
-                process_scrape_search(r, job_id)
+                _run_background("scrape-search", process_scrape_search, r, job_id, with_conn=False)
             elif queue == PORNSTAR_TPDB_QUEUE_KEY:
                 _run_background("pornstar-tpdb", process_pornstar_tpdb, job_id)
             elif queue == PREVIEW_QUEUE_KEY:
@@ -1735,11 +1880,9 @@ def main():
             elif queue == CREATOR_QUEUE_KEY:
                 _run_background("creator", process_creator_upload, job_id)
             elif queue == HLS_BACKFILL_QUEUE_KEY:
-                process_hls_backfill(conn, job_id, r)
-                if HLS_BACKFILL_DELAY_SEC > 0:
-                    time.sleep(HLS_BACKFILL_DELAY_SEC)
+                _hls_backfill_in_background(job_id)
             else:
-                _run_background("scrape-run", process_run, job_id)
+                _start_scrape_run(job_id)
         except Exception as e:
             log.error(_j(f"worker loop error: {e}"))
             time.sleep(3)

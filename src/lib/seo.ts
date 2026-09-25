@@ -341,7 +341,6 @@ export function videoObjectJsonLd(input: {
   pageUrl: string;
   viewCount?: number;
   tags?: string[];
-  embedUrl?: string;
   siteName: string;
   siteKeywords?: string[];
 }) {
@@ -360,7 +359,6 @@ export function videoObjectJsonLd(input: {
     uploadDate: input.uploadDate,
     duration: input.durationIso,
     url: input.pageUrl,
-    embedUrl: input.embedUrl || input.pageUrl,
     inLanguage: "en",
     isFamilyFriendly: false,
     ...(keywords ? { keywords } : {}),

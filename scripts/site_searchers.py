@@ -747,7 +747,7 @@ def _xhamster_list_search(query, count, cursor=0, min_duration=600, mode="query"
 
 
 def _html_xhamster(query, count, cursor=0, min_duration=600, mode="query"):
-    """Legacy listing-only entry (tests); prefer search_xhamster for enrichment."""
+    """Listing-only xHamster search. Detail pages are fetched at download time."""
     out, page, exhausted, age_gate = _xhamster_list_search(
         query, count, cursor, min_duration, mode=mode,
     )
@@ -1401,39 +1401,13 @@ def search_pornhub(query, count, cursor=0, min_duration=600, mode="query"):
 
 # ── XHamster ──────────────────────────────────────────────────────────
 def search_xhamster(query, count, cursor=0, min_duration=600, mode="query"):
-    """Search xHamster via HTML + window.initials; enrich each hit from its video page."""
-    stubs, page, exhausted, age_gate = _xhamster_list_search(
-        query, count, cursor, min_duration, mode=mode,
-    )
-    if age_gate and not stubs:
-        return [], page, True
+    """Search xHamster listings only.
 
-    out = []
-    for stub in stubs[:count]:
-        clean = stub.get("url") or ""
-        if not clean:
-            continue
-        try:
-            detail_html = _xhamster_get(clean)
-            if not detail_html:
-                out.append(stub)
-                continue
-            meta = _xh_parse_detail(detail_html, clean)
-            out.append(_norm(
-                clean,
-                meta.get("title") or stub.get("title"),
-                meta.get("duration_sec") or stub.get("duration_sec"),
-                thumbnail=meta.get("thumbnail") or stub.get("thumbnail"),
-                tags=meta.get("tags"),
-                pornstars=meta.get("pornstars"),
-                categories=meta.get("categories"),
-                description=meta.get("description") or "",
-                m3u8=meta.get("_m3u8_base_url"),
-            ))
-        except Exception:
-            out.append(stub)
-
-    return out, page, exhausted
+    Preview used to fetch every video page here for tags/m3u8. That is 50+
+    sequential VPN requests and is what timed out "load 50 more". The picker
+    only needs title/thumb/duration; download-time refresh fills the rest.
+    """
+    return _html_xhamster(query, count, cursor, min_duration, mode=mode)
 
 
 # ── XVideos ───────────────────────────────────────────────────────────

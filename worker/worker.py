@@ -43,7 +43,12 @@ import storage  # noqa: E402
 import media  # noqa: E402
 import tpdb  # noqa: E402
 from site_searchers import SEARCHERS  # noqa: E402
-from scrape_search import apply_download_urls, refresh_download_urls, resolve_urls  # noqa: E402
+from scrape_search import (  # noqa: E402
+    apply_download_urls,
+    apply_source_metadata,
+    refresh_download_urls,
+    resolve_urls,
+)
 
 logging.basicConfig(
     level=logging.INFO,
@@ -381,6 +386,7 @@ def _refresh_video_download_urls(video: dict, source_site: str, attempt: int) ->
     refreshed = refresh_download_urls(url, source_site)
     if refreshed:
         apply_download_urls(video, refreshed)
+        apply_source_metadata(video, refreshed)
     _event(
         "info",
         "download_urls_refreshed",
@@ -1091,6 +1097,7 @@ def process_redownload(conn, video_id: str):
             elif item.get("duration_sec"):
                 video["duration_sec"] = item["duration_sec"]
             apply_download_urls(video, item)
+            apply_source_metadata(video, item)
             break
     except Exception as e:  # noqa: BLE001
         _event("warning", "redownload_resolve_failed", videoId=video_id, reason=str(e)[:300])

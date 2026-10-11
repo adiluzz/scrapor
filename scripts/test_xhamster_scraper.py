@@ -87,20 +87,18 @@ class XHamsterParseTests(unittest.TestCase):
 
 class XHamsterSearchTests(unittest.TestCase):
     @patch.object(ss, "_xhamster_get")
-    def test_search_enriches_from_detail_page(self, mock_get):
-        detail = SAMPLE_DETAIL_HTML
-        mock_get.side_effect = [SAMPLE_SEARCH_HTML, detail]
+    def test_search_uses_listing_only(self, mock_get):
+        mock_get.return_value = SAMPLE_SEARCH_HTML
 
         batch, cursor, exhausted = ss.search_xhamster("piss", 1, 0, 600)
         self.assertEqual(len(batch), 1)
-        self.assertEqual(batch[0]["title"], "Test Video")
-        self.assertEqual(batch[0]["duration_sec"], 720)
-        self.assertEqual(batch[0]["categories"], ["Pissing"])
-        self.assertEqual(batch[0]["tags"], ["Outdoor"])
-        self.assertEqual(batch[0]["pornstars"], ["Jane Doe"])
-        self.assertIn("_TPL_.h264.mp4.m3u8", batch[0]["_m3u8_base_url"] or "")
+        self.assertEqual(batch[0]["title"], "Test Slug")
+        self.assertEqual(batch[0]["duration_sec"], 900)
+        self.assertEqual(batch[0]["tags"], [])
+        self.assertFalse(batch[0].get("_m3u8_base_url"))
         self.assertEqual(cursor, 2)
         self.assertFalse(exhausted)
+        mock_get.assert_called_once()
 
     @patch.object(ss, "_xhamster_get", return_value="")
     def test_search_empty_on_fetch_failure(self, _mock_get):
@@ -144,9 +142,13 @@ def live_download_one():
     if not batch:
         raise SystemExit("no search results")
     v = batch[0]
+    from scrape_search import apply_download_urls, apply_source_metadata, refresh_download_urls
+    refreshed = refresh_download_urls(v.get("url") or "", "XHamster")
+    apply_download_urls(v, refreshed)
+    apply_source_metadata(v, refreshed)
     m3u8 = v.get("_m3u8_base_url")
     if not m3u8:
-        raise SystemExit("no m3u8 fast-path URL on candidate")
+        raise SystemExit("no m3u8 fast-path URL after download-time refresh")
     dest = "/tmp/xhamster-scraper-test.mp4"
     stream = m3u8.replace("_TPL_", "240p")
     print(f"=== downloading 30s via ffmpeg from {stream[:80]}... ===")

@@ -141,10 +141,23 @@ _DETAIL_REFRESH_PARSERS: dict[str, tuple] = {
 }
 
 _DOWNLOAD_URL_KEYS = ("_cdn_url", "_m3u8_base_url", "_part_urls")
+_METADATA_KEYS = (
+    "title",
+    "description",
+    "tags",
+    "pornstars",
+    "categories",
+    "thumbnail",
+    "duration_sec",
+)
 
 
 def refresh_download_urls(url: str, source_site: str | None = None) -> dict:
-    """Fetch fresh direct-download URLs from the source page (called before each download)."""
+    """Fetch the source page once for download URLs and catalog metadata.
+
+    Called before each download attempt so listing-only preview search (xHamster)
+    still gets tags/description/m3u8 when the user actually starts a run.
+    """
     raw = (url or "").strip()
     if not raw:
         return {}
@@ -161,7 +174,11 @@ def refresh_download_urls(url: str, source_site: str | None = None) -> dict:
     if not html:
         return {}
     meta = parse_fn(html, raw)
-    return {key: meta.get(key) for key in _DOWNLOAD_URL_KEYS}
+    out = {key: meta.get(key) for key in _DOWNLOAD_URL_KEYS}
+    for key in _METADATA_KEYS:
+        if meta.get(key):
+            out[key] = meta[key]
+    return out
 
 
 def apply_download_urls(target: dict, refreshed: dict) -> None:
@@ -176,6 +193,16 @@ def apply_download_urls(target: dict, refreshed: dict) -> None:
             target[key] = val
         else:
             target.pop(key, None)
+
+
+def apply_source_metadata(target: dict, refreshed: dict) -> None:
+    """Fill listing-only preview fields from a download-time detail fetch."""
+    if not refreshed:
+        return
+    for key in _METADATA_KEYS:
+        val = refreshed.get(key)
+        if val:
+            target[key] = val
 
 
 def resolve_video_url(url: str, conn) -> dict:

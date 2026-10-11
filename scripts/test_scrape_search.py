@@ -42,6 +42,39 @@ class RefreshDownloadUrlsTests(unittest.TestCase):
         )
         self.assertIn("_TPL_.h264.mp4.m3u8", out.get("_m3u8_base_url") or "")
 
+    @patch("scrape_search._xhamster_get")
+    def test_refresh_xhamster_includes_catalog_metadata(self, mock_get):
+        mock_get.return_value = (
+            '<html><script>window.initials={"videoModel":{"title":"Detail Title",'
+            '"duration":720,"description":"A desc","thumbURL":"https://cdn/t.jpg"},'
+            '"videoTagsComponent":{"tags":['
+            '{"name":"Outdoor","url":"https://xhamster.com/tags/outdoor"}]}}</script>'
+            "https://video-am.xhcdn.com/x/_TPL_.h264.mp4.m3u8</html>"
+        )
+        out = ss.refresh_download_urls(
+            "https://xhamster.com/videos/example-xhABC",
+            "XHamster",
+        )
+        self.assertEqual(out["title"], "Detail Title")
+        self.assertEqual(out["description"], "A desc")
+        self.assertEqual(out["tags"], ["Outdoor"])
+        self.assertIn("_TPL_.h264.mp4.m3u8", out.get("_m3u8_base_url") or "")
+
+    def test_apply_source_metadata_fills_listing_stub(self):
+        video = {"title": "Listing Title", "tags": [], "description": ""}
+        ss.apply_source_metadata(video, {
+            "title": "Detail Title",
+            "tags": ["Outdoor"],
+            "description": "A desc",
+            "pornstars": ["Jane"],
+            "_m3u8_base_url": "https://cdn/x.m3u8",
+        })
+        self.assertEqual(video["title"], "Detail Title")
+        self.assertEqual(video["tags"], ["Outdoor"])
+        self.assertEqual(video["description"], "A desc")
+        self.assertEqual(video["pornstars"], ["Jane"])
+        self.assertNotIn("_m3u8_base_url", video)
+
     def test_apply_download_urls_replaces_and_clears(self):
         video = {
             "_cdn_url": "https://old.example/a.mp4",

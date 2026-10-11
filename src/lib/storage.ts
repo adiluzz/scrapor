@@ -57,6 +57,9 @@ export const s3Keys = {
   hlsPrefix: (siteId: string, videoId: string) => `sites/${siteId}/videos/${videoId}/hls/`,
   pornstarImage: (siteId: string, pornstarId: string) => `sites/${siteId}/pornstars/${pornstarId}/image.jpg`,
   creatorAvatar: (siteId: string, creatorId: string) => `sites/${siteId}/creators/${creatorId}/avatar.jpg`,
+  talentPhoto: (siteId: string, talentId: string) => `sites/${siteId}/talent/${talentId}/photo.jpg`,
+  talentMedia: (siteId: string, talentId: string, mediaId: string, ext: string) =>
+    `sites/${siteId}/talent/${talentId}/media/${mediaId}.${ext}`,
 };
 
 export function resolveVideoStorageKey(video: {

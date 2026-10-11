@@ -40,6 +40,13 @@ export function stripPort(host: string | null | undefined): string {
 export function normalizeHost(host: string | null | undefined): string {
   let h = stripPort(host);
   if (h.startsWith("www.")) h = h.slice(4);
+  // Local multi-tenant: sharlila.localhost → sharlila.com
+  if (h.endsWith(".localhost")) {
+    const slug = h.slice(0, -".localhost".length);
+    if (slug && slug !== "www" && slug !== "admin") {
+      return `${slug}.com`;
+    }
+  }
   if (h === "localhost" || h === "127.0.0.1" || h === "") h = PRIMARY_DOMAIN;
   return h;
 }

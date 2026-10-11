@@ -1,20 +1,27 @@
 import Link from "next/link";
 import CookieSettings from "@/components/site/CookieSettings";
 import PopularLinksStrip from "@/components/site/PopularLinksStrip";
+import StudioFooter from "@/components/studio/StudioFooter";
 import type { PopularLink } from "@/lib/popular-links";
 
 export default function Footer({
   siteName,
+  siteId,
   isStudio = false,
   popularTags = [],
   popularPornstars = [],
 }: {
   siteName: string;
+  siteId?: string;
   isStudio?: boolean;
   popularTags?: PopularLink[];
   popularPornstars?: PopularLink[];
 }) {
   const showHubs = !isStudio && (popularTags.length > 0 || popularPornstars.length > 0);
+
+  if (isStudio) {
+    return <StudioFooter siteName={siteName} siteId={siteId} />;
+  }
 
   return (
     <footer className="mt-16 border-t border-zinc-800 bg-zinc-950">

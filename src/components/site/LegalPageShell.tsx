@@ -8,7 +8,7 @@ type Props = {
 
 export default function LegalPageShell({ title, siteName, children }: Props) {
   return (
-    <article className="mx-auto max-w-3xl">
+    <article className="mx-auto max-w-3xl px-5 py-10 sm:px-8">
       <p className="text-sm text-zinc-500">
         <Link href="/" className="hover:text-zinc-300">
           Home

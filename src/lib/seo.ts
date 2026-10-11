@@ -291,7 +291,11 @@ export function creatorsIndexDescription(site: SeoSite): string {
 }
 
 /** WebSite + SearchAction for homepage rich results. */
-export function websiteJsonLd(baseUrl: string, site: Pick<Site, "name" | "seoDescription" | "tagline">) {
+export function websiteJsonLd(
+  baseUrl: string,
+  site: Pick<Site, "name" | "seoDescription" | "tagline">,
+  opts?: { includeSearch?: boolean }
+) {
   return {
     "@context": "https://schema.org",
     "@type": "WebSite",
@@ -300,14 +304,18 @@ export function websiteJsonLd(baseUrl: string, site: Pick<Site, "name" | "seoDes
     description: siteHomeDescription(site),
     inLanguage: "en",
     isFamilyFriendly: false,
-    potentialAction: {
-      "@type": "SearchAction",
-      target: {
-        "@type": "EntryPoint",
-        urlTemplate: `${baseUrl}/search?q={search_term_string}`,
-      },
-      "query-input": "required name=search_term_string",
-    },
+    ...(opts?.includeSearch === false
+      ? {}
+      : {
+          potentialAction: {
+            "@type": "SearchAction",
+            target: {
+              "@type": "EntryPoint",
+              urlTemplate: `${baseUrl}/search?q={search_term_string}`,
+            },
+            "query-input": "required name=search_term_string",
+          },
+        }),
   };
 }
 

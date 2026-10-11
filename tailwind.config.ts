@@ -17,6 +17,10 @@ const config: Config = {
   ],
   theme: {
     extend: {
+      fontFamily: {
+        studio: ["var(--font-studio-sans)", "ui-sans-serif", "system-ui", "sans-serif"],
+        display: ["var(--font-studio-display)", "Georgia", "Cambria", "serif"],
+      },
       colors: {
         brand: {
           DEFAULT: brandStop("DEFAULT"),

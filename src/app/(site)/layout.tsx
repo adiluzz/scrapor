@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import Script from "next/script";
 import { cookies } from "next/headers";
+import { Cormorant_Garamond, Outfit } from "next/font/google";
 import { getCurrentSite } from "@/lib/site";
 import {
   adultMetadataExtras,
@@ -18,6 +19,20 @@ import GoogleAnalytics from "@/components/site/GoogleAnalytics";
 import BrandStyle from "@/components/brand/BrandStyle";
 import MobileStickyAd from "@/components/ads/MobileStickyAd";
 import { listPopularPornstars, listPopularTags } from "@/lib/popular-links";
+
+const studioDisplay = Cormorant_Garamond({
+  subsets: ["latin"],
+  weight: ["400", "500", "600", "700"],
+  variable: "--font-studio-display",
+  display: "swap",
+});
+
+const studioSans = Outfit({
+  subsets: ["latin"],
+  weight: ["300", "400", "500", "600"],
+  variable: "--font-studio-sans",
+  display: "swap",
+});
 
 export async function generateMetadata(): Promise<Metadata> {
   const site = await getCurrentSite();
@@ -66,7 +81,13 @@ export default async function SiteLayout({ children }: { children: React.ReactNo
     : await Promise.all([listPopularTags(site.id, 20), listPopularPornstars(site.id, 16)]);
 
   return (
-    <div className="min-h-screen overflow-x-hidden bg-zinc-950 text-zinc-100">
+    <div
+      className={`min-h-screen overflow-x-hidden ${
+        isStudio
+          ? `studio-root ${studioDisplay.variable} ${studioSans.variable}`
+          : "bg-zinc-950 text-zinc-100"
+      }`}
+    >
       <BrandStyle primaryColor={site.primaryColor} />
       <ConsentModeDefault />
       {gaId ? <GoogleAnalytics measurementId={gaId} /> : null}
@@ -80,9 +101,16 @@ export default async function SiteLayout({ children }: { children: React.ReactNo
         </>
       ) : null}
       <Header site={site} />
-      <main className="mx-auto w-full px-3 py-4 sm:px-4 sm:py-6 lg:px-6">{children}</main>
+      <main
+        className={
+          isStudio ? "w-full" : "mx-auto w-full px-3 py-4 sm:px-4 sm:py-6 lg:px-6"
+        }
+      >
+        {children}
+      </main>
       <Footer
         siteName={site.name}
+        siteId={site.id}
         isStudio={isStudio}
         popularTags={popularTags}
         popularPornstars={popularPornstars}

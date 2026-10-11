@@ -11,6 +11,7 @@ const nav = [
   { href: "/admin/scrape-runs", label: "Scrape runs" },
   { href: "/admin/videos", label: "Videos" },
   { href: "/admin/pornstars", label: "Pornstars" },
+  { href: "/admin/talent", label: "Talent" },
   { href: "/admin/creators", label: "Creators" },
   { href: "/admin/applications", label: "Applications" },
   { href: "/admin/api-keys", label: "API Keys" },

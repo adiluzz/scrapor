@@ -17,6 +17,16 @@ const nextConfig = {
         destination: "/icon",
         permanent: true,
       },
+      {
+        source: "/stars",
+        destination: "/team",
+        permanent: false,
+      },
+      {
+        source: "/stars/:slug",
+        destination: "/team/:slug",
+        permanent: false,
+      },
     ];
   },
 };

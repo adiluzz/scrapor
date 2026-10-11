@@ -5,6 +5,7 @@ import SearchBar from "@/components/site/SearchBar";
 import SignOutButton from "@/components/auth/SignOutButton";
 import Logo from "@/components/brand/Logo";
 import TubeMobileNav from "@/components/site/TubeMobileNav";
+import StudioMobileNav from "@/components/studio/StudioMobileNav";
 import { getCurrentUser } from "@/lib/session";
 
 export default async function Header({ site }: { site: Site }) {
@@ -12,14 +13,26 @@ export default async function Header({ site }: { site: Site }) {
   const isStudio = site.kind === "STUDIO";
 
   return (
-    <header className="sticky top-0 z-30 border-b border-zinc-800/90 bg-zinc-950/90 backdrop-blur supports-[backdrop-filter]:bg-zinc-950/80">
-      <div className="mx-auto flex w-full flex-col gap-3 px-4 py-3 md:flex-row md:items-center lg:px-6">
+    <header
+      className={
+        isStudio
+          ? "sticky top-0 z-40 border-b border-brand-400/15 bg-[#070605]/80 backdrop-blur-xl"
+          : "sticky top-0 z-30 border-b border-zinc-800/90 bg-zinc-950/90 backdrop-blur supports-[backdrop-filter]:bg-zinc-950/80"
+      }
+    >
+      <div
+        className={`mx-auto flex w-full flex-col gap-3 px-4 py-3 md:flex-row md:items-center ${
+          isStudio ? "relative max-w-7xl lg:px-12" : "lg:px-6"
+        }`}
+      >
         <div className="flex min-w-0 items-center justify-between gap-3 md:contents">
           <div className="min-w-0 flex-1 md:flex-none">
             <Logo site={site} />
           </div>
 
-          {!isStudio && (
+          {isStudio ? (
+            <StudioMobileNav />
+          ) : (
             <TubeMobileNav
               signedIn={!!user}
               signOut={<SignOutButton className="text-zinc-500 hover:text-white" />}
@@ -41,21 +54,20 @@ export default async function Header({ site }: { site: Site }) {
           <div className="flex-1" />
         )}
 
-        <nav
-          className={`items-center gap-4 text-sm ${
-            isStudio ? "flex" : "hidden md:flex"
-          }`}
-        >
+        <nav className="hidden items-center gap-4 text-sm md:flex">
           {isStudio ? (
             <>
-              <Link href="/" className="text-zinc-300 hover:text-white">
+              <Link href="/" className="studio-kicker text-zinc-300 hover:text-white">
                 Home
               </Link>
-              <Link href="/contact" className="text-zinc-300 hover:text-white">
-                Contact
+              <Link href="/team" className="studio-kicker text-zinc-300 hover:text-white">
+                Talent
               </Link>
-              <Link href="/our-network" className="text-zinc-300 hover:text-white">
-                Our Network
+              <Link href="/our-network" className="studio-kicker text-zinc-300 hover:text-white">
+                Network
+              </Link>
+              <Link href="/contact" className="studio-cta px-4 py-2 text-[10px]">
+                Contact
               </Link>
             </>
           ) : (

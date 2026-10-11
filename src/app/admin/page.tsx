@@ -17,9 +17,10 @@ export default async function AdminHome() {
   await requireAdmin();
 
   // Platform-wide counts (admin is network-scoped; do not filter by admin user's storage site).
-  const [videos, pornstars, creators, pendingApps, runs] = await Promise.all([
+  const [videos, pornstars, talents, creators, pendingApps, runs] = await Promise.all([
     prisma.video.count({ where: { isDeleted: false } }),
     prisma.pornstar.count(),
+    prisma.studioTalent.count(),
     prisma.creatorProfile.count(),
     prisma.creatorApplication.count({ where: { status: "PENDING" } }),
     prisma.scrapeRun.count(),
@@ -28,9 +29,10 @@ export default async function AdminHome() {
   return (
     <div>
       <h1 className="mb-6 text-xl font-bold text-white sm:text-2xl">Overview</h1>
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5">
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-6">
         <Stat label="Videos" value={videos} href="/admin/videos" />
         <Stat label="Pornstars" value={pornstars} href="/admin/pornstars" />
+        <Stat label="Talent" value={talents} href="/admin/talent" />
         <Stat label="Creators" value={creators} href="/admin/creators" />
         <Stat label="Pending applications" value={pendingApps} href="/admin/applications" />
         <Stat label="Scrape runs" value={runs} href="/admin/scrape-runs" />

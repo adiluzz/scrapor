@@ -3,6 +3,7 @@ import { headers } from "next/headers";
 import { prisma } from "@/lib/db";
 import { getSiteByDomain, normalizeHost } from "@/lib/site";
 import { pornstarHasVideosOnSite } from "@/lib/pornstar-sites";
+import { listStudioTeam } from "@/lib/studio-talent";
 import { videoPageDescription } from "@/lib/seo";
 import {
   publicVideoContentUrl,
@@ -44,7 +45,13 @@ async function staticSitemap(base: string, site: Site): Promise<NextResponse> {
     `${base}/privacy`,
     `${base}/dmca`,
     `${base}/2257`,
-    ...(site.kind === "STUDIO" ? [`${base}/contact`] : []),
+    ...(site.kind === "STUDIO"
+      ? [
+          `${base}/contact`,
+          `${base}/team`,
+          ...(await listStudioTeam(site.id)).map((star) => `${base}/team/${star.slug}`),
+        ]
+      : []),
     ...creators.map((c) => `${base}/creators/${c.slug}`),
   ];
   return xmlResponse(renderSitemapXml(urls.map((u) => renderUrlOnlySitemapEntry(u)).join("\n")));

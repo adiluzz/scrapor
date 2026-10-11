@@ -108,6 +108,7 @@ model Site {
   applications     CreatorApplication[]
   apiKeys          ApiKey[]
   reddit           SiteRedditCredentials?
+  studioTalents    StudioTalent[]
 }
 
 /// Reddit API / Devvit app credentials for outbound posting (not exposed on public Site pages).
@@ -350,6 +351,57 @@ model VideoCategory {
 // ─────────────────────────────────────────────────────────────
 // Creators (user uploads)
 // ─────────────────────────────────────────────────────────────
+
+enum StudioTalentRegion {
+  ISRAEL
+  INTERNATIONAL
+}
+
+enum StudioTalentMediaKind {
+  IMAGE
+  VIDEO
+}
+
+model StudioTalent {
+  id        String             @id @default(cuid())
+  siteId    String
+  site      Site               @relation(fields: [siteId], references: [id], onDelete: Cascade)
+  name      String
+  slug      String
+  role      String             @default("Featured performer")
+  region    StudioTalentRegion @default(INTERNATIONAL)
+  origin    String             @default("")
+  basedIn   String             @default("")
+  languages String             @default("[]") // JSON string[]
+  signed    String?
+  featured  Boolean            @default(false)
+  published Boolean            @default(true)
+  sortOrder Int                @default(0)
+  tagline   String?
+  bio       String?
+  grade     String?
+  photoKey  String?
+  photoPath String?
+  media     StudioTalentMedia[]
+  createdAt DateTime           @default(now())
+  updatedAt DateTime           @updatedAt
+
+  @@unique([siteId, slug])
+  @@index([siteId, published, sortOrder])
+}
+
+model StudioTalentMedia {
+  id        String                 @id @default(cuid())
+  talentId  String
+  talent    StudioTalent           @relation(fields: [talentId], references: [id], onDelete: Cascade)
+  kind      StudioTalentMediaKind
+  s3Key     String
+  title     String?
+  sortOrder Int                    @default(0)
+  createdAt DateTime               @default(now())
+
+  @@index([talentId, kind, sortOrder])
+}
 
 model CreatorProfile {
   id          String   @id @default(cuid())

@@ -18,9 +18,10 @@ import {
   websiteJsonLd,
 } from "@/lib/seo";
 import type { Metadata } from "next";
-import Link from "next/link";
 import Filters from "@/components/site/Filters";
 import Pagination from "@/components/site/Pagination";
+import StudioHome from "@/components/studio/StudioHome";
+import { listFeaturedStudioTeam } from "@/lib/studio-talent";
 
 export const dynamic = "force-dynamic";
 
@@ -79,59 +80,6 @@ export async function generateMetadata({
   };
 }
 
-function StudioHome({
-  site,
-  base,
-}: {
-  site: Awaited<ReturnType<typeof getCurrentSite>>;
-  base: string;
-}) {
-  return (
-    <>
-      <JsonLd data={websiteJsonLd(base, site)} />
-      <JsonLd data={organizationJsonLd(base, site)} />
-      <section className="relative overflow-hidden rounded-3xl border border-zinc-800/80 bg-zinc-900/40 px-6 py-16 sm:px-12 sm:py-24">
-        <div
-          className="pointer-events-none absolute inset-0 opacity-40"
-          style={{
-            background: `radial-gradient(ellipse 70% 60% at 20% 0%, ${site.primaryColor}66, transparent)`,
-          }}
-        />
-        <div className="relative max-w-2xl">
-          <p className="text-sm uppercase tracking-[0.25em] text-zinc-500">Productions</p>
-          <h1 className="mt-4 text-5xl font-black tracking-tight text-white sm:text-6xl">
-            {site.homeH1 || site.name}
-          </h1>
-          <p className="mt-5 text-lg text-zinc-300">
-            {site.tagline || site.seoDescription || "Adult film production company."}
-          </p>
-          <div className="mt-10 flex flex-wrap gap-4">
-            <Link
-              href="/contact"
-              className="rounded-full px-6 py-2.5 text-sm font-semibold text-zinc-950"
-              style={{ background: site.primaryColor }}
-            >
-              Contact us
-            </Link>
-            <Link
-              href="/our-network"
-              className="rounded-full border border-zinc-600 px-6 py-2.5 text-sm font-semibold text-zinc-100 hover:border-zinc-400"
-            >
-              Our Network
-            </Link>
-          </div>
-        </div>
-      </section>
-      {site.homeIntroHtml ? (
-        <div
-          className="prose prose-invert mt-10 max-w-none text-zinc-400"
-          dangerouslySetInnerHTML={{ __html: site.homeIntroHtml }}
-        />
-      ) : null}
-    </>
-  );
-}
-
 export default async function HomePage({
   searchParams,
 }: {
@@ -149,7 +97,8 @@ export default async function HomePage({
   ]);
 
   if (site.kind === "STUDIO") {
-    return <StudioHome site={site} base={base} />;
+    const featured = await listFeaturedStudioTeam(site.id);
+    return <StudioHome site={site} base={base} featured={featured} />;
   }
 
   const [{ videos, totalPages }, popularTags] = await Promise.all([

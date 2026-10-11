@@ -7,6 +7,9 @@
  * In Docker:
  *   docker compose exec -e ADMIN_EMAIL=... -e ADMIN_PASSWORD=... web node scripts/seed.mjs
  */
+import { readFileSync } from "node:fs";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { PrismaClient } from "@prisma/client";
 import bcrypt from "bcryptjs";
 
@@ -69,7 +72,62 @@ async function upsertSite(data) {
   });
 }
 
+async function seedStudioTalent(siteId, domain) {
+  const seedDir = dirname(fileURLToPath(import.meta.url));
+  const roster = JSON.parse(
+    readFileSync(join(seedDir, "studio-talent-seed-data.json"), "utf8")
+  );
+  for (const [index, star] of roster.entries()) {
+    await prisma.studioTalent.upsert({
+      where: { siteId_slug: { siteId, slug: star.slug } },
+      update: {
+        name: star.name,
+        role: star.role,
+        region: star.region,
+        origin: star.origin,
+        basedIn: star.basedIn,
+        languages: JSON.stringify(star.languages),
+        signed: star.signed,
+        featured: star.featured,
+        published: true,
+        sortOrder: index * 10,
+        tagline: star.tagline,
+        bio: star.bio,
+        grade: star.grade,
+        photoPath: star.photoPath,
+      },
+      create: {
+        siteId,
+        slug: star.slug,
+        name: star.name,
+        role: star.role,
+        region: star.region,
+        origin: star.origin,
+        basedIn: star.basedIn,
+        languages: JSON.stringify(star.languages),
+        signed: star.signed,
+        featured: star.featured,
+        published: true,
+        sortOrder: index * 10,
+        tagline: star.tagline,
+        bio: star.bio,
+        grade: star.grade,
+        photoPath: star.photoPath,
+      },
+    });
+  }
+  console.log(`Studio talent ready: ${roster.length} on ${domain}`);
+}
+
 async function main() {
+  if (process.env.SEED_TALENT_ONLY === "1") {
+    const sharlila = await prisma.site.findUnique({ where: { domain: "sharlila.com" } });
+    if (!sharlila) {
+      throw new Error("sharlila.com site is missing; cannot seed studio talent");
+    }
+    await seedStudioTalent(sharlila.id, sharlila.domain);
+    return;
+  }
   const pisster = await upsertSite({
     domain: "pisster.com",
     name: "Pisster",
@@ -153,7 +211,7 @@ async function main() {
     name: "Sharlila",
     kind: "STUDIO",
     slug: "sharlila",
-    tagline: "Adult film productions",
+    tagline: "Cinematic adult productions. House talent. A network of specialty rooms.",
     logoPath: "/brand/sharlila-lockup.png",
     logoKey: "sharlila-mark",
     primaryColor: "#C4A574",
@@ -162,18 +220,18 @@ async function main() {
     networkOrder: 2,
     seoTitle: "Sharlila Productions — Adult Film Studio",
     seoDescription:
-      "Sharlila is an adult film production company. Contact the studio and explore our specialty tubes across the Sharlila network.",
+      "Sharlila is a cinematic adult film studio. Meet the house talent, contact the production office, and explore the specialty network.",
     seoKeywords: JSON.stringify([
       "sharlila",
       "adult studio",
       "porn production",
       "adult film production",
       "adult network",
+      "studio talent",
     ]),
-    ogImagePath: "/brand/sharlila-lockup.svg",
+    ogImagePath: "/studio/hero.jpg",
     homeH1: "Sharlila Productions",
-    homeIntroHtml:
-      "<p>Sharlila is an adult film production company. Contact us for collaborations, or explore our network of specialty tubes.</p><p><a href=\"/contact\">Contact</a> · <a href=\"/our-network\">Our Network</a></p>",
+    homeIntroHtml: "",
     seoCreatorTitleTpl: "{name} · Sharlila Productions",
     seoCreatorDescTpl: "{name} videos and productions from Sharlila.",
     seoCreatorsIndexTitle: "Creators · Sharlila Productions",
@@ -206,6 +264,7 @@ async function main() {
     },
   });
   console.log(`Admin ready: ${admin.email} on ${sharlila.domain}`);
+  await seedStudioTalent(sharlila.id, sharlila.domain);
 }
 
 main()

@@ -24,7 +24,7 @@ export async function GET(
   const file = await readStoredObject(media.s3Key, localTalentMediaPath(media.talentId, media.id));
   if (!file) return NextResponse.json({ error: "Media missing" }, { status: 404 });
 
-  return new NextResponse(file.body, {
+  return new NextResponse(new Uint8Array(file.body), {
     headers: {
       "Content-Type": file.contentType,
       "Content-Length": String(file.contentLength),

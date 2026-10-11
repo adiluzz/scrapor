@@ -12,15 +12,15 @@ export async function generateMetadata(): Promise<Metadata> {
   if (site.kind !== "STUDIO") {
     return { title: "Contact" };
   }
-  const title = pageTitleMeta(`Contact · ${site.name}`, site.name);
+  const ogTitle = `Contact · ${site.name}`;
   const description = `Casting, licensing, and collaborations with ${site.name}. ${CONTACT_EMAIL}`;
   return {
-    title,
+    title: pageTitleMeta(ogTitle, site.name),
     description,
     keywords: keywordsMeta(site, ["contact", CONTACT_EMAIL, "casting"]),
     alternates: { canonical: "/contact" },
     openGraph: buildOpenGraph({
-      title,
+      title: ogTitle,
       description,
       url: "/contact",
       siteName: site.name,

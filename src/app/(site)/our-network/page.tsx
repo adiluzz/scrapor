@@ -7,15 +7,15 @@ import StudioFrame from "@/components/studio/StudioFrame";
 
 export async function generateMetadata(): Promise<Metadata> {
   const site = await getCurrentSite();
-  const title = pageTitleMeta(`Our Network · ${site.name}`, site.name);
+  const ogTitle = `Our Network · ${site.name}`;
   const description = `Explore the ${site.name} network of specialty adult websites.`;
   return {
-    title,
+    title: pageTitleMeta(ogTitle, site.name),
     description,
     keywords: keywordsMeta(site, ["our network", "adult network"]),
     alternates: { canonical: "/our-network" },
     openGraph: buildOpenGraph({
-      title,
+      title: ogTitle,
       description,
       url: "/our-network",
       siteName: site.name,

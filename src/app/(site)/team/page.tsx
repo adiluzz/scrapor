@@ -12,15 +12,15 @@ export const dynamic = "force-dynamic";
 export async function generateMetadata(): Promise<Metadata> {
   const site = await getCurrentSite();
   if (site.kind !== "STUDIO") return { title: "Team" };
-  const title = pageTitleMeta(`Talent · ${site.name}`, site.name);
+  const ogTitle = `Talent · ${site.name}`;
   const description = `The ${site.name} house roster — original Israeli and international contracted talent.`;
   return {
-    title,
+    title: pageTitleMeta(ogTitle, site.name),
     description,
     keywords: keywordsMeta(site, ["talent", "team", "studio performers"]),
     alternates: { canonical: "/team" },
     openGraph: buildOpenGraph({
-      title,
+      title: ogTitle,
       description,
       url: "/team",
       siteName: site.name,

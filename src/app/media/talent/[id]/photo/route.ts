@@ -26,7 +26,7 @@ export async function GET(
   const image = await readStoredObject(talent.photoKey, localTalentPhotoPath(talent.id));
   if (!image) return NextResponse.json({ error: "Image missing" }, { status: 404 });
 
-  return new NextResponse(image.body, {
+  return new NextResponse(new Uint8Array(image.body), {
     headers: {
       "Content-Type": image.contentType,
       "Content-Length": String(image.contentLength),

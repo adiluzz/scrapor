@@ -843,7 +843,7 @@ def purge_mp4_if_hls(conn, r, *, video_id=None, execute=False, limit=None, worke
         expected_master = storage.key_hls_master(v["siteId"], v["id"])
         if v["s3HlsMasterKey"] != expected_master:
             return v, False, "unexpected_master_key", []
-        ok, reason = storage.verify_hls(v["s3HlsMasterKey"], v.get("durationSec"))
+        ok, reason = storage.verify_hls(v["s3HlsMasterKey"], v.get("durationSec"), v["s3VideoKey"])
         if not ok:
             return v, False, reason, []
         keys = []

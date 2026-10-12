@@ -172,8 +172,28 @@ def object_size(key):
         return None
 
 
-def verify_hls(master_key, duration_sec=None):
-    """Return (ok, reason). Complete VOD playlist, sane duration, first/last segment present."""
+def probe_remote_duration(key):
+    """Duration in seconds of a stored media object via ffprobe on a presigned URL."""
+    import subprocess
+    try:
+        url = s3().generate_presigned_url(
+            "get_object", Params={"Bucket": _BUCKET, "Key": key}, ExpiresIn=600
+        )
+        r = subprocess.run(
+            ["ffprobe", "-v", "error", "-show_entries", "format=duration",
+             "-of", "default=nw=1:nk=1", url],
+            capture_output=True, text=True, timeout=120, check=False,
+        )
+        return float(r.stdout.strip()) if r.returncode == 0 and r.stdout.strip() else None
+    except Exception:
+        return None
+
+
+def verify_hls(master_key, duration_sec=None, mp4_key=None):
+    """
+    Return (ok, reason). Complete VOD playlist, first/last segment present, and
+    playlist length matching the stored MP4 (DB duration first, ffprobe on mismatch).
+    """
     try:
         body = s3().get_object(Bucket=_BUCKET, Key=master_key)["Body"].read().decode("utf-8")
     except Exception as e:  # noqa: BLE001
@@ -195,9 +215,12 @@ def verify_hls(master_key, duration_sec=None):
                 total += float(l[len("#EXTINF:"):].split(",", 1)[0])
             except ValueError:
                 return False, "master_bad_extinf"
-    if duration_sec and duration_sec > 0:
-        if abs(total - duration_sec) > max(5.0, 0.02 * duration_sec):
-            return False, f"duration_mismatch:{total:.1f}vs{duration_sec}"
+    if not duration_sec or abs(total - duration_sec) > max(5.0, 0.02 * duration_sec):
+        actual = probe_remote_duration(mp4_key) if mp4_key else None
+        if actual is None:
+            return False, f"duration_unverified:{total:.1f}vs{duration_sec}"
+        if abs(total - actual) > max(2.0, 0.01 * actual):
+            return False, f"duration_mismatch:{total:.1f}vs{actual:.1f}"
     prefix = master_key.rsplit("/", 1)[0] + "/"
     for n in {names[0], names[-1]}:
         size = object_size(prefix + n)

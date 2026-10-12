@@ -1138,8 +1138,14 @@ export default forwardRef(function VideoPlayer(
       });
     }, 1000);
 
+    // Ad sessions are single-use server-side; a second grant would 403 and flip the UI to error.
+    let finished = false;
     const finish = (outcome: string) => {
+      if (finished) return;
+      finished = true;
       clearInterval(tick);
+      adVideo.onended = null;
+      adVideo.onerror = null;
       adVideo.pause();
       grantAndPlay(adSessionId, outcome);
     };

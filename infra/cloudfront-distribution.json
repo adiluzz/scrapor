@@ -59,5 +59,36 @@
     "DefaultTTL": 43200,
     "MaxTTL": 86400
   },
+  "CacheBehaviors": {
+    "Quantity": 1,
+    "Items": [
+      {
+        "PathPattern": "sites/*/videos/*/hls/*",
+        "TargetOriginId": "S3-pisster-media",
+        "ViewerProtocolPolicy": "redirect-to-https",
+        "ResponseHeadersPolicyId": "59ff53d9-81c3-412e-b380-9e1a5c378d17",
+        "AllowedMethods": {
+          "Quantity": 3,
+          "Items": ["GET", "HEAD", "OPTIONS"],
+          "CachedMethods": { "Quantity": 2, "Items": ["GET", "HEAD"] }
+        },
+        "Compress": false,
+        "TrustedKeyGroups": {
+          "Enabled": true,
+          "Quantity": 1,
+          "Items": ["aee9ba2d-087a-4072-96b6-7d68e5b5b54d"]
+        },
+        "ForwardedValues": {
+          "QueryString": false,
+          "Cookies": { "Forward": "none" },
+          "Headers": { "Quantity": 0 },
+          "QueryStringCacheKeys": { "Quantity": 0 }
+        },
+        "MinTTL": 0,
+        "DefaultTTL": 86400,
+        "MaxTTL": 31536000
+      }
+    ]
+  },
   "DefaultRootObject": ""
 }

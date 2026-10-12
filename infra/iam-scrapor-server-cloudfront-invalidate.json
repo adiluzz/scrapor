@@ -1,0 +1,11 @@
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "InvalidateRepackagedHls",
+      "Effect": "Allow",
+      "Action": "cloudfront:CreateInvalidation",
+      "Resource": "arn:aws:cloudfront::339712788589:distribution/E2REIQBJ5LA3HC"
+    }
+  ]
+}

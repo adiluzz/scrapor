@@ -83,6 +83,25 @@ def upload_hls_dir(local_dir, site_id, video_id):
     return master_key
 
 
+def invalidate_hls(site_id, video_id) -> bool:
+    """HLS segments are cached by path at CloudFront; drop them after re-packaging in place."""
+    dist = os.environ.get("CLOUDFRONT_DISTRIBUTION_ID")
+    if not dist:
+        return False
+    import time
+    try:
+        boto3.client("cloudfront", region_name="us-east-1").create_invalidation(
+            DistributionId=dist,
+            InvalidationBatch={
+                "Paths": {"Quantity": 1, "Items": [f"/{key_hls_prefix(site_id, video_id)}*"]},
+                "CallerReference": f"hls-{video_id}-{int(time.time() * 1000)}",
+            },
+        )
+        return True
+    except Exception:
+        return False
+
+
 def download(key, dest_path):
     """Download an S3 object to a local path. Returns True on success."""
     if not key:
@@ -141,6 +160,50 @@ def download_hls_as_mp4(master_key, dest_path, workers=16) -> bool:
         return False
     finally:
         shutil.rmtree(work, ignore_errors=True)
+
+
+def object_size(key):
+    """Content length in bytes, or None if missing / not readable."""
+    if not key:
+        return None
+    try:
+        return int(s3().head_object(Bucket=_BUCKET, Key=key)["ContentLength"])
+    except Exception:
+        return None
+
+
+def verify_hls(master_key, duration_sec=None):
+    """Return (ok, reason). Complete VOD playlist, sane duration, first/last segment present."""
+    try:
+        body = s3().get_object(Bucket=_BUCKET, Key=master_key)["Body"].read().decode("utf-8")
+    except Exception as e:  # noqa: BLE001
+        return False, f"master_unreadable:{type(e).__name__}"
+    if not body.startswith("#EXTM3U"):
+        return False, "master_not_m3u8"
+    if "#EXT-X-ENDLIST" not in body:
+        return False, "master_no_endlist"
+    lines = [l.strip() for l in body.splitlines() if l.strip()]
+    names = [l for l in lines if not l.startswith("#")]
+    if not names:
+        return False, "master_no_segments"
+    if any("/" in n or ".." in n for n in names):
+        return False, "master_unexpected_uri"
+    total = 0.0
+    for l in lines:
+        if l.startswith("#EXTINF:"):
+            try:
+                total += float(l[len("#EXTINF:"):].split(",", 1)[0])
+            except ValueError:
+                return False, "master_bad_extinf"
+    if duration_sec and duration_sec > 0:
+        if abs(total - duration_sec) > max(5.0, 0.02 * duration_sec):
+            return False, f"duration_mismatch:{total:.1f}vs{duration_sec}"
+    prefix = master_key.rsplit("/", 1)[0] + "/"
+    for n in {names[0], names[-1]}:
+        size = object_size(prefix + n)
+        if not size:
+            return False, f"segment_missing:{n}"
+    return True, "ok"
 
 
 def download_source(site_id, video_id, s3_video_key, s3_hls_master_key, dest_path) -> bool:

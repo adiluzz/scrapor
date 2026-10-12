@@ -435,6 +435,41 @@ def list_videos_with_hls_key(conn):
         ]
 
 
+def list_videos_for_mp4_purge(conn, video_id: str | None = None):
+    """READY rows that still reference a stored MP4 and claim an HLS master."""
+    sql = (
+        'SELECT id,"siteId","s3VideoKey","s3HlsMasterKey","durationSec" FROM "Video" '
+        'WHERE status = %s AND "s3VideoKey" IS NOT NULL AND "s3HlsMasterKey" IS NOT NULL'
+    )
+    params: list = ["READY"]
+    if video_id:
+        sql += " AND id = %s"
+        params.append(video_id)
+    sql += " ORDER BY id"
+    with conn.cursor() as cur:
+        cur.execute(sql, params)
+        return [
+            {
+                "id": row[0],
+                "siteId": row[1],
+                "s3VideoKey": row[2],
+                "s3HlsMasterKey": row[3],
+                "durationSec": row[4],
+            }
+            for row in cur.fetchall()
+        ]
+
+
+def clear_video_s3_video_key(conn, video_id: str, expected_key: str) -> bool:
+    with conn.cursor() as cur:
+        cur.execute(
+            'UPDATE "Video" SET "s3VideoKey"=NULL,"updatedAt"=now() '
+            'WHERE id=%s AND "s3VideoKey"=%s AND "s3HlsMasterKey" IS NOT NULL',
+            (video_id, expected_key),
+        )
+        return cur.rowcount == 1
+
+
 def clear_video_hls_master_key(conn, video_id: str):
     with conn.cursor() as cur:
         cur.execute(

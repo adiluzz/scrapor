@@ -133,6 +133,9 @@ HLS_BACKFILL_ENABLED = os.environ.get("HLS_BACKFILL_ENABLED", "true").lower() no
 HLS_BACKFILL_DELAY_SEC = float(os.environ.get("HLS_BACKFILL_DELAY_SEC", "30"))
 HLS_BACKFILL_LOCK_SEC = int(os.environ.get("HLS_BACKFILL_LOCK_SEC", "7200"))
 HLS_BACKFILL_RESCAN_SEC = int(os.environ.get("HLS_BACKFILL_RESCAN_SEC", "1800"))
+# Store only HLS for new/re-processed videos. Requires HLS serving for every video
+# in the web app (HLS-only rows already get HLS regardless of HLS_PLAYBACK_ENABLED).
+HLS_ONLY_INGEST = os.environ.get("HLS_ONLY_INGEST", "false").lower() in ("1", "true", "yes")
 SCRAPE_SEARCH_RESULT_PREFIX = "scrape:search:result:"
 # Hard wall-clock cap for one interactive search/URL-resolve request. The search
 # runs in a child process so a hung HTTP call inside a searcher can be killed
@@ -651,10 +654,16 @@ def _process_one(run, source_site, video) -> ProcessOutcome:
             _enqueue_pornstar_tpdb(new_pornstar_ids)
 
             if storage.configured():
-                keys["v"] = storage.upload(video_path, storage.key_video(site_id, vid), "video/mp4")
-                if not keys["v"]:
-                    _log_video_fail("upload", video, run, source_site, "S3 video upload failed", videoId=vid)
-                    return ProcessOutcome("fail", "S3 video upload failed", "upload")
+                if HLS_ONLY_INGEST:
+                    keys["hls"] = _package_and_upload_hls(site_id, vid, video_path, tmp_dir)
+                    if not keys["hls"]:
+                        _log_video_fail("upload", video, run, source_site, "S3 HLS upload failed", videoId=vid)
+                        return ProcessOutcome("fail", "S3 HLS upload failed", "upload")
+                else:
+                    keys["v"] = storage.upload(video_path, storage.key_video(site_id, vid), "video/mp4")
+                    if not keys["v"]:
+                        _log_video_fail("upload", video, run, source_site, "S3 video upload failed", videoId=vid)
+                        return ProcessOutcome("fail", "S3 video upload failed", "upload")
                 if os.path.exists(thumb):
                     keys["t"] = storage.upload(thumb, storage.key_thumb(site_id, vid), "image/jpeg")
                 if os.path.exists(preview):
@@ -663,7 +672,8 @@ def _process_one(run, source_site, video) -> ProcessOutcome:
                     keys["sb"] = storage.upload(sprite, storage.key_storyboard(site_id, vid), "image/jpeg")
                 if os.path.exists(vtt):
                     keys["vtt"] = storage.upload(vtt, storage.key_storyboard_vtt(site_id, vid), "text/vtt")
-                keys["hls"] = _package_and_upload_hls(site_id, vid, video_path, tmp_dir)
+                if not HLS_ONLY_INGEST:
+                    keys["hls"] = _package_and_upload_hls(site_id, vid, video_path, tmp_dir)
                 with conn.cursor() as cur:
                     cur.execute(
                         'UPDATE "Video" SET "s3VideoKey"=%s,"s3ThumbKey"=%s,"s3PreviewKey"=%s,'
@@ -710,7 +720,11 @@ def _package_and_upload_hls(site_id: str, video_id: str, video_path: str, tmp_di
     if not media.package_hls_from_mp4(video_path, hls_dir):
         return None
     if storage.configured():
-        return storage.upload_hls_dir(hls_dir, site_id, video_id)
+        replacing = storage.object_exists(storage.key_hls_master(site_id, video_id))
+        master = storage.upload_hls_dir(hls_dir, site_id, video_id)
+        if master and replacing and not storage.invalidate_hls(site_id, video_id):
+            _event("warning", "hls_cdn_invalidation_failed", videoId=video_id)
+        return master
     return None
 
 
@@ -810,6 +824,70 @@ def seed_hls_backfill_queue(conn, r, *, force: bool = False) -> int:
     return enqueued
 
 
+def purge_mp4_if_hls(conn, r, *, video_id=None, execute=False, limit=None, workers=8) -> dict:
+    """
+    Drop the stored MP4 for READY videos whose HLS rendition verifies on S3.
+    Dry-run unless execute=True. Never touches hls/, thumbs, preview or storyboard.
+    The DB key is cleared before the delete so a failed delete leaves an orphan
+    object rather than a row pointing at a missing MP4.
+    """
+    from concurrent.futures import ThreadPoolExecutor
+
+    rows = db.list_videos_for_mp4_purge(conn, video_id)
+    if limit:
+        rows = rows[:limit]
+    stats = {"candidates": len(rows), "purged": 0, "skipped": 0, "bytes": 0, "errors": 0}
+    _event("info", "mp4_purge_start", execute=execute, candidates=len(rows), videoId=video_id)
+
+    def check(v):
+        expected_master = storage.key_hls_master(v["siteId"], v["id"])
+        if v["s3HlsMasterKey"] != expected_master:
+            return v, False, "unexpected_master_key", []
+        ok, reason = storage.verify_hls(v["s3HlsMasterKey"], v.get("durationSec"))
+        if not ok:
+            return v, False, reason, []
+        keys = []
+        for key in dict.fromkeys([v["s3VideoKey"], storage.key_video(v["siteId"], v["id"])]):
+            if "/hls/" in key or not key.endswith(".mp4") or key.endswith("/preview.mp4"):
+                return v, False, f"refusing_key:{key}", []
+            keys.append((key, storage.object_size(key) or 0))
+        return v, True, "ok", keys
+
+    with ThreadPoolExecutor(max_workers=max(1, workers)) as ex:
+        for v, ok, reason, keys in ex.map(check, rows):
+            if not ok:
+                stats["skipped"] += 1
+                _event("warning", "mp4_purge_skip", videoId=v["id"], reason=reason)
+                continue
+            if r is not None and r.exists(f"{HLS_BACKFILL_LOCK_PREFIX}{v['id']}"):
+                stats["skipped"] += 1
+                _event("warning", "mp4_purge_skip", videoId=v["id"], reason="hls_backfill_locked")
+                continue
+            size = sum(s for _, s in keys)
+            if not execute:
+                stats["purged"] += 1
+                stats["bytes"] += size
+                _event("info", "mp4_purge_dry_run", videoId=v["id"], keys=[k for k, _ in keys], bytes=size)
+                continue
+            try:
+                if not db.clear_video_s3_video_key(conn, v["id"], v["s3VideoKey"]):
+                    stats["skipped"] += 1
+                    _event("warning", "mp4_purge_skip", videoId=v["id"], reason="row_changed")
+                    continue
+                for key, _ in keys:
+                    storage.delete(key)
+                stats["purged"] += 1
+                stats["bytes"] += size
+                _event("info", "mp4_purged", videoId=v["id"], keys=[k for k, _ in keys], bytes=size)
+            except Exception as e:  # noqa: BLE001
+                stats["errors"] += 1
+                _event("error", "mp4_purge_failed", videoId=v["id"], error=str(e)[:300])
+
+    stats["gib"] = round(stats["bytes"] / 1024 ** 3, 2)
+    _event("info", "mp4_purge_done", execute=execute, **stats)
+    return stats
+
+
 def process_hls_backfill(conn, video_id: str, r) -> None:
     """
     Download an existing S3 MP4, normalize (2s GOP + faststart), package HLS,
@@ -857,7 +935,9 @@ def process_hls_backfill(conn, video_id: str, r) -> None:
 
         _normalize_downloaded_video(video_path)
 
-        if not storage.upload(video_path, storage.key_video(site_id, video_id), "video/mp4"):
+        if not HLS_ONLY_INGEST and not storage.upload(
+            video_path, storage.key_video(site_id, video_id), "video/mp4"
+        ):
             _event("warning", "hls_backfill_upload_mp4_failed", videoId=video_id)
             failed = True
             return
@@ -923,7 +1003,14 @@ def process_creator_upload(conn, video_id: str):
 
         keys = dict(v=None, t=None, p=None, sb=None, vtt=None, hls=None)
         if storage.configured():
-            keys["v"] = storage.upload(video_path, storage.key_video(site_id, video_id), "video/mp4")
+            if HLS_ONLY_INGEST:
+                keys["hls"] = _package_and_upload_hls(site_id, video_id, video_path, tmp_dir)
+                if not keys["hls"]:
+                    _event("warning", "creator_failed", videoId=video_id, stage="hls_upload")
+                    db.set_video_status(conn, video_id, "FAILED")
+                    return
+            else:
+                keys["v"] = storage.upload(video_path, storage.key_video(site_id, video_id), "video/mp4")
             if os.path.exists(thumb):
                 keys["t"] = storage.upload(thumb, storage.key_thumb(site_id, video_id), "image/jpeg")
             if os.path.exists(preview):
@@ -932,7 +1019,8 @@ def process_creator_upload(conn, video_id: str):
                 keys["sb"] = storage.upload(sprite, storage.key_storyboard(site_id, video_id), "image/jpeg")
             if os.path.exists(vtt):
                 keys["vtt"] = storage.upload(vtt, storage.key_storyboard_vtt(site_id, video_id), "text/vtt")
-            keys["hls"] = _package_and_upload_hls(site_id, video_id, video_path, tmp_dir)
+            if not HLS_ONLY_INGEST:
+                keys["hls"] = _package_and_upload_hls(site_id, video_id, video_path, tmp_dir)
         else:
             # Dev fallback: keep files under downloads/{id}/ for local API routes.
             local = os.path.join(ROOT, "downloads", video_id)
@@ -1148,8 +1236,15 @@ def process_redownload(conn, video_id: str):
             "vtt": v.get("s3StoryboardVttKey"),
             "hls": v.get("s3HlsMasterKey"),
         }
+        stale_mp4 = None
         if storage.configured():
-            keys["v"] = storage.upload(video_path, storage.key_video(site_id, video_id), "video/mp4") or keys["v"]
+            if HLS_ONLY_INGEST:
+                new_hls = _package_and_upload_hls(site_id, video_id, video_path, tmp_dir)
+                if new_hls:
+                    keys["hls"] = new_hls
+                    stale_mp4, keys["v"] = keys["v"], None
+            else:
+                keys["v"] = storage.upload(video_path, storage.key_video(site_id, video_id), "video/mp4") or keys["v"]
             if os.path.exists(thumb):
                 keys["t"] = storage.upload(thumb, storage.key_thumb(site_id, video_id), "image/jpeg") or keys["t"]
             if os.path.exists(preview):
@@ -1157,7 +1252,8 @@ def process_redownload(conn, video_id: str):
             if storyboard_ok:
                 keys["sb"] = storage.upload(sprite, storage.key_storyboard(site_id, video_id), "image/jpeg") or keys["sb"]
                 keys["vtt"] = storage.upload(vtt, storage.key_storyboard_vtt(site_id, video_id), "text/vtt") or keys["vtt"]
-            keys["hls"] = _package_and_upload_hls(site_id, video_id, video_path, tmp_dir) or keys["hls"]
+            if not HLS_ONLY_INGEST:
+                keys["hls"] = _package_and_upload_hls(site_id, video_id, video_path, tmp_dir) or keys["hls"]
         else:
             local = os.path.join(ROOT, "downloads", video_id)
             os.makedirs(local, exist_ok=True)
@@ -1169,6 +1265,11 @@ def process_redownload(conn, video_id: str):
             if storyboard_ok:
                 shutil.copy(sprite, os.path.join(local, "storyboard.jpg"))
                 shutil.copy(vtt, os.path.join(local, "storyboard.vtt"))
+
+        if storage.configured() and not keys["v"] and not keys["hls"]:
+            _event("warning", "redownload_failed", videoId=video_id, stage="no_playable_source")
+            db.set_video_status(conn, video_id, "FAILED")
+            return
 
         db.update_video_media(
             conn,
@@ -1183,6 +1284,8 @@ def process_redownload(conn, video_id: str):
             status="READY",
             preview_version=media.PREVIEW_VERSION,
         )
+        if stale_mp4:
+            storage.delete(stale_mp4)
         _event("info", "redownload_done", videoId=video_id, durationSec=duration)
     except Exception as e:  # noqa: BLE001
         _event("warning", "redownload_failed", videoId=video_id, reason=str(e)[:500],
@@ -1767,9 +1870,31 @@ def main():
         "--hls-backfill",
         help="Normalize + HLS-pack one Video id from existing S3 MP4, then exit",
     )
+    parser.add_argument(
+        "--purge-mp4-if-hls",
+        action="store_true",
+        help="Delete stored MP4s whose HLS verifies on S3 (dry-run unless --execute)",
+    )
+    parser.add_argument("--video-id", help="Limit --purge-mp4-if-hls to one Video id")
+    parser.add_argument("--purge-limit", type=int, default=None, help="Cap rows for --purge-mp4-if-hls")
+    parser.add_argument("--purge-workers", type=int, default=8, help="Parallel S3 checks (default 8)")
+    parser.add_argument("--execute", action="store_true", help="Actually delete (with --purge-mp4-if-hls)")
     args = parser.parse_args()
 
     conn = db.connect()
+
+    if args.purge_mp4_if_hls:
+        import redis as redis_lib
+        r = redis_lib.from_url(os.environ.get("REDIS_URL", "redis://localhost:6379"))
+        stats = purge_mp4_if_hls(
+            conn, r,
+            video_id=args.video_id,
+            execute=args.execute,
+            limit=args.purge_limit,
+            workers=args.purge_workers,
+        )
+        print(json.dumps(stats))
+        return
 
     if args.hls_backfill:
         import redis as redis_lib

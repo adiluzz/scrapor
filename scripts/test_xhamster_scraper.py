@@ -44,6 +44,17 @@ window.initials={"searchResult":{"videoThumbProps":[
 </script></body></html>
 """
 
+SAMPLE_CATEGORY_HTML = """
+<html><body><script>
+window.initials={"pagesCategoryComponent":{"trendingVideoListProps":{"videoThumbProps":[
+  {"pageURL":"https://xhamster.com/videos/lady-o-dessert-xhgwrhv","title":"Lady O Dessert","duration":609,
+   "thumbURL":"https://ic-vt-nss.xhcdn.com/a/one.webp"},
+  {"pageURL":"https://xhamster.com/videos/bi-couple-xhHXafm","title":"Bi Couple","duration":1267,
+   "thumbURL":"https://ic-vt-nss.xhcdn.com/a/two.webp"}
+]}}}
+</script></body></html>
+"""
+
 
 class XHamsterParseTests(unittest.TestCase):
     def test_extract_m3u8_prefers_h264_template(self):
@@ -105,6 +116,30 @@ class XHamsterSearchTests(unittest.TestCase):
         batch, _cursor, exhausted = ss.search_xhamster("piss", 5, 0, 600)
         self.assertEqual(batch, [])
         self.assertTrue(exhausted)
+
+    @patch.object(ss, "_xhamster_get")
+    def test_category_reads_trending_thumbs(self, mock_get):
+        mock_get.return_value = SAMPLE_CATEGORY_HTML
+        batch, cursor, exhausted = ss.search_xhamster("fbb", 2, 0, 600, "category")
+        self.assertEqual([v["title"] for v in batch], ["Lady O Dessert", "Bi Couple"])
+        self.assertEqual(batch[0]["duration_sec"], 609)
+        self.assertIn("lady-o-dessert-xhgwrhv", batch[0]["url"])
+        self.assertEqual(len({v["url"] for v in batch}), 2)
+        self.assertEqual(cursor, 2)
+        mock_get.assert_called_once()
+        self.assertEqual(
+            mock_get.call_args[0][0],
+            "https://xhamster.com/categories/fbb?min-duration=10",
+        )
+
+    @patch.object(ss, "_xhamster_get")
+    def test_category_pagination_uses_path(self, mock_get):
+        mock_get.return_value = SAMPLE_CATEGORY_HTML
+        ss.search_xhamster("fbb", 2, 2, 600, "category")
+        self.assertEqual(
+            mock_get.call_args[0][0],
+            "https://xhamster.com/categories/fbb/2?min-duration=10",
+        )
 
 
 def live_search(limit=3):

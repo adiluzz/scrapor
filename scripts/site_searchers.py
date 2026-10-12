@@ -328,7 +328,8 @@ def _xhamster_canonical_url(url_or_path):
         path = urlparse(url_or_path).path or ""
     else:
         path = url_or_path if str(url_or_path).startswith("/") else f"/{url_or_path}"
-    if "/videos/" not in path:
+    # Require a real video slug — bare /videos/ would collapse every card to one URL.
+    if not re.search(r"^/videos/[^/]+", path):
         return ""
     return f"{_XH_BASE}{path.rstrip('/')}"
 
@@ -338,19 +339,47 @@ def _xhamster_min_duration_param(min_duration):
     return next((c for c in ("40", "30", "10", "5", "2") if int(c) <= min_min), "10")
 
 
-def _xhamster_from_initials(html, need, min_duration, seen):
-    """Extract search hits from window.initials.searchResult.videoThumbProps."""
+def _xhamster_collect_thumbs(obj, out=None):
+    """Gather videoThumbProps lists from search or category initials JSON."""
+    if out is None:
+        out = []
+    if isinstance(obj, dict):
+        items = obj.get("videoThumbProps")
+        if isinstance(items, list):
+            out.extend(v for v in items if isinstance(v, dict))
+        for v in obj.values():
+            _xhamster_collect_thumbs(v, out)
+    elif isinstance(obj, list):
+        for v in obj:
+            _xhamster_collect_thumbs(v, out)
+    return out
+
+
+def _xhamster_thumb_items(html):
+    """Video cards from searchResult or pagesCategoryComponent (category browse)."""
     data = _extract_initials_json(html)
     if not data:
         return []
+    items = []
     sr = data.get("searchResult")
-    if not isinstance(sr, dict):
-        return []
-    items = sr.get("videoThumbProps") or []
+    if isinstance(sr, dict):
+        items.extend(v for v in (sr.get("videoThumbProps") or []) if isinstance(v, dict))
+    pcc = data.get("pagesCategoryComponent")
+    if isinstance(pcc, dict):
+        trending = pcc.get("trendingVideoListProps") or {}
+        if isinstance(trending, dict):
+            items.extend(
+                v for v in (trending.get("videoThumbProps") or []) if isinstance(v, dict)
+            )
+    if items:
+        return items
+    return _xhamster_collect_thumbs(data)
+
+
+def _xhamster_from_initials(html, need, min_duration, seen):
+    """Extract search/category hits from window.initials videoThumbProps."""
     out = []
-    for v in items:
-        if not isinstance(v, dict):
-            continue
+    for v in _xhamster_thumb_items(html):
         url = _xhamster_canonical_url(v.get("pageURL") or "")
         if not url or url in seen:
             continue
@@ -360,7 +389,7 @@ def _xhamster_from_initials(html, need, min_duration, seen):
             continue
         seen.add(url)
         thumb = str(v.get("thumbURL") or v.get("imageURL") or "")
-        title = str(v.get("title") or "Unknown")
+        title = str(v.get("title") or "").strip() or "Unknown"
         out.append(_norm(url, title, dur_s, thumbnail=thumb))
         if len(out) >= need:
             break
@@ -381,7 +410,7 @@ def _xhamster_from_links(html, need, min_duration, seen):
         parsed = urlparse(full)
         if "xhamster" not in (parsed.netloc or ""):
             continue
-        if not re.search(r"^/videos/", parsed.path or ""):
+        if not re.search(r"^/videos/[^/]+", parsed.path or ""):
             continue
         clean = _xhamster_canonical_url(parsed.path)
         if not clean or clean in seen:
@@ -389,10 +418,18 @@ def _xhamster_from_links(html, need, min_duration, seen):
         dur = _find_duration(a)
         if dur and dur < min_duration:
             continue
-        seen.add(clean)
         title = (a.get("title") or a.get("data-title")
                  or a.get_text(" ", strip=True) or "").strip()
-        out.append(_norm(clean, title or "Unknown", dur or None, thumbnail=_find_thumb(a)))
+        # Duration badges sit in the same <a> as the thumb; don't use them as titles.
+        if title and (_DUR_RE.fullmatch(title) or _DUR_MIN_RE.fullmatch(title)):
+            title = ""
+        if not title:
+            slug = (parsed.path or "").rstrip("/").rsplit("/", 1)[-1]
+            slug = re.sub(r"-xh[a-zA-Z0-9]+$", "", slug)
+            slug = re.sub(r"-\d+$", "", slug)
+            title = slug.replace("-", " ").strip() or "Unknown"
+        seen.add(clean)
+        out.append(_norm(clean, title, dur or None, thumbnail=_find_thumb(a)))
         if len(out) >= need:
             break
     return out
@@ -577,21 +614,34 @@ def _html_spankbang(query, count, cursor=0, min_duration=600, mode="query"):
     )
 
 
+def _xhamster_list_url(query, page, min_duration, mode):
+    """Build a search or category listing URL.
+
+    Category pagination is path-based (`/categories/fbb/2`). `?page=2` is
+    ignored and returns page 1 again. Category pages also ignore `sort=longest`.
+    """
+    from urllib.parse import quote_plus
+
+    md = _xhamster_min_duration_param(min_duration)
+    if _is_category_mode(mode):
+        slug = _category_slug(query)
+        path = f"{_XH_BASE}/categories/{slug}" if page <= 1 else f"{_XH_BASE}/categories/{slug}/{page}"
+        return f"{path}?min-duration={md}"
+    q = quote_plus(query)
+    return f"{_XH_BASE}/search/{q}?sort=longest&min-duration={md}&page={page}"
+
+
 def _xhamster_new_urls_on_page(html, seen):
     """Count never-before-seen video URLs on this page (before duration filtering)."""
-    data = _extract_initials_json(html)
-    if data:
-        sr = data.get("searchResult")
-        if isinstance(sr, dict):
-            n = 0
-            for v in sr.get("videoThumbProps") or []:
-                if not isinstance(v, dict):
-                    continue
-                url = _xhamster_canonical_url(v.get("pageURL") or "")
-                if url and url not in seen:
-                    n += 1
-            if n:
-                return n
+    items = _xhamster_thumb_items(html)
+    if items:
+        n = 0
+        for v in items:
+            url = _xhamster_canonical_url(v.get("pageURL") or "")
+            if url and url not in seen:
+                n += 1
+        if n:
+            return n
     from urllib.parse import urljoin, urlparse
     try:
         from bs4 import BeautifulSoup
@@ -604,7 +654,7 @@ def _xhamster_new_urls_on_page(html, seen):
         parsed = urlparse(full)
         if "xhamster" not in (parsed.netloc or ""):
             continue
-        if not re.search(r"^/videos/", parsed.path or ""):
+        if not re.search(r"^/videos/[^/]+", parsed.path or ""):
             continue
         clean = _xhamster_canonical_url(parsed.path)
         if clean and clean not in seen:
@@ -704,23 +754,12 @@ def _xh_parse_detail(html, url):
 
 def _xhamster_list_search(query, count, cursor=0, min_duration=600, mode="query"):
     """Listing-only xHamster search via embedded JSON + HTML links."""
-    from urllib.parse import quote_plus
-
-    md = _xhamster_min_duration_param(min_duration)
-    q = quote_plus(query)
-    slug = _category_slug(query)
     out, seen = [], set()
     age_gate = False
     page = _page_cursor(cursor)
     try:
         while len(out) < count:
-            if _is_category_mode(mode):
-                url = (
-                    f"{_XH_BASE}/categories/{slug}"
-                    f"?sort=longest&min-duration={md}&page={page}"
-                )
-            else:
-                url = f"{_XH_BASE}/search/{q}?sort=longest&min-duration={md}&page={page}"
+            url = _xhamster_list_url(query, page, min_duration, mode)
             html = _xhamster_get(url)
             if not html:
                 return out, page, page == _page_cursor(cursor), age_gate

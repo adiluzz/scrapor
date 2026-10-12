@@ -657,11 +657,14 @@ def _process_one(run, source_site, video) -> ProcessOutcome:
                 if HLS_ONLY_INGEST:
                     keys["hls"] = _package_and_upload_hls(site_id, vid, video_path, tmp_dir)
                     if not keys["hls"]:
+                        # The row was inserted as READY with no media; hide it from the catalog.
+                        db.set_video_status(conn, vid, "FAILED")
                         _log_video_fail("upload", video, run, source_site, "S3 HLS upload failed", videoId=vid)
                         return ProcessOutcome("fail", "S3 HLS upload failed", "upload")
                 else:
                     keys["v"] = storage.upload(video_path, storage.key_video(site_id, vid), "video/mp4")
                     if not keys["v"]:
+                        db.set_video_status(conn, vid, "FAILED")
                         _log_video_fail("upload", video, run, source_site, "S3 video upload failed", videoId=vid)
                         return ProcessOutcome("fail", "S3 video upload failed", "upload")
                 if os.path.exists(thumb):

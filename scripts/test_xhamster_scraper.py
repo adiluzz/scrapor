@@ -141,6 +141,45 @@ class XHamsterSearchTests(unittest.TestCase):
             "https://xhamster.com/categories/fbb/2?min-duration=10",
         )
 
+    @patch.object(ss, "_xhamster_get")
+    def test_category_skips_short_videos_without_shared_thumb(self, mock_get):
+        page1 = """
+<html><body>
+<img src="https://ic-vt-nss.xhcdn.com/a/shared-hero.webp">
+<script>
+window.initials={"pagesCategoryComponent":{"trendingVideoListProps":{"videoThumbProps":[
+  {"pageURL":"https://xhamster.com/videos/long-one-xhAAA","title":"Long One","duration":900,
+   "thumbURL":"https://ic-vt-nss.xhcdn.com/a/long.webp"},
+  {"pageURL":"https://xhamster.com/videos/short-one-xhBBB","title":"Short One","duration":120,
+   "thumbURL":"https://ic-vt-nss.xhcdn.com/a/short.webp","imageURL":"https://ic-vt-nss.xhcdn.com/a/shared-hero.webp"}
+]}}}
+</script>
+<a href="/videos/short-one-xhBBB"><img src="https://ic-vt-nss.xhcdn.com/a/shared-hero.webp"></a>
+<a href="/videos/page-two-xhCCC" title="Page Two"></a>
+</body></html>
+"""
+        page2 = """
+<html><body><script>
+window.initials={"pagesCategoryComponent":{"trendingVideoListProps":{"videoThumbProps":[
+  {"pageURL":"https://xhamster.com/videos/page-two-xhCCC","title":"Page Two","duration":800,
+   "thumbURL":"https://ic-vt-nss.xhcdn.com/a/two.webp"}
+]}}}
+</script></body></html>
+"""
+        mock_get.side_effect = [page1, page2]
+        batch, cursor, exhausted = ss.search_xhamster("fbb", 2, 0, 600, "category")
+        self.assertEqual([v["title"] for v in batch], ["Long One", "Page Two"])
+        self.assertEqual(
+            [v["thumbnail"] for v in batch],
+            [
+                "https://ic-vt-nss.xhcdn.com/a/long.webp",
+                "https://ic-vt-nss.xhcdn.com/a/two.webp",
+            ],
+        )
+        self.assertNotIn("https://ic-vt-nss.xhcdn.com/a/shared-hero.webp", [v["thumbnail"] for v in batch])
+        self.assertEqual(len({v["thumbnail"] for v in batch}), 2)
+        self.assertEqual(cursor, 3)
+
 
 def live_search(limit=3):
     print(f"=== live search (limit={limit}) ===")

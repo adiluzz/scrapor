@@ -376,6 +376,11 @@ def _xhamster_thumb_items(html):
     return _xhamster_collect_thumbs(data)
 
 
+def _xhamster_card_thumb(v):
+    """Prefer the 16:9 listing card over the 2560x1440 still (often a different frame)."""
+    return str(v.get("thumbURL") or v.get("previewThumbURL") or v.get("imageURL") or "")
+
+
 def _xhamster_from_initials(html, need, min_duration, seen):
     """Extract search/category hits from window.initials videoThumbProps."""
     out = []
@@ -383,14 +388,15 @@ def _xhamster_from_initials(html, need, min_duration, seen):
         url = _xhamster_canonical_url(v.get("pageURL") or "")
         if not url or url in seen:
             continue
+        # Remember shorts too so the HTML fallback cannot re-add them with a
+        # shared parent-page image (that is what made 20 cards look identical).
+        seen.add(url)
         dur_raw = v.get("duration")
         dur_s = int(dur_raw) if dur_raw else None
         if dur_s and dur_s < min_duration:
             continue
-        seen.add(url)
-        thumb = str(v.get("thumbURL") or v.get("imageURL") or "")
         title = str(v.get("title") or "").strip() or "Unknown"
-        out.append(_norm(url, title, dur_s, thumbnail=thumb))
+        out.append(_norm(url, title, dur_s, thumbnail=_xhamster_card_thumb(v)))
         if len(out) >= need:
             break
     return out
@@ -437,8 +443,10 @@ def _xhamster_from_links(html, need, min_duration, seen):
 
 def _xhamster_videos_from_html(html, need, min_duration, seen):
     out = _xhamster_from_initials(html, need, min_duration, seen)
-    if len(out) >= need:
-        return out
+    # When initials listed cards (even if all were too short), paginate instead
+    # of scraping leftover <a> tags — those reuse one page-level thumbnail.
+    if out or _xhamster_thumb_items(html):
+        return out[:need]
     out.extend(_xhamster_from_links(html, need - len(out), min_duration, seen))
     return out[:need]
 
@@ -461,16 +469,15 @@ def _find_duration(node):
 
 
 def _find_thumb(node):
-    for _ in range(3):
-        if node is None or not hasattr(node, "find"):
-            break
-        img = node.find("img")
-        if img:
-            for attr in ("data-original", "data-src", "data-thumb_url", "data-thumb", "src"):
-                v = img.get(attr)
-                if v and str(v).startswith("http"):
-                    return str(v)
-        node = getattr(node, "parent", None)
+    """Use only the image inside this card/anchor — parent walks pick up one shared hero still."""
+    if node is None or not hasattr(node, "find"):
+        return ""
+    img = node.find("img")
+    if img:
+        for attr in ("data-original", "data-src", "data-thumb_url", "data-thumb", "src"):
+            v = img.get(attr)
+            if v and str(v).startswith("http"):
+                return str(v)
     return ""
 
 

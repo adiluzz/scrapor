@@ -3,6 +3,7 @@ import { prisma } from "@/lib/db";
 import { guardAdmin } from "@/lib/admin-guard";
 import { redis, PREVIEW_QUEUE_KEY } from "@/lib/redis";
 import { logger } from "@/lib/logger";
+import { hasStoredVideoSource } from "@/lib/video-source";
 
 /** Queue hover-preview + storyboard regeneration for an existing video (worker). */
 export async function POST(_request: Request, { params }: { params: Promise<{ id: string }> }) {
@@ -12,10 +13,17 @@ export async function POST(_request: Request, { params }: { params: Promise<{ id
 
   const video = await prisma.video.findUnique({
     where: { id },
-    select: { id: true, slug: true, s3VideoKey: true, s3PreviewKey: true, previewVersion: true },
+    select: {
+      id: true,
+      slug: true,
+      s3VideoKey: true,
+      s3HlsMasterKey: true,
+      s3PreviewKey: true,
+      previewVersion: true,
+    },
   });
   if (!video) return NextResponse.json({ error: "Not found" }, { status: 404 });
-  if (!video.s3VideoKey) {
+  if (!hasStoredVideoSource(video)) {
     return NextResponse.json(
       { error: "Video has no stored source file — cannot regenerate preview" },
       { status: 400 }

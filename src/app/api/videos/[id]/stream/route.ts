@@ -5,6 +5,12 @@ import { getSiteIdForAuth } from "@/lib/site";
 import { mintStreamUrl } from "@/lib/cdn";
 import { isS3Configured } from "@/lib/storage";
 
+function requestOrigin(request: Request): string {
+  const host = request.headers.get("x-forwarded-host") || request.headers.get("host") || "";
+  const proto = request.headers.get("x-forwarded-proto") || "https";
+  return host ? `${proto}://${host}` : new URL(request.url).origin;
+}
+
 /**
  * API-consumer path for full video retrieval (no ad flow).
  * Requires session or READ_ONLY / FULL_ACCESS API key.
@@ -39,6 +45,9 @@ export async function GET(
     clientIp: ip,
     adSessionId: "api-key",
     s3HlsMasterKey: video.s3HlsMasterKey,
+    s3VideoKey: video.s3VideoKey,
+    forceMp4: true,
+    playlistOrigin: requestOrigin(request),
   });
 
   return NextResponse.json({ ...grant, videoId: video.id, title: video.title });

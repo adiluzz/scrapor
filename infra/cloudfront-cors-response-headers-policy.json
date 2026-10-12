@@ -1,0 +1,28 @@
+{
+  "Name": "pisster-media-cors",
+  "Comment": "CORS for HLS segments fetched by Video.js VHS from the site origins",
+  "CorsConfig": {
+    "AccessControlAllowOrigins": {
+      "Quantity": 8,
+      "Items": [
+        "https://pisster.com",
+        "https://www.pisster.com",
+        "https://fbbtube.com",
+        "https://www.fbbtube.com",
+        "https://sharlila.com",
+        "https://www.sharlila.com",
+        "https://admin.sharlila.com",
+        "http://localhost:3000"
+      ]
+    },
+    "AccessControlAllowHeaders": { "Quantity": 1, "Items": ["*"] },
+    "AccessControlAllowMethods": { "Quantity": 2, "Items": ["GET", "HEAD"] },
+    "AccessControlAllowCredentials": false,
+    "AccessControlExposeHeaders": {
+      "Quantity": 4,
+      "Items": ["ETag", "Content-Length", "Content-Range", "Accept-Ranges"]
+    },
+    "AccessControlMaxAgeSec": 86400,
+    "OriginOverride": true
+  }
+}

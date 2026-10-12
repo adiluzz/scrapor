@@ -93,3 +93,58 @@ def download(key, dest_path):
         return os.path.exists(dest_path) and os.path.getsize(dest_path) > 0
     except Exception:
         return False
+
+
+def delete(key) -> bool:
+    if not key:
+        return False
+    s3().delete_object(Bucket=_BUCKET, Key=key)
+    return True
+
+
+def download_hls_as_mp4(master_key, dest_path, workers=16) -> bool:
+    """Download HLS segments and remux (stream copy) into one faststart MP4."""
+    if not master_key:
+        return False
+    import shutil
+    import subprocess
+    import tempfile
+    from concurrent.futures import ThreadPoolExecutor
+
+    prefix = master_key.rsplit("/", 1)[0] + "/"
+    parent = os.path.dirname(os.path.abspath(dest_path)) or "."
+    os.makedirs(parent, exist_ok=True)
+    work = tempfile.mkdtemp(prefix=".hls-", dir=parent)
+    try:
+        body = s3().get_object(Bucket=_BUCKET, Key=master_key)["Body"].read().decode("utf-8")
+        names = [l.strip() for l in body.splitlines() if l.strip() and not l.startswith("#")]
+        if not body.startswith("#EXTM3U") or not names:
+            return False
+        if any("/" in n or ".." in n for n in names):
+            return False
+        with open(os.path.join(work, "master.m3u8"), "w") as f:
+            f.write(body)
+        with ThreadPoolExecutor(max_workers=workers) as ex:
+            list(ex.map(lambda n: s3().download_file(_BUCKET, prefix + n, os.path.join(work, n)), names))
+        out = os.path.join(work, "out.mp4")
+        r = subprocess.run(
+            ["ffmpeg", "-y", "-loglevel", "error", "-allowed_extensions", "ALL",
+             "-i", os.path.join(work, "master.m3u8"),
+             "-c", "copy", "-bsf:a", "aac_adtstoasc", "-movflags", "+faststart", out],
+            capture_output=True, timeout=1800, check=False,
+        )
+        if r.returncode != 0 or not os.path.exists(out) or os.path.getsize(out) == 0:
+            return False
+        os.replace(out, dest_path)
+        return True
+    except Exception:
+        return False
+    finally:
+        shutil.rmtree(work, ignore_errors=True)
+
+
+def download_source(site_id, video_id, s3_video_key, s3_hls_master_key, dest_path) -> bool:
+    """Full source video to dest_path: stored MP4, else remuxed from HLS."""
+    if s3_video_key and download(s3_video_key, dest_path):
+        return True
+    return download_hls_as_mp4(s3_hls_master_key, dest_path)

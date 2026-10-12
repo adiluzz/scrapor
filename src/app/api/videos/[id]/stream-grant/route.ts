@@ -53,6 +53,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     clientIp: ip,
     adSessionId: session.id,
     s3HlsMasterKey: video.s3HlsMasterKey,
+    s3VideoKey: video.s3VideoKey,
   });
 
   logger.info({ videoId: video.id, outcome, s3: isS3Configured(), format: grant.mimeType }, "stream granted");

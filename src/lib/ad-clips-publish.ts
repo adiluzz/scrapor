@@ -1,6 +1,7 @@
 import { prisma } from "@/lib/db";
 import { redis, PREVIEW_QUEUE_KEY } from "@/lib/redis";
 import { logger } from "@/lib/logger";
+import { hasStoredVideoSource } from "@/lib/video-source";
 
 /** Editor exports that can be published as standalone videos (not source-video segments). */
 export function isClipPublishableVideo(video: {
@@ -31,6 +32,7 @@ export async function publishClipVideoToSites(
       sourceUrl: true,
       sourceSite: true,
       s3VideoKey: true,
+      s3HlsMasterKey: true,
       isDeleted: true,
     },
   });
@@ -38,7 +40,7 @@ export async function publishClipVideoToSites(
   if (!isClipPublishableVideo(video)) {
     throw new Error("Only compiled or editor-uploaded videos can be published from Ad clips");
   }
-  if (!video.s3VideoKey) {
+  if (!hasStoredVideoSource(video)) {
     throw new Error("Video file is not ready yet — wait for processing to finish");
   }
 

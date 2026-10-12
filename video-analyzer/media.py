@@ -101,8 +101,59 @@ def download_video(site_id: str, video_id: str, dest: Path) -> bool:
         s3_client().download_file(CONFIG.s3_bucket, video_s3_key(site_id, video_id), str(dest))
         return dest.exists()
     except Exception as e:  # noqa: BLE001
-        log.warning("s3_download_failed video_id=%s err=%s", video_id, e)
+        log.info("s3_mp4_unavailable video_id=%s err=%s — trying HLS", video_id, e)
+    if download_hls_as_mp4(hls_master_s3_key(site_id, video_id), dest):
+        return True
+    log.warning("s3_download_failed video_id=%s (no MP4 or HLS)", video_id)
+    return False
+
+
+def hls_master_s3_key(site_id: str, video_id: str) -> str:
+    return f"sites/{site_id}/videos/{video_id}/hls/master.m3u8"
+
+
+def video_mp4_exists(site_id: str, video_id: str) -> bool:
+    try:
+        s3_client().head_object(Bucket=CONFIG.s3_bucket, Key=video_s3_key(site_id, video_id))
+        return True
+    except Exception:  # noqa: BLE001
         return False
+
+
+def download_hls_as_mp4(master_key: str, dest: Path, workers: int = 16) -> bool:
+    """Download HLS segments and remux (stream copy) into one faststart MP4."""
+    import shutil
+    import tempfile
+    from concurrent.futures import ThreadPoolExecutor
+
+    prefix = master_key.rsplit("/", 1)[0] + "/"
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    work = Path(tempfile.mkdtemp(prefix=".hls-", dir=dest.parent))
+    try:
+        client = s3_client()
+        body = client.get_object(Bucket=CONFIG.s3_bucket, Key=master_key)["Body"].read().decode("utf-8")
+        names = [l.strip() for l in body.splitlines() if l.strip() and not l.startswith("#")]
+        if not body.startswith("#EXTM3U") or not names or any("/" in n or ".." in n for n in names):
+            return False
+        (work / "master.m3u8").write_text(body)
+        with ThreadPoolExecutor(max_workers=workers) as ex:
+            list(ex.map(lambda n: client.download_file(CONFIG.s3_bucket, prefix + n, str(work / n)), names))
+        out = work / "out.mp4"
+        r = subprocess.run(
+            ["ffmpeg", "-y", "-loglevel", "error", "-allowed_extensions", "ALL",
+             "-i", str(work / "master.m3u8"),
+             "-c", "copy", "-bsf:a", "aac_adtstoasc", "-movflags", "+faststart", str(out)],
+            capture_output=True, timeout=1800, check=False,
+        )
+        if r.returncode != 0 or not out.exists() or out.stat().st_size == 0:
+            return False
+        out.replace(dest)
+        return True
+    except Exception as e:  # noqa: BLE001
+        log.warning("hls_download_failed key=%s err=%s", master_key, e)
+        return False
+    finally:
+        shutil.rmtree(work, ignore_errors=True)
 
 
 def probe_duration(video_path: Path) -> float:
@@ -217,7 +268,7 @@ def resolve_media_source(
         except Exception as e:  # noqa: BLE001
             log.warning("chunk_upload_failed video_id=%s start=%s err=%s", video_id, chunk_start, e)
 
-    if os.environ.get("AWS_ACCESS_KEY_ID"):
+    if os.environ.get("AWS_ACCESS_KEY_ID") and video_mp4_exists(site_id, video_id):
         try:
             url = presign_video_url(site_id, video_id)
             return MediaSource(

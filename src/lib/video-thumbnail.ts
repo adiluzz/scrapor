@@ -9,10 +9,10 @@ import {
   downloadS3ObjectToFile,
   isS3Configured,
   objectExists,
-  resolveVideoStorageKey,
   s3Keys,
   uploadBuffer,
 } from "@/lib/storage";
+import { downloadVideoSourceToFile, hasStoredVideoSource } from "@/lib/video-source";
 
 /** Brand intro on compiled editor exports is ~2.5s — sample poster after it. */
 export const COMPILED_POSTER_AT_SEC = 8;
@@ -22,6 +22,7 @@ type VideoPosterRow = {
   id: string;
   siteId: string;
   s3VideoKey: string | null;
+  s3HlsMasterKey: string | null;
   s3ThumbKey: string | null;
   previewVersion: number | null;
   durationSec: number | null;
@@ -55,6 +56,7 @@ async function loadVideoForPoster(videoId: string): Promise<VideoPosterRow | nul
       id: true,
       siteId: true,
       s3VideoKey: true,
+      s3HlsMasterKey: true,
       s3ThumbKey: true,
       previewVersion: true,
       durationSec: true,
@@ -66,7 +68,7 @@ async function loadVideoForPoster(videoId: string): Promise<VideoPosterRow | nul
 }
 
 function needsPosterRegeneration(video: VideoPosterRow): boolean {
-  if (!video.s3VideoKey || !isS3Configured()) return false;
+  if (!hasStoredVideoSource(video) || !isS3Configured()) return false;
   if (isCompiledLibraryVideo(video)) {
     return (video.previewVersion ?? 0) < COMPILED_THUMB_PREVIEW_VERSION;
   }
@@ -85,7 +87,7 @@ async function extractPosterJpeg(videoPath: string, destJpg: string, atSec: numb
 /** Extract, upload, and persist a poster JPEG when missing or outdated (compiled intro skip). */
 export async function ensureVideoPosterBytes(videoId: string): Promise<Buffer | null> {
   const video = await loadVideoForPoster(videoId);
-  if (!video?.s3VideoKey) return null;
+  if (!video || !hasStoredVideoSource(video)) return null;
 
   const thumbKey = video.s3ThumbKey || s3Keys.thumb(video.siteId, video.id);
 
@@ -109,7 +111,7 @@ export async function ensureVideoPosterBytes(videoId: string): Promise<Buffer | 
   const thumbPath = join(tmpDir, "thumbnail.jpg");
   try {
     await mkdir(tmpDir, { recursive: true });
-    await downloadS3ObjectToFile(resolveVideoStorageKey(video), videoPath);
+    await downloadVideoSourceToFile(video, videoPath);
     const atSec = posterSampleSec(video);
     if (!(await extractPosterJpeg(videoPath, thumbPath, atSec))) return null;
 

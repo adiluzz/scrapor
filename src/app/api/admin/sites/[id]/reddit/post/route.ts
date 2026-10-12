@@ -55,6 +55,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
           slug: true,
           title: true,
           s3VideoKey: true,
+          s3HlsMasterKey: true,
           s3ThumbKey: true,
           status: true,
         },

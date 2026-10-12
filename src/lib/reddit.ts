@@ -439,6 +439,7 @@ export async function downloadSiteVideoMedia(video: {
   id: string;
   siteId: string;
   s3VideoKey?: string | null;
+  s3HlsMasterKey?: string | null;
   s3ThumbKey?: string | null;
 }): Promise<{
   video: { bytes: Buffer; filename: string; contentType: string };
@@ -470,10 +471,30 @@ export async function downloadSiteVideoMedia(video: {
     return null;
   }
 
-  const videoKey = video.s3VideoKey || s3Keys.video(video.siteId, video.id);
-  const thumbKey = video.s3ThumbKey || s3Keys.thumb(video.siteId, video.id);
+  async function readHlsAsMp4(masterKey: string): Promise<{ bytes: Buffer; contentType: string } | null> {
+    if (!isS3Configured()) return null;
+    const { mkdtemp, readFile, rm } = await import("fs/promises");
+    const { tmpdir } = await import("os");
+    const { downloadHlsAsMp4 } = await import("@/lib/video-source");
+    const dir = await mkdtemp(join(tmpdir(), "reddit-hls-"));
+    try {
+      const out = join(dir, "video.mp4");
+      await downloadHlsAsMp4(masterKey, out);
+      return { bytes: await readFile(out), contentType: "video/mp4" };
+    } catch {
+      return null;
+    } finally {
+      await rm(dir, { recursive: true, force: true }).catch(() => {});
+    }
+  }
 
-  const [s3Video, s3Thumb] = await Promise.all([readS3(videoKey), readS3(thumbKey)]);
+  const thumbKey = video.s3ThumbKey || s3Keys.thumb(video.siteId, video.id);
+  const videoSource =
+    !video.s3VideoKey && video.s3HlsMasterKey
+      ? readHlsAsMp4(video.s3HlsMasterKey)
+      : readS3(video.s3VideoKey || s3Keys.video(video.siteId, video.id));
+
+  const [s3Video, s3Thumb] = await Promise.all([videoSource, readS3(thumbKey)]);
   const videoBytes = s3Video?.bytes || readLocal(["video.mp4", "preview.mp4"]);
   const thumbBytes = s3Thumb?.bytes || readLocal(["thumbnail.jpg", "thumb.jpg"]);
 

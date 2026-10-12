@@ -328,7 +328,7 @@ def load_video_media(conn, video_id: str):
         cur.execute(
             'SELECT id,"siteId","durationSec","s3VideoKey","s3PreviewKey",'
             '"s3StoryboardKey","s3StoryboardVttKey","previewVersion","s3ThumbKey",'
-            '"sourceSite","sourceUrl" '
+            '"sourceSite","sourceUrl","s3HlsMasterKey" '
             'FROM "Video" WHERE id=%s',
             (video_id,),
         )
@@ -347,6 +347,7 @@ def load_video_media(conn, video_id: str):
         "s3ThumbKey": row[8],
         "sourceSite": row[9],
         "sourceUrl": row[10],
+        "s3HlsMasterKey": row[11],
     }
 
 
@@ -424,11 +425,14 @@ def list_videos_with_hls_key(conn):
     """Rows that claim HLS — used to detect stale DB keys after failed uploads."""
     with conn.cursor() as cur:
         cur.execute(
-            'SELECT id,"s3HlsMasterKey" FROM "Video" '
+            'SELECT id,"s3HlsMasterKey","s3VideoKey" FROM "Video" '
             'WHERE "s3HlsMasterKey" IS NOT NULL AND "isDeleted" = false AND status = %s',
             ("READY",),
         )
-        return [{"id": row[0], "s3HlsMasterKey": row[1]} for row in cur.fetchall()]
+        return [
+            {"id": row[0], "s3HlsMasterKey": row[1], "s3VideoKey": row[2]}
+            for row in cur.fetchall()
+        ]
 
 
 def clear_video_hls_master_key(conn, video_id: str):

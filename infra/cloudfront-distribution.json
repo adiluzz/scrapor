@@ -30,6 +30,7 @@
   "DefaultCacheBehavior": {
     "TargetOriginId": "S3-pisster-media",
     "ViewerProtocolPolicy": "redirect-to-https",
+    "ResponseHeadersPolicyId": "59ff53d9-81c3-412e-b380-9e1a5c378d17",
     "AllowedMethods": {
       "Quantity": 3,
       "Items": ["GET", "HEAD", "OPTIONS"],

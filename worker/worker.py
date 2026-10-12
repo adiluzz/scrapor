@@ -727,6 +727,9 @@ def _reconcile_stale_hls_keys(conn) -> int:
     """Clear s3HlsMasterKey when the S3 playlist object no longer exists."""
     cleared = 0
     for row in db.list_videos_with_hls_key(conn):
+        # HLS-only rows have nothing to fall back to; a failed HEAD must not orphan them.
+        if not row.get("s3VideoKey"):
+            continue
         hls_key = row.get("s3HlsMasterKey")
         if hls_key and not storage.object_exists(hls_key):
             db.clear_video_hls_master_key(conn, row["id"])
@@ -817,7 +820,7 @@ def process_hls_backfill(conn, video_id: str, r) -> None:
         _event("warning", "hls_backfill_not_found", videoId=video_id)
         return
     if v.get("s3HlsMasterKey"):
-        if storage.object_exists(v["s3HlsMasterKey"]):
+        if storage.object_exists(v["s3HlsMasterKey"]) or not v.get("s3VideoKey"):
             return
         db.clear_video_hls_master_key(conn, video_id)
         _event("warning", "hls_backfill_stale_key", videoId=video_id)
@@ -956,10 +959,11 @@ def process_creator_upload(conn, video_id: str):
         shutil.rmtree(os.path.join(UPLOAD_DIR, video_id), ignore_errors=True)
 
 
-def _resolve_source_video(conn, video_id: str, site_id: str, s3_video_key: str | None, dest: str) -> bool:
+def _resolve_source_video(conn, video_id: str, site_id: str, s3_video_key: str | None, dest: str,
+                          s3_hls_master_key: str | None = None) -> bool:
     """Copy or download the full video to dest for media regeneration."""
-    if storage.configured() and s3_video_key:
-        if storage.download(s3_video_key, dest):
+    if storage.configured() and (s3_video_key or s3_hls_master_key):
+        if storage.download_source(site_id, video_id, s3_video_key, s3_hls_master_key, dest):
             return True
     for name in ("video.mp4", "preview.mp4"):
         local = os.path.join(ROOT, "downloads", video_id, name)
@@ -984,7 +988,8 @@ def process_regenerate_preview(conn, video_id: str):
     tmp_dir = tempfile.mkdtemp(prefix="preview_regen_")
     try:
         video_path = os.path.join(tmp_dir, "video.mp4")
-        if not _resolve_source_video(conn, video_id, site_id, v.get("s3VideoKey"), video_path):
+        if not _resolve_source_video(conn, video_id, site_id, v.get("s3VideoKey"), video_path,
+                                     v.get("s3HlsMasterKey")):
             _event("warning", "preview_regen_no_source", videoId=video_id)
             return
 

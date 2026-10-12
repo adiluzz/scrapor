@@ -312,6 +312,7 @@ export default forwardRef(function VideoPlayer(
   const heatmapRef = useRef<HTMLDivElement>(null);
   const timelineHitRef = useRef<HTMLDivElement>(null);
   const trackingAttachedRef = useRef(false);
+  const fallbackHandlerRef = useRef<(() => void) | null>(null);
   const [status, setStatus] = useState<"idle" | "ad" | "loading" | "playing" | "error">("idle");
   const [controlsVisible, setControlsVisible] = useState(true);
   const [adSkipIn, setAdSkipIn] = useState<number | null>(null);
@@ -1066,12 +1067,20 @@ export default forwardRef(function VideoPlayer(
   }, [adminPreview, status]);
 
   function attachPlaybackFallback(player: Player, mp4FallbackUrl?: string | null) {
-    if (!mp4FallbackUrl) return;
     const onError = () => {
-      player.off("error", onError);
+      if (!mp4FallbackUrl) {
+        setStatus("error");
+        return;
+      }
+      const resumeAt = player.currentTime() || 0;
       player.src({ src: mp4FallbackUrl, type: "video/mp4" });
+      if (resumeAt > 0) {
+        player.one("loadedmetadata", () => player.currentTime(resumeAt));
+      }
       void player.play()?.catch(() => setStatus("error"));
     };
+    if (fallbackHandlerRef.current) player.off("error", fallbackHandlerRef.current);
+    fallbackHandlerRef.current = onError;
     player.one("error", onError);
   }
 

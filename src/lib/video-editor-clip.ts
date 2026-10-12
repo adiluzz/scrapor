@@ -8,6 +8,7 @@ import {
   resolveVideoStorageKey,
 } from "@/lib/storage";
 import { runProcess } from "@/lib/assistant-tools/utils";
+import { downloadVideoSourceToFile } from "@/lib/video-source";
 import { MAX_EDITOR_CLIP_DURATION_SEC, MAX_GIF_DURATION_SEC } from "@/lib/video-editor-limits";
 import { logger } from "@/lib/logger";
 
@@ -31,7 +32,8 @@ function gifCachePath(videoId: string, startSec: number, endSec: number): string
 async function resolveSourcePath(
   videoId: string,
   siteId: string,
-  s3VideoKey?: string | null
+  s3VideoKey?: string | null,
+  s3HlsMasterKey?: string | null
 ): Promise<string> {
   await mkdir(join(UPLOAD_ROOT, "tmp", "editor-src"), { recursive: true });
   const localCandidates = [
@@ -52,6 +54,10 @@ async function resolveSourcePath(
     if (st.size > 0) return dest;
   }
 
+  if (!s3VideoKey && s3HlsMasterKey) {
+    await downloadVideoSourceToFile({ id: videoId, siteId, s3HlsMasterKey }, dest);
+    return dest;
+  }
   const key = s3VideoKey || resolveVideoStorageKey({ id: videoId, siteId });
   await downloadS3ObjectToFile(key, dest);
   return dest;
@@ -74,7 +80,7 @@ export async function ensureEditorClip(input: {
 
   const video = await prisma.video.findUnique({
     where: { id: input.videoId },
-    select: { id: true, siteId: true, s3VideoKey: true, isDeleted: true },
+    select: { id: true, siteId: true, s3VideoKey: true, s3HlsMasterKey: true, isDeleted: true },
   });
   if (!video || video.isDeleted) throw new Error("Video not found");
 
@@ -87,7 +93,7 @@ export async function ensureEditorClip(input: {
     }
   }
 
-  const srcPath = await resolveSourcePath(video.id, video.siteId, video.s3VideoKey);
+  const srcPath = await resolveSourcePath(video.id, video.siteId, video.s3VideoKey, video.s3HlsMasterKey);
   const tmpOut = `${outPath}.partial.mp4`;
   await rm(tmpOut, { force: true }).catch(() => {});
 
@@ -155,7 +161,7 @@ export async function ensureEditorClipGif(input: {
 
   const video = await prisma.video.findUnique({
     where: { id: input.videoId },
-    select: { id: true, siteId: true, s3VideoKey: true, isDeleted: true },
+    select: { id: true, siteId: true, s3VideoKey: true, s3HlsMasterKey: true, isDeleted: true },
   });
   if (!video || video.isDeleted) throw new Error("Video not found");
 
@@ -168,7 +174,7 @@ export async function ensureEditorClipGif(input: {
     }
   }
 
-  const srcPath = await resolveSourcePath(video.id, video.siteId, video.s3VideoKey);
+  const srcPath = await resolveSourcePath(video.id, video.siteId, video.s3VideoKey, video.s3HlsMasterKey);
   const tmpOut = `${outPath}.partial.gif`;
   await rm(tmpOut, { force: true }).catch(() => {});
 

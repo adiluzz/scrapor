@@ -30,6 +30,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     adSessionId: "admin-preview",
     adminPreview: true,
     s3HlsMasterKey: video.s3HlsMasterKey,
+    s3VideoKey: video.s3VideoKey,
   });
 
   logger.info({ videoId: video.id, isDeleted: video.isDeleted, format: grant.mimeType }, "admin preview stream granted");

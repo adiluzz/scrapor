@@ -86,7 +86,8 @@ function nginxAssetUrl(opts: { videoId: string; file: string; expires: number })
 
 /**
  * Mint signed playback URL after ad grant (CloudFront custom policy when configured).
- * Prefers HLS when s3HlsMasterKey is set (segment-based seeking).
+ * HLS when the master exists and HLS is enabled for the video (or no MP4 is left);
+ * otherwise progressive MP4.
  */
 export type StreamGrant = {
   url: string;
@@ -95,9 +96,72 @@ export type StreamGrant = {
   mp4FallbackUrl?: string;
 };
 
-/** HLS in the browser requires CDN CORS (see infra/s3-cors-policy.json). Off by default. */
-export function isHlsPlaybackEnabled(): boolean {
-  return process.env.HLS_PLAYBACK_ENABLED === "true";
+/**
+ * HLS for every video when HLS_PLAYBACK_ENABLED=true, otherwise only for ids in
+ * HLS_PLAYBACK_VIDEO_IDS (comma-separated). Videos with no MP4 always get HLS.
+ * Segments are fetched cross-origin from the CDN, so CORS must be on (infra/s3-cors-policy.json).
+ */
+export function isHlsPlaybackEnabled(videoId?: string): boolean {
+  if (process.env.HLS_PLAYBACK_ENABLED === "true") return true;
+  if (!videoId) return false;
+  const ids = (process.env.HLS_PLAYBACK_VIDEO_IDS || "").split(",").map((s) => s.trim());
+  return ids.includes(videoId);
+}
+
+type HlsPlaylistTokenPayload = { v: string; k: string; e: number };
+
+export function makeHlsPlaylistToken(payload: HlsPlaylistTokenPayload): string {
+  const body = base64url(Buffer.from(JSON.stringify(payload)));
+  const sig = base64url(crypto.createHmac("sha256", `hls:${SECRET}`).update(body).digest());
+  return `${body}.${sig}`;
+}
+
+export function verifyHlsPlaylistToken(token: string): HlsPlaylistTokenPayload | null {
+  const [body, sig] = (token || "").split(".");
+  if (!body || !sig) return null;
+  const expected = base64url(crypto.createHmac("sha256", `hls:${SECRET}`).update(body).digest());
+  if (sig.length !== expected.length) return null;
+  if (!crypto.timingSafeEqual(Buffer.from(sig), Buffer.from(expected))) return null;
+  try {
+    const payload = JSON.parse(Buffer.from(body, "base64").toString());
+    if (typeof payload.e !== "number" || payload.e * 1000 < Date.now()) return null;
+    if (typeof payload.v !== "string" || typeof payload.k !== "string") return null;
+    if (!payload.k.endsWith("/hls/master.m3u8")) return null;
+    return payload;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Rewrite a media playlist so every segment URI is an absolute CloudFront URL
+ * carrying the wildcard-policy signature (relative URIs would drop the query).
+ */
+export function signHlsPlaylist(opts: {
+  playlist: string;
+  masterKey: string;
+  expiresEpochSec: number;
+  clientIp: string;
+}): string {
+  const prefix = opts.masterKey.replace(/master\.m3u8$/, "");
+  const signed = new URL(
+    signCloudFrontCustomWildcard({
+      objectPathPrefix: `/${prefix}`,
+      expiresEpochSec: opts.expiresEpochSec,
+      clientIp: opts.clientIp,
+    })
+  );
+  const query = signed.search.slice(1);
+  const base = `${signed.origin}/${prefix}`;
+  return opts.playlist
+    .split(/\r?\n/)
+    .map((line) => {
+      const t = line.trim();
+      if (!t || t.startsWith("#")) return line;
+      if (/^https?:\/\//i.test(t)) return line;
+      return `${base}${t}${t.includes("?") ? "&" : "?"}${query}`;
+    })
+    .join("\n");
 }
 
 function mintMp4StreamUrl(opts: {
@@ -107,9 +171,10 @@ function mintMp4StreamUrl(opts: {
   adSessionId: string;
   expires: number;
   adminPreview?: boolean;
+  s3VideoKey?: string | null;
 }): string {
   if (isCloudFrontConfigured()) {
-    const objectPath = `/${s3Keys.video(opts.siteId, opts.videoId)}`;
+    const objectPath = `/${opts.s3VideoKey || s3Keys.video(opts.siteId, opts.videoId)}`;
     return signCloudFrontCustom({
       objectPath,
       expiresEpochSec: opts.expires,
@@ -133,34 +198,36 @@ export function mintStreamUrl(opts: {
   adSessionId: string;
   ttlSeconds?: number;
   adminPreview?: boolean;
-  s3HlsMasterKey?: string | null;
-  /** Force progressive MP4 even when HLS is available. */
+  s3HlsMasterKey: string | null;
+  /** Null once the MP4 has been purged (HLS-only video). */
+  s3VideoKey: string | null;
+  /** Force progressive MP4 even when HLS is available (ignored when no MP4 exists). */
   forceMp4?: boolean;
+  /** Absolute origin for the playlist URL (API consumers); browser callers use a relative path. */
+  playlistOrigin?: string;
 }): StreamGrant {
   const ttl = opts.ttlSeconds ?? TTL;
   const expires = Math.floor(Date.now() / 1000) + ttl;
-  const mp4Url = mintMp4StreamUrl({ ...opts, expires });
+  const hasMp4 = Boolean(opts.s3VideoKey);
+  const mp4Url = hasMp4 ? mintMp4StreamUrl({ ...opts, expires }) : null;
 
-  if (
+  const useHls =
     isCloudFrontConfigured() &&
-    !opts.forceMp4 &&
-    isHlsPlaybackEnabled() &&
-    opts.s3HlsMasterKey
-  ) {
-    const prefix = opts.s3HlsMasterKey.replace(/master\.m3u8$/, "");
+    Boolean(opts.s3HlsMasterKey) &&
+    (!hasMp4 || (!opts.forceMp4 && isHlsPlaybackEnabled(opts.videoId)));
+
+  if (useHls && opts.s3HlsMasterKey) {
+    const t = makeHlsPlaylistToken({ v: opts.videoId, k: opts.s3HlsMasterKey, e: expires });
+    const path = `/api/hls/${opts.videoId}/playlist.m3u8?t=${encodeURIComponent(t)}`;
     return {
-      url: signCloudFrontCustomWildcard({
-        objectPathPrefix: `/${prefix}`,
-        expiresEpochSec: expires,
-        clientIp: opts.clientIp,
-      }),
+      url: `${opts.playlistOrigin ?? ""}${path}`,
       mimeType: "application/x-mpegURL",
-      mp4FallbackUrl: mp4Url,
+      ...(mp4Url ? { mp4FallbackUrl: mp4Url } : {}),
     };
   }
 
   return {
-    url: mp4Url,
+    url: mp4Url ?? mintMp4StreamUrl({ ...opts, expires }),
     mimeType: "video/mp4",
   };
 }

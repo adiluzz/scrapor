@@ -5,6 +5,7 @@ import { guardAdmin } from "@/lib/admin-guard";
 import { invalidateCdnVideoCache } from "@/lib/cdn-cache";
 import { linkTags, linkPornstars, linkCategories, resolveAdminVideoSlug } from "@/lib/videos";
 import { logger } from "@/lib/logger";
+import { hasStoredVideoSource } from "@/lib/video-source";
 
 const patchSchema = z.object({
   title: z.string().min(1).max(400).optional(),
@@ -55,7 +56,7 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
       updatedAt: video.updatedAt.toISOString(),
       previewVersion: video.previewVersion,
       hasPreview: Boolean(video.s3PreviewKey),
-      hasVideoSource: Boolean(video.s3VideoKey),
+      hasVideoSource: hasStoredVideoSource(video),
       tags: video.tags.map((t) => t.tag.name),
       tagDetails: video.tags.map((t) => ({
         name: t.tag.name,

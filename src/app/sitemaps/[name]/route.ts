@@ -12,6 +12,7 @@ import {
   renderUrlOnlySitemapEntry,
   renderVideoSitemapUrl,
   SITEMAP_VIDEO_CHUNK_SIZE,
+  sitemapPublishedVideoWhere,
   sitemapVideoDescription,
   sitemapVideoTitle,
 } from "@/lib/video-sitemap";
@@ -60,7 +61,7 @@ async function staticSitemap(base: string, site: Site): Promise<NextResponse> {
 async function videosSitemap(base: string, site: Site, chunk: number): Promise<NextResponse | null> {
   if (!Number.isInteger(chunk) || chunk < 1) return null;
   const videos = await prisma.video.findMany({
-    where: { sites: { some: { siteId: site.id } }, isDeleted: false, status: "READY" },
+    where: sitemapPublishedVideoWhere(site.id),
     select: {
       id: true,
       slug: true,
@@ -70,6 +71,8 @@ async function videosSitemap(base: string, site: Site, chunk: number): Promise<N
       sourceUploadDate: true,
       createdAt: true,
       viewCount: true,
+      s3HlsMasterKey: true,
+      s3VideoKey: true,
       tags: { include: { tag: { select: { name: true } } } },
     },
     // Ascending keeps chunk membership stable: new videos only append to the
@@ -81,24 +84,28 @@ async function videosSitemap(base: string, site: Site, chunk: number): Promise<N
   if (videos.length === 0 && chunk > 1) return null;
 
   const body = videos
-    .map((video) => {
+    .flatMap((video) => {
+      const contentUrl = publicVideoContentUrl(base, video);
+      if (!contentUrl) return [];
       const pageUrl = `${base}/videos/${video.slug}`;
       const fallbackDescription = videoPageDescription(video.title, site, video.description);
-      return renderVideoSitemapUrl({
-        pageUrl,
-        thumbnailUrl: publicVideoThumbnailUrl(base, video.id),
-        contentUrl: publicVideoContentUrl(base, video.id),
-        title: sitemapVideoTitle(video.title),
-        description: sitemapVideoDescription(video.description || "", fallbackDescription),
-        durationSec: video.durationSec,
-        // Only the real source upload date; omit when unknown instead of
-        // claiming the scrape time as publication date.
-        publicationDate: video.sourceUploadDate,
-        viewCount: video.viewCount,
-        tags: video.tags.map((t) => t.tag.name),
-        // createdAt is stable; updatedAt churns on every view-count touch.
-        lastModified: video.createdAt,
-      });
+      return [
+        renderVideoSitemapUrl({
+          pageUrl,
+          thumbnailUrl: publicVideoThumbnailUrl(base, video.id),
+          contentUrl,
+          title: sitemapVideoTitle(video.title),
+          description: sitemapVideoDescription(video.description || "", fallbackDescription),
+          durationSec: video.durationSec,
+          // Only the real source upload date; omit when unknown instead of
+          // claiming the scrape time as publication date.
+          publicationDate: video.sourceUploadDate,
+          viewCount: video.viewCount,
+          tags: video.tags.map((t) => t.tag.name),
+          // createdAt is stable; updatedAt churns on every view-count touch.
+          lastModified: video.createdAt,
+        }),
+      ];
     })
     .join("\n");
   return xmlResponse(renderSitemapXml(body));

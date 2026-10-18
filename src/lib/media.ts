@@ -33,7 +33,7 @@ export async function thumbUrl(video: VideoMediaFields): Promise<string> {
   return `/api/thumbnail-img/${video.id}`;
 }
 
-/** Hover-preview clip URL (signed CDN — used by sitemap / external refs). */
+/** Hover-preview clip URL (signed CDN). Not the sitemap video file. */
 export async function previewUrl(video: VideoMediaFields): Promise<string> {
   if (isS3Configured() && video.s3PreviewKey) {
     return mintAssetUrl({ videoId: video.id, siteId: video.siteId, file: "preview.mp4" });

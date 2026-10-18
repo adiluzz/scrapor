@@ -164,7 +164,10 @@ export default async function VideoPage({
           title: video.title,
           description: video.description,
           thumbnailUrl: publicVideoThumbnailUrl(base, video.id),
-          contentUrl: publicVideoContentUrl(base, video.id),
+          contentUrl:
+            !adminPreview && !video.isDeleted && video.status === "READY"
+              ? publicVideoContentUrl(base, video)
+              : null,
           uploadDate: (video.sourceUploadDate || video.createdAt).toISOString(),
           durationIso: isoDuration(video.durationSec),
           pageUrl,

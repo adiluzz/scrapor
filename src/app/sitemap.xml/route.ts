@@ -2,7 +2,12 @@ import { NextResponse } from "next/server";
 import { headers } from "next/headers";
 import { prisma } from "@/lib/db";
 import { getSiteByDomain, normalizeHost } from "@/lib/site";
-import { renderSitemapIndexXml, SITEMAP_VIDEO_CHUNK_SIZE } from "@/lib/video-sitemap";
+import {
+  renderSitemapIndexXml,
+  SITEMAP_MEDIA_REVISION,
+  SITEMAP_VIDEO_CHUNK_SIZE,
+  sitemapPublishedVideoWhere,
+} from "@/lib/video-sitemap";
 
 export const dynamic = "force-dynamic";
 
@@ -10,8 +15,10 @@ const CACHE_HEADER = "public, max-age=3600, s-maxage=21600, stale-while-revalida
 
 /**
  * Sitemap index — points at small per-content-type sitemaps under /sitemaps/
- * instead of one giant file. Videos are chunked (1,000/URLs each, stable
+ * instead of one giant file. Videos are chunked (1,000 URLs each, stable
  * chunk membership: ordered by createdAt ascending so old chunks never move).
+ * Only READY videos with a full HLS playlist or MP4 are listed — hover
+ * previews are not video files.
  */
 export async function GET() {
   const h = await headers();
@@ -20,12 +27,11 @@ export async function GET() {
   const base = `${proto}://${host}`;
   const site = await getSiteByDomain(host);
 
+  const where = sitemapPublishedVideoWhere(site.id);
   const [videoCount, latestVideo] = await Promise.all([
-    prisma.video.count({
-      where: { sites: { some: { siteId: site.id } }, isDeleted: false, status: "READY" },
-    }),
+    prisma.video.count({ where }),
     prisma.video.findFirst({
-      where: { sites: { some: { siteId: site.id } }, isDeleted: false, status: "READY" },
+      where,
       orderBy: { createdAt: "desc" },
       select: { createdAt: true },
     }),
@@ -34,12 +40,15 @@ export async function GET() {
   const videoChunks = Math.max(1, Math.ceil(videoCount / SITEMAP_VIDEO_CHUNK_SIZE));
   const sitemaps: { loc: string; lastModified?: Date | null }[] = [
     { loc: `${base}/sitemaps/static.xml` },
-    ...Array.from({ length: videoChunks }, (_, i) => ({
-      loc: `${base}/sitemaps/videos-${i + 1}.xml`,
-      // Only the newest chunk actually changes, but latest createdAt is a
-      // stable "content changed" signal (unlike updatedAt row churn).
-      lastModified: i + 1 === videoChunks ? latestVideo?.createdAt : null,
-    })),
+    ...Array.from({ length: videoChunks }, (_, i) => {
+      const newest = i + 1 === videoChunks ? latestVideo?.createdAt : null;
+      const lastModified =
+        newest && newest > SITEMAP_MEDIA_REVISION ? newest : SITEMAP_MEDIA_REVISION;
+      return {
+        loc: `${base}/sitemaps/videos-${i + 1}.xml`,
+        lastModified,
+      };
+    }),
     { loc: `${base}/sitemaps/tags.xml` },
     { loc: `${base}/sitemaps/pornstars.xml` },
   ];

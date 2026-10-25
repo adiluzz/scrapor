@@ -14,6 +14,7 @@ import redis
 
 from config import CONFIG
 from db import connect, list_active_iterations
+from publish_compiled import notify_compiled
 from runner import process_iteration, purge_work_root
 
 logging.basicConfig(
@@ -48,9 +49,14 @@ def main() -> None:
         log.error(_j({"event": "resume_failed", "error": str(e)}))
 
     log.info(_j({"event": "started", "queue": CONFIG.queue_key}))
+    last_sweep = 0.0
 
     while True:
         try:
+            now = time.time()
+            if now - last_sweep >= 60:
+                last_sweep = now
+                notify_compiled()
             item = r.blpop(CONFIG.queue_key, timeout=5)
             if not item:
                 continue

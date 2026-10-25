@@ -21,6 +21,7 @@ from db import (
 )
 from media import extract_frame, overlay_logo, promo_ad_s3_key, upload_file
 from providers import get_provider
+from publish_compiled import notify_compiled
 
 log = logging.getLogger("ad-generator.runner")
 
@@ -95,6 +96,7 @@ def process_iteration(conn, iteration_id: str) -> None:
                 logo_path=job.get("logoPath"),
             )
             complete_iteration(conn, iteration_id, promo_ad_id, s3_key, actual_cost_usd=0.0)
+            notify_compiled(promo_ad_id)
             return
 
         # GENERATIVE

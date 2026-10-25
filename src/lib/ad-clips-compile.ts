@@ -1,3 +1,4 @@
+import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/db";
 import { upsertVideoWithMedia } from "@/lib/videos";
 import { ensureDefaultVideoAgent } from "@/lib/video-agent-agent";
@@ -60,27 +61,34 @@ export async function publishCompiledPromoAdToAdClips(
   let video = await prisma.video.findUnique({ where: { sourceUrl } });
 
   if (!video) {
-    video = await upsertVideoWithMedia({
-      siteId: ad.siteId,
-      publishSiteIds: [],
-      sourceUrl,
-      title,
-      description: "Compiled from video editor — publish from Ad clips when ready",
-      durationSec,
-      sourceSite: "VideoEditor",
-      status: "PENDING",
-      tags: ["compiled", "edited"],
-    });
-
-    if (isS3Configured()) {
-      const destKey = s3Keys.video(ad.siteId, video.id);
-      await copyS3Object(iteration.s3Key, destKey);
-      video = await prisma.video.update({
-        where: { id: video.id },
-        data: { s3VideoKey: destKey, durationSec },
+    try {
+      video = await upsertVideoWithMedia({
+        siteId: ad.siteId,
+        publishSiteIds: [],
+        sourceUrl,
+        title,
+        description: "Compiled from video editor — publish from Ad clips when ready",
+        durationSec,
+        sourceSite: "VideoEditor",
+        status: "PENDING",
+        tags: ["compiled", "edited"],
       });
+    } catch (err) {
+      if (!(err instanceof Prisma.PrismaClientKnownRequestError) || err.code !== "P2002") throw err;
+      video = await prisma.video.findUnique({ where: { sourceUrl } });
+      if (!video) throw err;
     }
+  }
 
+  if (!video) return null;
+
+  if (!video.s3VideoKey && isS3Configured()) {
+    const destKey = s3Keys.video(ad.siteId, video.id);
+    await copyS3Object(iteration.s3Key, destKey);
+    video = await prisma.video.update({
+      where: { id: video.id },
+      data: { s3VideoKey: destKey, durationSec },
+    });
     try {
       await redis.rpush(PREVIEW_QUEUE_KEY, video.id);
     } catch (err) {
@@ -108,7 +116,7 @@ export async function publishCompiledPromoAdToAdClips(
       analysisModel: "manual",
       manualOnly: true,
       status: "DONE",
-      createdByUserId: userId ?? null,
+      createdByUserId: userId ?? ad.createdByUserId ?? null,
     },
   });
 
@@ -167,4 +175,60 @@ export async function syncPromoAdCompileStatus(
   }
   if (iterStatus === "PENDING") return { status: "PENDING" };
   return { status: "DRAFT" };
+}
+
+/**
+ * Finished editor compiles whose file is stored but were never listed on Ad clips.
+ * The browser poll used to be the only publisher, so a closed tab left these behind.
+ */
+export async function listUnpublishedEditorCompileIds(limit = 20): Promise<string[]> {
+  const rows = await prisma.$queryRaw<{ id: string }[]>`
+    SELECT a.id
+    FROM "PromoAd" a
+    JOIN LATERAL (
+      SELECT status, "s3Key"
+      FROM "PromoAdIteration"
+      WHERE "promoAdId" = a.id
+      ORDER BY "iterationNumber" DESC
+      LIMIT 1
+    ) i ON true
+    WHERE a."generationMode" = 'CLIP_COMPOSE'
+      AND a.status = 'DONE'
+      AND i.status = 'DONE'
+      AND i."s3Key" IS NOT NULL
+      AND NOT EXISTS (
+        SELECT 1 FROM "Video" v
+        JOIN "VideoAgentDetection" d ON d."videoId" = v.id AND d.label = 'compiled'
+        WHERE v."sourceUrl" = ${COMPILED_SOURCE_PREFIX} || a.id
+      )
+      AND (
+        EXISTS (
+          SELECT 1 FROM "VideoEditorJob" j WHERE j."promoAdId" = a.id
+        )
+        OR EXISTS (
+          SELECT 1
+          FROM "PromoAdClip" c
+          JOIN "VideoAgentDetection" d ON d.id = c."detectionId"
+          JOIN "VideoAgentRun" r ON r.id = d."runId"
+          WHERE c."promoAdId" = a.id
+            AND r."searchQuery" IN ('editor-render', 'editor')
+        )
+      )
+    ORDER BY a."updatedAt" ASC
+    LIMIT ${limit}
+  `;
+  return rows.map((row) => row.id);
+}
+
+/** List any finished editor compiles that the browser never published. Idempotent. */
+export async function publishUnpublishedEditorCompiles(
+  limit = 20
+): Promise<CompiledPublishResult[]> {
+  const ids = await listUnpublishedEditorCompileIds(limit);
+  const published: CompiledPublishResult[] = [];
+  for (const id of ids) {
+    const result = await publishCompiledPromoAdToAdClips(id);
+    if (result) published.push(result);
+  }
+  return published;
 }

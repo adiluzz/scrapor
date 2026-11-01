@@ -6,6 +6,7 @@ import "video.js/dist/video-js.css";
 import type Player from "video.js/dist/types/player";
 import Heatmap from "@/components/player/Heatmap";
 import InVideoAd from "@/components/ads/InVideoAd";
+import { CONTENT_STARTED_EVENT, watchCoveringAdOverlay } from "@/lib/exo-click";
 import { fireImpressions, resolveVastAd, type VastAd } from "@/lib/vast";
 import type { StoryboardCue } from "@/lib/storyboard";
 
@@ -1100,6 +1101,7 @@ export default forwardRef(function VideoPlayer(
       attachContentTracking();
       await player.play()?.catch(() => {});
       setStatus("playing");
+      window.dispatchEvent(new Event(CONTENT_STARTED_EVENT));
     } catch {
       setStatus("error");
     }
@@ -1181,6 +1183,7 @@ export default forwardRef(function VideoPlayer(
         setStatus("playing");
         return;
       }
+      watchCoveringAdOverlay();
       const res = await fetch(`/api/videos/${videoId}/ad-session`, { method: "POST" });
       const data = await res.json();
       if (data.adRequired) {

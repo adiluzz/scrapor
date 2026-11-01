@@ -47,6 +47,44 @@ declare global {
   }
 }
 
+/** Fired when the pre-roll is done and the video itself is playing. */
+export const CONTENT_STARTED_EVENT = "pisster:content-started";
+
+const COVERING_AD_SRC = /orbsrv\.com|pemsrv\.com|magsrv\.com|exoclick\.com/i;
+
+/**
+ * The fullpage interstitial opens on the same click that starts the pre-roll
+ * and covers it. Remove that frame so the pre-roll stays visible. Banner and
+ * cam slots are too small to match.
+ */
+export function dismissCoveringAdOverlay() {
+  if (typeof document === "undefined") return;
+  document.querySelectorAll("iframe").forEach((frame) => {
+    const src = frame.src || "";
+    if (!COVERING_AD_SRC.test(src)) return;
+    const rect = frame.getBoundingClientRect();
+    if (rect.width < 320 || rect.height < 240) return;
+    const parent = frame.parentElement;
+    if (
+      parent &&
+      parent !== document.body &&
+      parent !== document.documentElement &&
+      parent.querySelectorAll("iframe").length === 1
+    ) {
+      parent.remove();
+    } else {
+      frame.remove();
+    }
+  });
+}
+
+/** Keep clearing a late-arriving interstitial for a few seconds after play. */
+export function watchCoveringAdOverlay(ms = 8000) {
+  dismissCoveringAdOverlay();
+  const id = window.setInterval(dismissCoveringAdOverlay, 200);
+  window.setTimeout(() => window.clearInterval(id), ms);
+}
+
 /** Ask ad-provider.js to fill every unserved `<ins data-zoneid>` on the page. */
 export function serveExoAds() {
   if (typeof window === "undefined") return;

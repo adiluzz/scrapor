@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import {
+  CONTENT_STARTED_EVENT,
   EXO_ZONE_TYPE,
   exoInsClassFor,
   serveExoAds,
@@ -12,8 +13,9 @@ const SESSION_KEY = "exo_fullscreen_shown";
 /**
  * ExoClick Desktop Fullpage Interstitial.
  *
- * Exo triggers this format on click (per zone Frequency / Trigger settings),
- * not on bare page load. We only mark the session after Exo fires
+ * Armed only after the pre-roll finishes. The play click must not open this
+ * interstitial, or it covers the pre-roll. Exo triggers the format on a later
+ * click. We only mark the session after Exo fires
  * `creativeDisplayed-{zoneId}` so empty fills can retry.
  *
  * The `<ins>` class must end with zone type 35 (not the banner `…2`), and
@@ -31,9 +33,16 @@ export default function ExoFullscreenOverlay({
     insClass
   );
   const [enabled, setEnabled] = useState(false);
+  const [contentStarted, setContentStarted] = useState(false);
 
   useEffect(() => {
-    if (!zoneId) return;
+    const onContent = () => setContentStarted(true);
+    window.addEventListener(CONTENT_STARTED_EVENT, onContent);
+    return () => window.removeEventListener(CONTENT_STARTED_EVENT, onContent);
+  }, []);
+
+  useEffect(() => {
+    if (!zoneId || !contentStarted) return;
     try {
       if (sessionStorage.getItem(SESSION_KEY) === "1") {
         setEnabled(false);
@@ -56,7 +65,7 @@ export default function ExoFullscreenOverlay({
     document.addEventListener(eventName, onShown);
     serveExoAds();
     return () => document.removeEventListener(eventName, onShown);
-  }, [zoneId]);
+  }, [zoneId, contentStarted]);
 
   if (!zoneId || !enabled) return null;
 

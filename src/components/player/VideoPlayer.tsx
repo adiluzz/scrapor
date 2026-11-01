@@ -1116,22 +1116,15 @@ export default forwardRef(function VideoPlayer(
       if (res.ok) {
         const data = await res.json();
         ad = data.ad ?? null;
-        if (!ad && typeof data.clientVastTagUrl === "string" && data.clientVastTagUrl) {
-          ad = await resolveVastAd(data.clientVastTagUrl, {
+        const tags = [data.clientVastTagUrl, data.clientVastTagUrlBackup].filter(
+          (tag): tag is string => typeof tag === "string" && tag.length > 0
+        );
+        for (const tag of tags) {
+          if (ad) break;
+          ad = await resolveVastAd(tag, {
             timeoutMs: cfg.timeoutMs,
             browser: true,
           });
-        }
-        if (!ad && data.retryPrimary) {
-          const retry = await fetch(`/api/videos/${videoId}/vast`, {
-            method: "POST",
-            headers: { "content-type": "application/json" },
-            body: JSON.stringify({ adSessionId, retryPrimary: true }),
-          });
-          if (retry.ok) {
-            const retryData = await retry.json();
-            ad = retryData.ad ?? null;
-          }
         }
       }
     } catch {

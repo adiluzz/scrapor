@@ -26,7 +26,6 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
   return NextResponse.json({
     adSessionId: session.id,
     adRequired,
-    vastTagUrl: vastTagUrl || vastTagUrlBackup || null,
     skipSeconds: site.adSkipSeconds,
     minViewSeconds: site.adMinViewSeconds,
     timeoutMs: site.adTimeoutMs,

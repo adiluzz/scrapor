@@ -6,7 +6,7 @@ import "video.js/dist/video-js.css";
 import type Player from "video.js/dist/types/player";
 import Heatmap from "@/components/player/Heatmap";
 import InVideoAd from "@/components/ads/InVideoAd";
-import { fireImpressions, type VastAd } from "@/lib/vast";
+import { fireImpressions, resolveVastAd, type VastAd } from "@/lib/vast";
 import type { StoryboardCue } from "@/lib/storyboard";
 
 type Storyboard = { sprite: string; cues: StoryboardCue[] } | null;
@@ -1116,6 +1116,23 @@ export default forwardRef(function VideoPlayer(
       if (res.ok) {
         const data = await res.json();
         ad = data.ad ?? null;
+        if (!ad && typeof data.clientVastTagUrl === "string" && data.clientVastTagUrl) {
+          ad = await resolveVastAd(data.clientVastTagUrl, {
+            timeoutMs: cfg.timeoutMs,
+            browser: true,
+          });
+        }
+        if (!ad && data.retryPrimary) {
+          const retry = await fetch(`/api/videos/${videoId}/vast`, {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({ adSessionId, retryPrimary: true }),
+          });
+          if (retry.ok) {
+            const retryData = await retry.json();
+            ad = retryData.ad ?? null;
+          }
+        }
       }
     } catch {
       ad = null;

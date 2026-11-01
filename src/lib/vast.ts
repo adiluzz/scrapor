@@ -12,6 +12,12 @@ export type VastFetchOptions = {
   userAgent?: string;
   timeoutMs?: number;
   maxDepth?: number;
+  /**
+   * Fetch from the page itself. The browser sets IP, User-Agent, and Referer;
+   * those headers are forbidden to set from script and a server-supplied
+   * User-Agent would make the ad network see a bot.
+   */
+  browser?: boolean;
 };
 
 function parseTimeToSec(t: string | null | undefined): number | null {
@@ -110,7 +116,7 @@ function hasVastPayload(xml: string): boolean {
   return /<Ad\b/i.test(xml) || /<Wrapper\b/i.test(xml) || /<Linear\b/i.test(xml);
 }
 
-/** Fetch a VAST tag server-side, follow Wrapper chains, return a playable ad or null. */
+/** Fetch a VAST tag, follow Wrapper chains, return a playable ad or null. */
 export async function resolveVastAd(
   tagUrl: string,
   opts: VastFetchOptions = {}
@@ -125,11 +131,13 @@ export async function resolveVastAd(
     const timer = setTimeout(() => controller.abort(), timeoutMs);
     try {
       const headers: Record<string, string> = {
-        "User-Agent": opts.userAgent || "Mozilla/5.0 (compatible; Pisster/1.0)",
         Accept: "application/xml,text/xml,*/*",
       };
-      if (opts.referer) headers.Referer = opts.referer;
-      if (opts.clientIp) headers["X-Forwarded-For"] = opts.clientIp;
+      if (!opts.browser) {
+        headers["User-Agent"] = opts.userAgent || "Mozilla/5.0 (compatible; Pisster/1.0)";
+        if (opts.referer) headers.Referer = opts.referer;
+        if (opts.clientIp) headers["X-Forwarded-For"] = opts.clientIp;
+      }
 
       const res = await fetch(url, { signal: controller.signal, headers, cache: "no-store" });
       clearTimeout(timer);

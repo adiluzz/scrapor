@@ -1,7 +1,6 @@
-import { GetObjectCommand } from "@aws-sdk/client-s3";
 import { prisma } from "@/lib/db";
 import { normalizeHost, getSiteByDomain } from "@/lib/site";
-import { isS3Configured, s3, S3_BUCKET, s3Keys } from "@/lib/storage";
+import { isS3Configured, readS3ObjectText, s3Keys } from "@/lib/storage";
 import { isHlsMasterFile, isHlsSegmentFile } from "@/lib/video-sitemap";
 
 const VIDEO_ID = /^[a-z0-9]+$/i;
@@ -53,10 +52,5 @@ export function publicHlsObjectKey(
 
 export async function readS3Text(key: string): Promise<string | null> {
   if (!isS3Configured()) return null;
-  try {
-    const obj = await s3.send(new GetObjectCommand({ Bucket: S3_BUCKET, Key: key }));
-    return (await obj.Body?.transformToString("utf-8")) ?? null;
-  } catch {
-    return null;
-  }
+  return readS3ObjectText(key);
 }

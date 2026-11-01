@@ -1,6 +1,5 @@
-import { GetObjectCommand } from "@aws-sdk/client-s3";
 import { signHlsPlaylist, verifyHlsPlaylistToken } from "@/lib/cdn";
-import { s3, S3_BUCKET } from "@/lib/storage";
+import { readS3ObjectText } from "@/lib/storage";
 import { logger } from "@/lib/logger";
 
 export const dynamic = "force-dynamic";
@@ -15,8 +14,8 @@ const cache = (globalForHls.hlsPlaylistCache ??= new Map());
 async function loadPlaylist(key: string): Promise<string> {
   const hit = cache.get(key);
   if (hit && Date.now() - hit.at < CACHE_TTL_MS) return hit.text;
-  const obj = await s3.send(new GetObjectCommand({ Bucket: S3_BUCKET, Key: key }));
-  const text = (await obj.Body?.transformToString("utf-8")) ?? "";
+  const text = await readS3ObjectText(key);
+  if (!text) throw new Error("empty playlist");
   if (cache.size >= CACHE_MAX) {
     const oldest = cache.keys().next().value;
     if (oldest) cache.delete(oldest);

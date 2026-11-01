@@ -39,5 +39,5 @@ export async function GET(
     headers["Content-Length"] = String(image.contentLength);
   }
 
-  return new NextResponse(image.body, { headers });
+  return new NextResponse(new Uint8Array(image.body), { headers });
 }

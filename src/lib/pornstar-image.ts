@@ -1,7 +1,6 @@
 import { existsSync, readFileSync } from "fs";
 import { join } from "path";
-import { GetObjectCommand } from "@aws-sdk/client-s3";
-import { isS3Configured, s3, S3_BUCKET, s3Keys } from "@/lib/storage";
+import { isS3Configured, readS3ObjectBuffer, s3Keys } from "@/lib/storage";
 
 const DOWNLOADS_DIR = join(process.cwd(), "downloads", "pornstars");
 
@@ -27,22 +26,17 @@ export function localPornstarImagePath(pornstarId: string): string {
 
 export async function readPornstarImage(
   pornstar: PornstarImageFields
-): Promise<{ body: BodyInit; contentType: string; contentLength?: number } | null> {
+): Promise<{ body: Buffer; contentType: string; contentLength: number } | null> {
   const key = pornstarImageKey(pornstar);
 
   if (isS3Configured()) {
-    try {
-      const obj = await s3.send(new GetObjectCommand({ Bucket: S3_BUCKET, Key: key }));
-      if (!obj.Body) return null;
-      const bytes = await obj.Body.transformToByteArray();
-      return {
-        body: Buffer.from(bytes),
-        contentType: obj.ContentType || "image/jpeg",
-        contentLength: bytes.length,
-      };
-    } catch {
-      return null;
-    }
+    const obj = await readS3ObjectBuffer(key);
+    if (!obj) return null;
+    return {
+      body: obj.body,
+      contentType: obj.contentType.startsWith("image/") ? obj.contentType : "image/jpeg",
+      contentLength: obj.body.length,
+    };
   }
 
   const localPath = localPornstarImagePath(pornstar.id);

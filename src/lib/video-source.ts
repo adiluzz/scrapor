@@ -1,9 +1,8 @@
 import { existsSync } from "node:fs";
 import { mkdir, mkdtemp, rename, rm, stat, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
-import { GetObjectCommand } from "@aws-sdk/client-s3";
 import { runProcess } from "@/lib/assistant-tools/utils";
-import { downloadS3ObjectToFile, s3, S3_BUCKET } from "@/lib/storage";
+import { downloadS3ObjectToFile, readS3ObjectText } from "@/lib/storage";
 
 export type VideoSourceRow = {
   id: string;
@@ -28,8 +27,7 @@ export async function downloadHlsAsMp4(masterKey: string, destPath: string): Pro
   await mkdir(dirname(destPath), { recursive: true });
   const work = await mkdtemp(join(dirname(destPath), ".hls-"));
   try {
-    const obj = await s3.send(new GetObjectCommand({ Bucket: S3_BUCKET, Key: masterKey }));
-    const playlist = (await obj.Body?.transformToString("utf-8")) ?? "";
+    const playlist = (await readS3ObjectText(masterKey)) ?? "";
     const names = playlist
       .split(/\r?\n/)
       .map((l) => l.trim())

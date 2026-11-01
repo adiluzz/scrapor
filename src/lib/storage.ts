@@ -8,8 +8,8 @@ import {
 } from "@aws-sdk/client-s3";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 import { createWriteStream } from "node:fs";
+import { Writable, type Readable } from "node:stream";
 import { pipeline } from "node:stream/promises";
-import type { Readable } from "node:stream";
 
 const region = process.env.AWS_REGION || "us-east-1";
 const bucket = process.env.S3_BUCKET || "pisster-media";
@@ -23,6 +23,9 @@ export const s3: S3Client =
     region,
     endpoint,
     forcePathStyle: Boolean(endpoint),
+    // Default WHEN_SUPPORTED asks S3 for trailing checksums. On Node 24 those
+    // trailers never end the body stream, so image routes hang with no bytes.
+    responseChecksumValidation: "WHEN_REQUIRED",
     credentials:
       process.env.AWS_ACCESS_KEY_ID && process.env.AWS_SECRET_ACCESS_KEY
         ? {
@@ -75,6 +78,43 @@ export async function downloadS3ObjectToFile(key: string, destPath: string): Pro
   const obj = await s3.send(new GetObjectCommand({ Bucket: bucket, Key: key }));
   if (!obj.Body) throw new Error("Empty S3 object");
   await pipeline(obj.Body as unknown as Readable, createWriteStream(destPath));
+}
+
+/**
+ * Read an S3 object into memory. Uses pipeline instead of transformToByteArray(),
+ * which hangs on Node 24 when the SDK wraps the body in a checksum stream.
+ */
+export async function readS3ObjectBuffer(
+  key: string
+): Promise<{ body: Buffer; contentType: string } | null> {
+  try {
+    const obj = await s3.send(new GetObjectCommand({ Bucket: bucket, Key: key }));
+    if (!obj.Body) return null;
+    const chunks: Buffer[] = [];
+    await pipeline(
+      obj.Body as unknown as Readable,
+      new Writable({
+        write(chunk, _encoding, callback) {
+          chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
+          callback();
+        },
+      })
+    );
+    if (chunks.length === 0) return null;
+    return {
+      body: Buffer.concat(chunks),
+      contentType: obj.ContentType || "application/octet-stream",
+    };
+  } catch {
+    return null;
+  }
+}
+
+/** Read a small S3 text object (HLS playlists). Same Node 24-safe path as readS3ObjectBuffer. */
+export async function readS3ObjectText(key: string): Promise<string | null> {
+  const obj = await readS3ObjectBuffer(key);
+  if (!obj || obj.body.length === 0) return null;
+  return obj.body.toString("utf8");
 }
 
 export async function uploadBuffer(

@@ -18,6 +18,8 @@ _SOURCE_PATTERNS = [
     r"xhamster(?:\.com|\.desi)?",
     r"xnxx(?:\.com)?",
     r"abxxx(?:\.com)?",
+    r"xozilla(?:\.xxx|\.com)?",
+    r"pisshamster(?:\.com)?",
     r"redtube(?:\.com)?",
     r"spankbang(?:\.com)?",
     r"youporn(?:\.com)?",

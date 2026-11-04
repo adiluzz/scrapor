@@ -77,6 +77,16 @@ export function dedupeKey(url: string): string {
     const m = path.match(/\/video\/(\d+)/);
     if (host.includes("abxxx") && m) return `abxxx:${m[1]}`;
   }
+  {
+    const m = path.match(/\/videos\/(\d+)/);
+    if (host.includes("xozilla") && m) return `xozilla:${m[1]}`;
+  }
+  if (host.includes("pisshamster")) {
+    const embed = path.match(/^\/embed\/(\d+)\/?$/);
+    if (embed) return `pisshamster:${embed[1]}`;
+    const video = path.match(/^\/(\d+)-[^/]+\/?$/);
+    if (video) return `pisshamster:${video[1]}`;
+  }
 
   const keep = Object.entries(q)
     .filter(([k]) => !TRACKING_PARAMS.has(k.toLowerCase()))

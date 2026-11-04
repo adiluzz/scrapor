@@ -2426,6 +2426,835 @@ def search_hqporner(query, count, cursor=0, min_duration=600, mode="query"):
     return search_hqporner(query, count, cursor, min_duration, mode="query")
 
 
+# ── Xozilla (KVS HTML; no yt-dlp extractor) ───────────────────────────
+_XZ_BASE = "https://www.xozilla.xxx"
+# Opaque cursor: page * stride + index of the next card on that page.
+# 0 means "start at page 1". Listing pages are ~100 cards, so stride stays
+# well above a single page.
+_XZ_PAGE_STRIDE = 10_000
+_XZ_VIDEO_RE = re.compile(r"/videos/(\d+)(?:/([^/?#]+))?", re.I)
+_XZ_MODEL_RE = re.compile(r"^/models/([^/]+)/?$", re.I)
+_XZ_SITE_NAME_RE = re.compile(r"^xozilla(?:\.xxx|\.com)?$", re.I)
+_XZ_FLASH_KEY_RE = re.compile(r"\b(video_url|video_alt_url\d*)\b")
+
+
+def _xz_cursor(cursor):
+    raw = max(0, int(cursor or 0))
+    if raw < _XZ_PAGE_STRIDE:
+        return 1, 0
+    return raw // _XZ_PAGE_STRIDE, raw % _XZ_PAGE_STRIDE
+
+
+def _xz_encode_cursor(page, index):
+    return int(page) * _XZ_PAGE_STRIDE + int(index)
+
+
+def _xz_abs(url_or_path):
+    from urllib.parse import urljoin
+    if not url_or_path:
+        return ""
+    if str(url_or_path).startswith("http"):
+        return str(url_or_path)
+    return urljoin(_XZ_BASE, str(url_or_path))
+
+
+def _xz_canonical(url):
+    from urllib.parse import urlparse
+    raw = _xz_abs(url)
+    try:
+        parts = urlparse(raw)
+    except Exception:
+        return raw
+    match = _XZ_VIDEO_RE.search(parts.path or "")
+    if not match:
+        return raw.split("?", 1)[0]
+    vid, slug = match.group(1), match.group(2)
+    if slug:
+        return f"{_XZ_BASE}/videos/{vid}/{slug.strip('/')}/"
+    return f"{_XZ_BASE}/videos/{vid}/"
+
+
+def _xz_keep_name(name):
+    cleaned = re.sub(r"\s+", " ", str(name or "")).strip(" ,")
+    if not cleaned or _XZ_SITE_NAME_RE.match(cleaned):
+        return ""
+    return cleaned
+
+
+def _xz_search_url(query, page, mode="query"):
+    from urllib.parse import urlencode
+    page = max(1, int(page or 1))
+    if _is_category_mode(mode):
+        slug = _category_slug(query) or "all"
+        base = f"{_XZ_BASE}/categories/{slug}/"
+        if page <= 1:
+            return base
+        return base + "?" + urlencode({
+            "mode": "async",
+            "function": "get_block",
+            "block_id": "list_videos_common_videos_list",
+            "sort_by": "post_date",
+            "from": f"{page:02d}",
+        })
+    params = {"q": query or ""}
+    if page > 1:
+        params.update({
+            "mode": "async",
+            "function": "get_block",
+            "block_id": "list_videos_videos_list_search_result",
+            "category_ids": "",
+            "sort_by": "",
+            "from_videos": f"{page:02d}",
+            "from_albums": f"{page:02d}",
+        })
+    return f"{_XZ_BASE}/search/?" + urlencode(params)
+
+
+def _xz_next_page(html, current):
+    """Smallest listing page number strictly after `current`."""
+    higher = []
+    for params in re.findall(r'data-parameters="([^"]+)"', html or ""):
+        for part in params.split(";"):
+            if ":" not in part:
+                continue
+            keys, val = part.split(":", 1)
+            if not val.isdigit():
+                continue
+            if set(keys.split("+")) & {"from", "from_videos"}:
+                num = int(val)
+                if num > current:
+                    higher.append(num)
+    return min(higher) if higher else None
+
+
+def _xz_card_duration(node):
+    """Listing duration is kept in an HTML comment (`12m:17s`)."""
+    from bs4 import Comment
+    for comment in node.find_all(string=lambda s: isinstance(s, Comment)):
+        match = re.search(r'class="duration">\s*([^<]+)', str(comment))
+        if match:
+            return _dur(match.group(1)) or None
+    return None
+
+
+def _xz_search_items(html):
+    """Video cards from a Xozilla search or category listing."""
+    from bs4 import BeautifulSoup
+    from urllib.parse import urlparse
+    soup = BeautifulSoup(html or "", "html.parser")
+    out = []
+    seen = set()
+    for item in soup.select("a.item[href]"):
+        full = _xz_canonical(item.get("href") or "")
+        parsed = urlparse(full)
+        if "xozilla." not in (parsed.netloc or ""):
+            continue
+        match = _XZ_VIDEO_RE.search(parsed.path or "")
+        if not match:
+            continue
+        vid = match.group(1)
+        if vid in seen:
+            continue
+        seen.add(vid)
+        img = item.select_one("img")
+        title = (img.get("alt") if img else "") or ""
+        title = str(title).strip()
+        if not title:
+            strong = item.select_one("strong.title")
+            title = strong.get_text(" ", strip=True) if strong else ""
+        thumb = ""
+        if img:
+            for attr in ("data-original", "data-src", "thumb", "src"):
+                val = img.get(attr) or ""
+                if str(val).startswith("http"):
+                    thumb = str(val)
+                    break
+        out.append({
+            "url": full,
+            "title": title or "Unknown",
+            "duration_sec": _xz_card_duration(item),
+            "thumbnail": thumb,
+        })
+    return out
+
+
+def _xz_flash_map(html):
+    """Parse the kt_player `flashvars` object. Values are single-quoted."""
+    match = re.search(r"var\s+flashvars\s*=\s*\{(.*?)\};", html or "", re.S)
+    if not match:
+        return {}
+    body = match.group(1)
+    out = {}
+    for key, val in re.findall(r"\b([A-Za-z0-9_]+)\s*:\s*'([^']*)'", body):
+        out[key] = val.replace("\\/", "/").replace("\\'", "'")
+    for key, val in re.findall(r"\b([A-Za-z0-9_]+)\s*:\s*(\d+)\b", body):
+        out.setdefault(key, val)
+    return out
+
+
+def _xz_best_cdn(flash):
+    """Highest labeled MP4 in flashvars. HLS is used only when no MP4 exists."""
+    ranked = []
+    for key, url in (flash or {}).items():
+        if not _XZ_FLASH_KEY_RE.fullmatch(key):
+            continue
+        if not str(url).startswith("http"):
+            continue
+        label = str(flash.get(f"{key}_text") or "")
+        res_match = re.search(r"(\d+)", label)
+        res = int(res_match.group(1)) if res_match else 0
+        if key == "video_url":
+            rank = 0
+        else:
+            alt = re.search(r"(\d+)$", key)
+            rank = int(alt.group(1)) if alt else 1
+        ranked.append((res, rank, str(url)))
+    if not ranked:
+        return None, None
+    mp4s = [row for row in ranked if ".m3u8" not in row[2].lower()]
+    pool = mp4s or ranked
+    pool.sort()
+    best = pool[-1][2]
+    if ".m3u8" in best.lower():
+        return None, best
+    return best, None
+
+
+def _xz_split_names(value):
+    names = []
+    for part in str(value or "").split(","):
+        name = _xz_keep_name(part)
+        if name and name not in names:
+            names.append(name)
+    return names
+
+
+def _xz_icon_text(soup, icon_class):
+    icon = soup.select_one(f".block-details i.{icon_class}")
+    if not icon or not icon.parent:
+        return ""
+    em = icon.parent.find("em")
+    return em.get_text(" ", strip=True) if em else ""
+
+
+def _xz_parse_detail(html, url):
+    """Parse a Xozilla video page for catalog metadata and the best MP4."""
+    from bs4 import BeautifulSoup
+    from urllib.parse import urlparse
+    soup = BeautifulSoup(html or "", "html.parser")
+    flash = _xz_flash_map(html)
+    canonical = _xz_canonical(url)
+
+    title = ""
+    h1 = soup.select_one("h1")
+    if h1:
+        title = h1.get_text(" ", strip=True)
+    if not title:
+        title = flash.get("video_title") or ""
+    if not title:
+        og = soup.select_one('meta[property="og:title"]')
+        if og and og.get("content"):
+            title = str(og["content"]).strip()
+    title = re.sub(
+        r"\s*[-–|]\s*Xozilla(?:\.xxx|\.com)?\s*$", "", title or "", flags=re.I
+    ).strip()
+
+    description = _xz_icon_text(soup, "fa-pencil-square-o")
+    if not description:
+        meta_desc = soup.select_one('meta[name="description"]')
+        if meta_desc and meta_desc.get("content"):
+            description = str(meta_desc["content"]).strip()
+
+    def names_from(pattern):
+        found = []
+        for anchor in soup.select(".block-details a[href]"):
+            href = anchor.get("href") or ""
+            if not re.search(pattern, href.split("?", 1)[0]):
+                continue
+            name = _xz_keep_name(anchor.get_text(" ", strip=True))
+            if name and name not in found:
+                found.append(name)
+        return found
+
+    categories = names_from(r"/categories/[^/]+")
+    tags = names_from(r"/tags/[^/]+")
+    pornstars = []
+    for anchor in soup.select("a[href]"):
+        path = urlparse(_xz_abs(anchor.get("href") or "")).path or ""
+        if not _XZ_MODEL_RE.match(path):
+            continue
+        name = _xz_keep_name(anchor.get_text(" ", strip=True))
+        if name and name not in pornstars:
+            pornstars.append(name)
+    if not categories:
+        categories = _xz_split_names(flash.get("video_categories"))
+    if not tags:
+        tags = _xz_split_names(flash.get("video_tags"))
+
+    duration = None
+    if str(flash.get("duration") or "").isdigit():
+        duration = int(flash["duration"])
+    if not duration:
+        duration = _dur(_xz_icon_text(soup, "fa-clock-o")) or None
+
+    thumb = ""
+    og = soup.select_one('meta[property="og:image"]')
+    if og and og.get("content"):
+        thumb = _xz_abs(og["content"])
+    if not thumb:
+        thumb = _xz_abs(flash.get("preview_url") or "")
+
+    cdn, m3u8 = _xz_best_cdn(flash)
+    return {
+        "url": canonical,
+        "title": title,
+        "duration_sec": duration,
+        "tags": tags,
+        "categories": categories,
+        "pornstars": pornstars,
+        "thumbnail": thumb,
+        "description": description,
+        "_cdn_url": cdn,
+        "_m3u8_base_url": m3u8,
+        "_part_urls": None,
+    }
+
+
+def search_xozilla(query, count, cursor=0, min_duration=600, mode="query"):
+    """Search Xozilla.
+
+    Keyword mode hits ``/search/?q=``. Category mode hits
+    ``/categories/<slug>/`` and falls back to keyword search when that slug
+    is not a real category. Pages after the first are KVS ``get_block`` AJAX
+    requests (path pagination 404s). Each kept card is enriched from its
+    video page so tags, performers, description, and the MP4 URL are present
+    before download.
+    """
+    page, index = _xz_cursor(cursor)
+    count = max(0, int(count or 0))
+    stubs = []
+    exhausted = False
+    saw_cards = False
+    resume_page, resume_index = page, index
+    try:
+        while len(stubs) < count:
+            html = _html_get(_xz_search_url(query, page, mode=mode))
+            if not html:
+                exhausted = True
+                break
+            items = _xz_search_items(html)
+            if not items:
+                exhausted = True
+                break
+            saw_cards = True
+            if index >= len(items):
+                nxt = _xz_next_page(html, page)
+                if not nxt:
+                    exhausted = True
+                    break
+                page, index = nxt, 0
+                continue
+            filled = False
+            for i in range(index, len(items)):
+                item = items[i]
+                dur = item.get("duration_sec")
+                if dur and dur < min_duration:
+                    continue
+                stubs.append(item)
+                if len(stubs) >= count:
+                    resume_index = i + 1
+                    resume_page = page
+                    if resume_index >= len(items):
+                        nxt = _xz_next_page(html, page)
+                        if nxt:
+                            resume_page, resume_index = nxt, 0
+                        else:
+                            exhausted = True
+                    filled = True
+                    break
+            if filled:
+                break
+            nxt = _xz_next_page(html, page)
+            if not nxt:
+                exhausted = True
+                resume_page, resume_index = page, len(items)
+                break
+            page, index = nxt, 0
+    except Exception as e:  # noqa: BLE001
+        print(f"[site_searchers] Xozilla search failed: {e!r}", file=sys.stderr, flush=True)
+        return [], _xz_encode_cursor(page, index), True
+
+    if (
+        _is_category_mode(mode)
+        and not saw_cards
+        and _xz_cursor(cursor) == (1, 0)
+    ):
+        return search_xozilla(query, count, 0, min_duration, mode="query")
+
+    out = []
+    for stub in stubs:
+        try:
+            detail_html = _html_get(stub["url"])
+            if not detail_html:
+                out.append(_norm(
+                    stub["url"], stub.get("title"), stub.get("duration_sec"),
+                    thumbnail=stub.get("thumbnail") or "",
+                ))
+                continue
+            meta = _xz_parse_detail(detail_html, stub["url"])
+            dur = meta.get("duration_sec") or stub.get("duration_sec")
+            if dur and dur < min_duration:
+                continue
+            out.append(_norm(
+                meta.get("url") or stub["url"],
+                meta.get("title") or stub.get("title"),
+                dur,
+                thumbnail=meta.get("thumbnail") or stub.get("thumbnail") or "",
+                tags=meta.get("tags"),
+                categories=meta.get("categories"),
+                pornstars=meta.get("pornstars"),
+                description=meta.get("description") or "",
+                cdn=meta.get("_cdn_url"),
+                m3u8=meta.get("_m3u8_base_url"),
+            ))
+        except Exception:
+            out.append(_norm(
+                stub["url"], stub.get("title"), stub.get("duration_sec"),
+                thumbnail=stub.get("thumbnail") or "",
+            ))
+    return out, _xz_encode_cursor(resume_page, resume_index), exhausted
+
+
+# ── PissHamster (WordPress HTML; no yt-dlp extractor, no EAF library) ─
+# Listings are /?s=<query> (keyword) or /<id>-<slug>/ (category). Video pages
+# are /<id>-<slug>/ with a signed xcdn1.nosofiles.com MP4. The unsigned CDN
+# URL in JSON-LD returns 403, so the download fast path must keep ?verify=.
+_PSH_BASE = "https://pisshamster.com"
+_PSH_PAGE_STRIDE = 10_000
+_PSH_VIDEO_RE = re.compile(r"^/(\d+)-([^/]+)/?$")
+_PSH_EMBED_RE = re.compile(r"^/embed/(\d+)/?$")
+_PSH_RESERVED = {
+    "tag", "actor", "categories", "page", "embed", "search",
+    "my-favorites", "my-history", "sitemap", "sitemap_index.xml",
+}
+_PSH_QUALITY = {"low": 1, "med": 2, "medium": 2, "sd": 2, "hd": 3, "high": 4, "uhd": 5}
+
+
+def _psh_cursor(cursor):
+    raw = max(0, int(cursor or 0))
+    if raw < _PSH_PAGE_STRIDE:
+        return 1, 0
+    return raw // _PSH_PAGE_STRIDE, raw % _PSH_PAGE_STRIDE
+
+
+def _psh_encode_cursor(page, index):
+    return int(page) * _PSH_PAGE_STRIDE + int(index)
+
+
+def _psh_abs(url_or_path):
+    from urllib.parse import urljoin
+    if not url_or_path:
+        return ""
+    if str(url_or_path).startswith("http"):
+        return str(url_or_path)
+    return urljoin(_PSH_BASE, str(url_or_path))
+
+
+def _psh_canonical(url):
+    """Apex-host video URL, or "" when `url` is not a video page."""
+    from urllib.parse import urlparse
+    raw = _psh_abs(url)
+    try:
+        parts = urlparse(raw)
+    except Exception:
+        return ""
+    host = (parts.netloc or "").lower()
+    if "pisshamster.com" not in host:
+        return ""
+    path = parts.path or ""
+    match = _PSH_VIDEO_RE.fullmatch(path)
+    if match:
+        return f"{_PSH_BASE}/{match.group(1)}-{match.group(2)}/"
+    embed = _PSH_EMBED_RE.fullmatch(path)
+    if embed:
+        return f"{_PSH_BASE}/embed/{embed.group(1)}"
+    return ""
+
+
+def _psh_video_id(url):
+    from urllib.parse import urlparse
+    path = urlparse(url or "").path or ""
+    match = _PSH_VIDEO_RE.fullmatch(path) or _PSH_EMBED_RE.fullmatch(path)
+    return match.group(1) if match else ""
+
+
+def _psh_use_longest(min_duration):
+    return int(min_duration or 0) >= 600
+
+
+def _psh_listing_url(query, page, min_duration, category_base=None):
+    from urllib.parse import quote_plus
+    page = max(1, int(page or 1))
+    longest = _psh_use_longest(min_duration)
+    if category_base:
+        base = str(category_base).rstrip("/")
+        path = f"{base}/" if page <= 1 else f"{base}/page/{page}/"
+        return path + ("?filter=longest" if longest else "")
+    q = quote_plus(query or "")
+    if page <= 1:
+        path = f"{_PSH_BASE}/?s={q}"
+    else:
+        path = f"{_PSH_BASE}/page/{page}/?s={q}"
+    if longest:
+        path += "&filter=longest"
+    return path
+
+
+def _psh_category_base(query):
+    """Resolve a category name to its listing URL, or None.
+
+    Category paths are numeric (`/3-outdoor/`, `/3-outdoor/36087-beach/`),
+    so the slug cannot be guessed. The categories index is the lookup table.
+    """
+    from bs4 import BeautifulSoup
+    from urllib.parse import urlparse
+    slug = _category_slug(query)
+    if not slug:
+        return None
+    html = _html_get(f"{_PSH_BASE}/categories/")
+    if not html:
+        return None
+    soup = BeautifulSoup(html, "html.parser")
+    best = None
+    for anchor in soup.select("a[href]"):
+        full = _psh_abs(anchor.get("href") or "")
+        try:
+            parts = urlparse(full)
+        except Exception:
+            continue
+        if "pisshamster.com" not in (parts.netloc or ""):
+            continue
+        segs = [s for s in (parts.path or "").split("/") if s]
+        if not segs or any(s in _PSH_RESERVED for s in segs):
+            continue
+        last = segs[-1]
+        match = re.fullmatch(r"\d+-(.+)", last)
+        if not match:
+            continue
+        url_slug = match.group(1).lower()
+        text_slug = _category_slug(anchor.get("title") or anchor.get_text(" ", strip=True))
+        if url_slug != slug and text_slug != slug:
+            continue
+        score = 2 if text_slug == slug else 1
+        rank = (score, -len(segs))
+        path = "/" + "/".join(segs) + "/"
+        if best is None or rank > best[0]:
+            best = (rank, f"{_PSH_BASE}{path}")
+    return best[1] if best else None
+
+
+def _psh_next_page(html, current):
+    from bs4 import BeautifulSoup
+    soup = BeautifulSoup(html or "", "html.parser")
+    nxt = soup.select_one("a.next")
+    href = (nxt.get("href") if nxt else "") or ""
+    match = re.search(r"/page/(\d+)/", href)
+    if match and int(match.group(1)) > current:
+        return int(match.group(1))
+    return None
+
+
+def _psh_search_items(html):
+    """Video cards from a PissHamster search or category listing."""
+    from bs4 import BeautifulSoup
+    soup = BeautifulSoup(html or "", "html.parser")
+    out = []
+    seen = set()
+    for block in soup.select("div.video-block"):
+        anchor = block.select_one("a.thumb[href]")
+        if not anchor:
+            continue
+        url = _psh_canonical(anchor.get("href") or "")
+        vid = _psh_video_id(url)
+        if not vid or vid in seen:
+            continue
+        seen.add(vid)
+        title_el = block.select_one("span.title")
+        title = title_el.get_text(" ", strip=True) if title_el else ""
+        if not title:
+            title = (anchor.get("aria-label") or anchor.get("title") or "").strip()
+        dur_el = block.select_one("span.duration")
+        dur = _dur(dur_el.get_text()) if dur_el else 0
+        thumb = ""
+        img = block.select_one("img")
+        if img:
+            for attr in ("src", "data-src", "data-original"):
+                val = img.get(attr) or ""
+                if str(val).startswith("http"):
+                    thumb = str(val)
+                    break
+        out.append({
+            "url": url,
+            "title": title or "Unknown",
+            "duration_sec": dur or None,
+            "thumbnail": thumb,
+        })
+    return out
+
+
+def _psh_video_object(html):
+    from bs4 import BeautifulSoup
+    soup = BeautifulSoup(html or "", "html.parser")
+    for node in soup.select('script[type="application/ld+json"]'):
+        try:
+            data = json.loads(node.string or "")
+        except Exception:
+            continue
+        graph = data.get("@graph") if isinstance(data, dict) else None
+        nodes = graph if isinstance(graph, list) else [data]
+        for item in nodes:
+            if isinstance(item, dict) and item.get("@type") == "VideoObject":
+                return item
+    return {}
+
+
+def _psh_label_names(soup, selector):
+    from bs4 import BeautifulSoup
+    names = []
+    for anchor in soup.select(selector):
+        name = (anchor.get("title") or "").strip()
+        if not name:
+            clone = BeautifulSoup(str(anchor), "html.parser")
+            for extra in clone.select(".act-count"):
+                extra.decompose()
+            name = clone.get_text(" ", strip=True)
+        name = re.sub(r"\s+", " ", name).strip(" ,")
+        if not name or re.fullmatch(r"pisshamster(?:\.com)?", name, re.I):
+            continue
+        if name not in names:
+            names.append(name)
+    return names
+
+
+def _psh_best_mp4(html):
+    """Highest labeled MP4, keeping the signed ?verify= query (unsigned 403s)."""
+    from bs4 import BeautifulSoup
+    soup = BeautifulSoup(html or "", "html.parser")
+    best = (-1, "")
+    for src in soup.select("video source[src], video[src]"):
+        href = src.get("src") or ""
+        if ".mp4" not in href or not href.startswith("http"):
+            continue
+        title = (src.get("title") or "").lower()
+        rank = _PSH_QUALITY.get(title, 0)
+        if "_uhd" in href or "_4k" in href:
+            rank = max(rank, 5)
+        elif "_high" in href:
+            rank = max(rank, 4)
+        elif "_hd" in href:
+            rank = max(rank, 3)
+        elif "_low" in href:
+            rank = max(rank, 1)
+        res = re.search(r"(\d{3,4})p", href)
+        if res:
+            rank = max(rank, int(res.group(1)) // 240)
+        if rank >= best[0] and href:
+            best = (rank, href)
+    return best[1] or None
+
+
+def _psh_parse_detail(html, url):
+    """Parse a PissHamster video page for catalog metadata and the signed MP4."""
+    from bs4 import BeautifulSoup
+    soup = BeautifulSoup(html or "", "html.parser")
+    video = _psh_video_object(html)
+    canonical = ""
+    link = soup.select_one('link[rel="canonical"]')
+    if link and link.get("href"):
+        canonical = _psh_canonical(link["href"])
+    if not canonical:
+        canonical = _psh_canonical(url)
+
+    title = ""
+    h1 = soup.select_one("h1")
+    if h1:
+        title = h1.get_text(" ", strip=True)
+    if not title:
+        title = str(video.get("name") or "").strip()
+    title = re.sub(
+        r"\s*[-–|]\s*Pisshamster(?:\.com)?\s*$", "", title or "", flags=re.I
+    ).strip()
+
+    description = str(video.get("description") or "").strip()
+    if not description:
+        meta_desc = soup.select_one('meta[name="description"]')
+        if meta_desc and meta_desc.get("content"):
+            description = str(meta_desc["content"]).strip()
+
+    categories = _psh_label_names(soup, "a.label-cat-video")
+    tags = _psh_label_names(soup, "a.label-tag-video")
+    if not tags:
+        for part in str(video.get("keywords") or "").split(","):
+            name = part.strip()
+            if name and name not in tags:
+                tags.append(name)
+    pornstars = _psh_label_names(soup, "a.label-act-video")
+
+    duration = _po_iso_duration(video.get("duration")) if video else None
+    if not duration:
+        duration = _dur(video.get("duration")) or None
+
+    thumb = ""
+    thumbs = video.get("thumbnailUrl") if video else None
+    if isinstance(thumbs, list) and thumbs:
+        thumb = str(thumbs[0])
+    elif isinstance(thumbs, str):
+        thumb = thumbs
+    if not thumb:
+        og = soup.select_one('meta[property="og:image"]')
+        if og and og.get("content"):
+            thumb = str(og["content"])
+
+    cdn = _psh_best_mp4(html)
+    if not cdn:
+        return {}
+    return {
+        "url": canonical or url,
+        "title": title or "Unknown",
+        "duration_sec": duration,
+        "tags": tags,
+        "categories": categories,
+        "pornstars": pornstars,
+        "thumbnail": thumb,
+        "description": description,
+        "upload_date": str(video.get("uploadDate") or ""),
+        "_cdn_url": cdn,
+        "_m3u8_base_url": None,
+        "_part_urls": None,
+    }
+
+
+def search_pisshamster(query, count, cursor=0, min_duration=600, mode="query"):
+    """Search PissHamster.
+
+    Keyword mode hits ``/?s=``. Category mode resolves the name against
+    ``/categories/`` (paths are numeric) and falls back to keyword search
+    when that name is not a category. Listings of at least 10 minutes use
+    ``?filter=longest`` so the duration filter is not stuck on short
+    popular clips. Each kept card is enriched from its video page.
+    """
+    page, index = _psh_cursor(cursor)
+    count = max(0, int(count or 0))
+    category_base = None
+    if _is_category_mode(mode):
+        category_base = _psh_category_base(query)
+        if not category_base:
+            if page == 1 and index == 0:
+                return search_pisshamster(query, count, 0, min_duration, mode="query")
+            return [], _psh_encode_cursor(page, index), True
+
+    stubs = []
+    exhausted = False
+    saw_cards = False
+    resume_page, resume_index = page, index
+    try:
+        while len(stubs) < count:
+            html = _html_get(_psh_listing_url(query, page, min_duration, category_base))
+            if not html:
+                exhausted = True
+                break
+            items = _psh_search_items(html)
+            if not items:
+                exhausted = True
+                break
+            saw_cards = True
+            if index >= len(items):
+                nxt = _psh_next_page(html, page)
+                if not nxt:
+                    exhausted = True
+                    break
+                page, index = nxt, 0
+                continue
+            filled = False
+            for i in range(index, len(items)):
+                item = items[i]
+                dur = item.get("duration_sec")
+                if dur and dur < min_duration:
+                    continue
+                stubs.append(item)
+                if len(stubs) >= count:
+                    resume_index = i + 1
+                    resume_page = page
+                    if resume_index >= len(items):
+                        nxt = _psh_next_page(html, page)
+                        if nxt:
+                            resume_page, resume_index = nxt, 0
+                        else:
+                            exhausted = True
+                    filled = True
+                    break
+            if filled:
+                break
+            nxt = _psh_next_page(html, page)
+            if not nxt:
+                exhausted = True
+                resume_page, resume_index = page, len(items)
+                break
+            page, index = nxt, 0
+    except Exception as e:  # noqa: BLE001
+        print(f"[site_searchers] PissHamster search failed: {e!r}", file=sys.stderr, flush=True)
+        return [], _psh_encode_cursor(page, index), True
+
+    if (
+        _is_category_mode(mode)
+        and category_base
+        and not saw_cards
+        and _psh_cursor(cursor) == (1, 0)
+    ):
+        return search_pisshamster(query, count, 0, min_duration, mode="query")
+
+    out = []
+    for stub in stubs:
+        try:
+            detail_html = _html_get(stub["url"])
+            if not detail_html:
+                out.append(_norm(
+                    stub["url"], stub.get("title"), stub.get("duration_sec"),
+                    thumbnail=stub.get("thumbnail") or "",
+                ))
+                continue
+            meta = _psh_parse_detail(detail_html, stub["url"])
+            if not meta:
+                out.append(_norm(
+                    stub["url"], stub.get("title"), stub.get("duration_sec"),
+                    thumbnail=stub.get("thumbnail") or "",
+                ))
+                continue
+            dur = meta.get("duration_sec") or stub.get("duration_sec")
+            if dur and dur < min_duration:
+                continue
+            item = _norm(
+                meta.get("url") or stub["url"],
+                meta.get("title") or stub.get("title"),
+                dur,
+                thumbnail=meta.get("thumbnail") or stub.get("thumbnail") or "",
+                tags=meta.get("tags"),
+                categories=meta.get("categories"),
+                pornstars=meta.get("pornstars"),
+                description=meta.get("description") or "",
+                cdn=meta.get("_cdn_url"),
+            )
+            if meta.get("upload_date"):
+                item["upload_date"] = meta["upload_date"]
+            out.append(item)
+        except Exception:
+            out.append(_norm(
+                stub["url"], stub.get("title"), stub.get("duration_sec"),
+                thumbnail=stub.get("thumbnail") or "",
+            ))
+    return out, _psh_encode_cursor(resume_page, resume_index), exhausted
+
+
 # ── yt-dlp generic fallback (RedTube / SpankBang) ─────────────────────
 def search_ytdlp(query, count, skip=0, min_duration=600, prefix="ytsearch"):
     """Generic yt-dlp search fallback. Note: only sites with a yt-dlp search
@@ -2475,4 +3304,8 @@ SEARCHERS = {
     "ParadiseHill": search_paradisehill,
     "PornOne": search_pornone,
     "ABXXX": search_abxxx,
+    # No yt-dlp extractor and no EchterAlsFake library. HTML search + get_file MP4.
+    "Xozilla": search_xozilla,
+    # No yt-dlp extractor and no EchterAlsFake library. HTML search + signed MP4.
+    "PissHamster": search_pisshamster,
 }

@@ -1,7 +1,9 @@
 /**
- * Adult source sites supported by the scraper (subset of yt-dlp's porn-capable
- * extractors that have dedicated Python APIs / reliable search). The admin UI
- * renders these as checkboxes when creating a scrape run.
+ * Adult source sites supported by the scraper. Downloads use yt-dlp when the
+ * site has an extractor; Xozilla and PissHamster (and a few others) use a
+ * custom HTML searcher in scripts/site_searchers.py because yt-dlp has no
+ * extractor for them.
+ * The admin UI renders these as checkboxes when creating a scrape run.
  */
 export const SOURCE_SITES = [
   "PornHub",
@@ -16,6 +18,8 @@ export const SOURCE_SITES = [
   "ParadiseHill",
   "PornOne",
   "ABXXX",
+  "Xozilla",
+  "PissHamster",
 ] as const;
 
 export type SourceSite = (typeof SOURCE_SITES)[number];

@@ -20,7 +20,7 @@ export default function InteractiveScrapeForm() {
   const router = useRouter();
   const [query, setQuery] = useState("");
   const [searchMode, setSearchMode] = useState<"query" | "category">("query");
-  const [sources, setSources] = useState<string[]>([...SOURCE_SITES]);
+  const [sources, setSources] = useState<string[]>([]);
   const [tubeSites, setTubeSites] = useState<TubeSite[]>([]);
   const [targetSiteIds, setTargetSiteIds] = useState<string[]>([]);
   const [minMinutes, setMinMinutes] = useState(10);
@@ -333,6 +333,9 @@ export default function InteractiveScrapeForm() {
               </label>
             ))}
           </div>
+          {sources.length === 0 && (
+            <p className="mt-2 text-xs text-zinc-500">Select the sites to scrape.</p>
+          )}
         </div>
 
         <div>

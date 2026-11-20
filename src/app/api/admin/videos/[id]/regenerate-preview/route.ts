@@ -39,7 +39,7 @@ export async function POST(_request: Request, { params }: { params: Promise<{ id
       videoId: video.id,
       slug: video.slug,
       currentPreviewVersion: video.previewVersion,
-      targetPreviewVersion: 2,
+      targetPreviewVersion: 4,
     });
   } catch (err) {
     const message = err instanceof Error ? err.message : "Queue failed";

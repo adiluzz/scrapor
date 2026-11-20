@@ -359,6 +359,23 @@ def load_video_media(conn, video_id: str):
     }
 
 
+def list_videos_for_preview_backfill(conn):
+    """
+    READY videos that have a preview key and a stored source (HLS and/or MP4).
+    Used to seed a full-catalog preview regeneration job.
+    """
+    with conn.cursor() as cur:
+        cur.execute(
+            'SELECT id FROM "Video" '
+            'WHERE status = %s AND "isDeleted" = false '
+            'AND "s3PreviewKey" IS NOT NULL '
+            'AND ("s3HlsMasterKey" IS NOT NULL OR "s3VideoKey" IS NOT NULL) '
+            'ORDER BY id',
+            ("READY",),
+        )
+        return [row[0] for row in cur.fetchall()]
+
+
 def update_video_preview_media(
     conn,
     video_id: str,

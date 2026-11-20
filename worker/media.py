@@ -11,11 +11,17 @@ GOP_SEC = 2.0
 HLS_SEGMENT_SEC = 2.0
 
 # ── Preview (grid hover) ──────────────────────────────────────────────
-PREVIEW_VERSION = 2
-PREVIEW_TARGET_SEC = 4.0
-PREVIEW_MAX_SEGMENTS = 8
+# v4: evenly spaced windows; count scales with duration (min 8, max 20).
+PREVIEW_VERSION = 4
+PREVIEW_MIN_SEGMENTS = 8
+PREVIEW_MAX_SEGMENTS = 20
 PREVIEW_SEGMENT_SEC = 0.5
+PREVIEW_SEC_PER_WINDOW = 120  # one window per 2 minutes of source
+PREVIEW_SPAN_START = 0.10
+PREVIEW_SPAN_END = 0.85
 PREVIEW_MAX_WIDTH = 480
+# Minimum montage length (8 × 0.5s); longer sources get more windows.
+PREVIEW_TARGET_SEC = PREVIEW_MIN_SEGMENTS * PREVIEW_SEGMENT_SEC
 
 # ── Storyboard (player scrub) ─────────────────────────────────────────
 STORYBOARD_COLS = 5
@@ -87,45 +93,39 @@ def package_hls_from_mp4(src: str, out_dir: str, segment_sec: float = HLS_SEGMEN
         return False
 
 
-def _evenly_spaced_times(duration: int, count: int) -> list[float]:
-    if duration <= 0 or count <= 0:
+def preview_window_count(duration: int) -> int:
+    """How many 0.5s snippets for a source of the given length (min 8, max 20)."""
+    if duration <= 0:
+        return PREVIEW_MIN_SEGMENTS
+    return min(
+        PREVIEW_MAX_SEGMENTS,
+        max(PREVIEW_MIN_SEGMENTS, duration // PREVIEW_SEC_PER_WINDOW),
+    )
+
+
+def preview_sample_times(duration: int, count: int | None = None) -> list[float]:
+    """
+    Evenly spaced sample midpoints across 10%–85% of the timeline.
+    Skips intro/outro; always returns `count` points when duration allows.
+    """
+    if duration <= 0:
         return []
-    step = duration / count
-    return [min(duration - 0.1, step * (i + 0.5)) for i in range(count)]
+    n = count if count is not None else preview_window_count(duration)
+    if n <= 0:
+        return []
+    if duration < PREVIEW_TARGET_SEC:
+        return [min(duration - 0.1, max(0.0, duration * 0.5))]
 
-
-def _scene_midpoints(video_path: str, duration: int, max_scenes: int) -> list[float]:
-    """Scene-aware sample points; falls back to evenly spaced times."""
-    try:
-        from scenedetect import ContentDetector, SceneManager, open_video
-    except ImportError:
-        return _evenly_spaced_times(duration, max_scenes)
-
-    try:
-        video = open_video(video_path)
-        scene_manager = SceneManager()
-        scene_manager.add_detector(ContentDetector(threshold=27.0))
-        scene_manager.detect_scenes(video)
-        scene_list = scene_manager.get_scene_list()
-    except Exception:
-        return _evenly_spaced_times(duration, max_scenes)
-
-    if not scene_list:
-        return _evenly_spaced_times(duration, max_scenes)
-
-    midpoints = [
-        s.get_seconds() + (e.get_seconds() - s.get_seconds()) / 2
-        for s, e in scene_list
-    ]
-    if len(midpoints) <= max_scenes:
-        return midpoints
-
-    # Subsample scenes evenly across the timeline.
-    picked: list[float] = []
-    step = len(midpoints) / max_scenes
-    for i in range(max_scenes):
-        picked.append(midpoints[min(len(midpoints) - 1, int(i * step))])
-    return picked
+    span_start = duration * PREVIEW_SPAN_START
+    span_end = duration * PREVIEW_SPAN_END
+    if span_end <= span_start:
+        span_start = 0.0
+        span_end = float(duration)
+    span = span_end - span_start
+    if n == 1:
+        return [min(duration - 0.1, span_start + span / 2)]
+    step = span / n
+    return [min(duration - 0.1, span_start + step * (i + 0.5)) for i in range(n)]
 
 
 def _extract_preview_segment(
@@ -149,10 +149,11 @@ def _extract_preview_segment(
 def _fallback_preview_clip(video_path: str, dest: str, duration: int, timeout: int) -> bool:
     """Single short clip from ~10% into the video (YouTube-style fallback)."""
     start = max(0.0, duration * 0.1)
+    clip_len = min(PREVIEW_TARGET_SEC, max(1.0, float(duration) * 0.5))
     cmd = [
         "ffmpeg", "-y",
         "-ss", f"{start:.3f}", "-i", video_path,
-        "-t", str(PREVIEW_TARGET_SEC),
+        "-t", str(clip_len),
         "-vf", f"scale={PREVIEW_MAX_WIDTH}:-2:flags=lanczos",
         "-an", "-c:v", "libx264", "-crf", "28", "-preset", "veryfast",
         "-movflags", "+faststart", dest,
@@ -163,18 +164,57 @@ def _fallback_preview_clip(video_path: str, dest: str, duration: int, timeout: i
         return False
 
 
+def _concat_preview_segments(
+    segments: list[str], dest: str, target_sec: float, timeout: int
+) -> bool:
+    if not segments:
+        return False
+    list_path = os.path.join(os.path.dirname(os.path.abspath(dest)) or ".", "preview_concat.txt")
+    try:
+        with open(list_path, "w", encoding="utf-8") as f:
+            for path in segments:
+                f.write(f"file '{path}'\n")
+        cmd = [
+            "ffmpeg", "-y", "-f", "concat", "-safe", "0", "-i", list_path,
+            "-t", str(target_sec),
+            "-an", "-c:v", "libx264", "-crf", "28", "-preset", "veryfast",
+            "-movflags", "+faststart", dest,
+        ]
+        return subprocess.run(cmd, capture_output=True, timeout=timeout).returncode == 0
+    except Exception:
+        return False
+    finally:
+        try:
+            os.remove(list_path)
+        except OSError:
+            pass
+
+
+def assemble_preview_clips(
+    clips: list[str], dest: str, timeout: int = 1800
+) -> bool:
+    """Concat pre-extracted mute clips into the final hover preview."""
+    if not clips:
+        return False
+    target_sec = len(clips) * PREVIEW_SEGMENT_SEC
+    ok = _concat_preview_segments(clips, dest, target_sec, timeout)
+    return ok and os.path.exists(dest) and os.path.getsize(dest) > 10_000
+
+
 def make_preview(
     video_path: str,
     dest: str,
     duration: int = 0,
     force: bool = False,
     timeout: int = 1800,
+    sample_times: list[float] | None = None,
 ) -> bool:
     """
-    Muted grid-hover preview: scene montage capped at PREVIEW_TARGET_SEC.
+    Muted grid-hover preview: evenly spaced montage.
 
-    v2 (default): up to 8 × 0.5s scene snippets (~4s total), width ≤480px.
-    Legacy v1 previews remain valid until regenerated (force=True).
+    v4: N × 0.5s windows (N = min(20, max(8, duration//120))), width ≤480px,
+    sampled across 10%–85% of the source. Pass sample_times when the caller
+    already resolved seek points (e.g. HLS window fetch).
     """
     if not force and os.path.exists(dest) and os.path.getsize(dest) > 10_000:
         return True
@@ -184,43 +224,34 @@ def make_preview(
     if duration <= 0:
         return False
 
-    tmp_dir = os.path.dirname(os.path.abspath(dest)) or "."
-    times = _scene_midpoints(video_path, duration, PREVIEW_MAX_SEGMENTS)
-    segments: list[str] = []
-
-    for i, midpoint in enumerate(times):
-        seg_path = os.path.join(tmp_dir, f"preview_seg_{i:02d}.mp4")
-        start = max(0.0, midpoint - PREVIEW_SEGMENT_SEC / 2)
-        if _extract_preview_segment(video_path, start, seg_path, timeout):
-            segments.append(seg_path)
-
-    if not segments:
+    if duration < PREVIEW_TARGET_SEC:
         return _fallback_preview_clip(video_path, dest, duration, timeout)
 
-    list_path = os.path.join(tmp_dir, "preview_concat.txt")
+    times = sample_times if sample_times is not None else preview_sample_times(duration)
+    if not times:
+        return _fallback_preview_clip(video_path, dest, duration, timeout)
+
+    tmp_dir = os.path.dirname(os.path.abspath(dest)) or "."
+    segments: list[str] = []
+    ok = False
     try:
-        with open(list_path, "w", encoding="utf-8") as f:
-            for path in segments:
-                f.write(f"file '{path}'\n")
-        cmd = [
-            "ffmpeg", "-y", "-f", "concat", "-safe", "0", "-i", list_path,
-            "-t", str(PREVIEW_TARGET_SEC),
-            "-an", "-c:v", "libx264", "-crf", "28", "-preset", "veryfast",
-            "-movflags", "+faststart", dest,
-        ]
-        ok = subprocess.run(cmd, capture_output=True, timeout=timeout).returncode == 0
-    except Exception:
-        ok = False
+        for i, midpoint in enumerate(times):
+            seg_path = os.path.join(tmp_dir, f"preview_seg_{i:02d}.mp4")
+            start = max(0.0, midpoint - PREVIEW_SEGMENT_SEC / 2)
+            if _extract_preview_segment(video_path, start, seg_path, timeout):
+                segments.append(seg_path)
+
+        if not segments:
+            return _fallback_preview_clip(video_path, dest, duration, timeout)
+
+        target_sec = len(segments) * PREVIEW_SEGMENT_SEC
+        ok = _concat_preview_segments(segments, dest, target_sec, timeout)
     finally:
         for path in segments:
             try:
                 os.remove(path)
             except OSError:
                 pass
-        try:
-            os.remove(list_path)
-        except OSError:
-            pass
 
     if ok and os.path.exists(dest) and os.path.getsize(dest) > 10_000:
         return True

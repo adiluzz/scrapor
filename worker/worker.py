@@ -12,10 +12,14 @@ Consumes two Redis queues:
     upload to S3 under the video id, then flip the video to READY.
   • `hls:backfill:queue` — Video ids for catalog backfill: download existing S3 MP4,
     normalize + HLS-pack, re-upload. Seeded on worker startup (lowest priority).
+  • `preview:queue` — Video ids (or JSON {videoId,jobId,previewOnly}) for hover-preview
+    regeneration. Prefer HLS time-window fetch (no full download). Seed all catalog
+    previews with: python worker/worker.py --seed-preview-backfill
 
 Run modes:
   python worker/worker.py                 # long-running queue consumer (container)
   python worker/worker.py --run <runId>   # process one existing scrape run and exit
+  python worker/worker.py --seed-preview-backfill  # enqueue all previews; prints jobId
 """
 
 import argparse
@@ -121,6 +125,8 @@ ALL_CAP = int(os.environ.get("SCRAPE_ALL_MAX", "100000"))
 QUEUE_KEY = "scrape:queue"
 CREATOR_QUEUE_KEY = "creator:queue"
 PREVIEW_QUEUE_KEY = "preview:queue"
+PREVIEW_JOB_KEY_PREFIX = "preview:job:"
+PREVIEW_PROGRESS_EVERY = 25
 REDOWNLOAD_QUEUE_KEY = "redownload:queue"
 SCRAPE_SEARCH_QUEUE_KEY = "scrape:search:queue"
 PORNSTAR_TPDB_QUEUE_KEY = "pornstar:tpdb:queue"
@@ -1064,61 +1070,244 @@ def _resolve_source_video(conn, video_id: str, site_id: str, s3_video_key: str |
     return False
 
 
-def process_regenerate_preview(conn, video_id: str):
-    """Rebuild hover preview (v2) and adaptive storyboard for an existing video."""
+def _parse_preview_queue_item(raw: str) -> tuple[str, str | None, bool]:
+    """
+    Queue payloads are either a bare video id (admin button) or JSON:
+    {"videoId":"...","jobId":"...","previewOnly":true}
+    Returns (video_id, job_id, preview_only).
+    """
+    text = (raw or "").strip()
+    if text.startswith("{"):
+        try:
+            payload = json.loads(text)
+            vid = str(payload.get("videoId") or payload.get("id") or "").strip()
+            if vid:
+                job_id = payload.get("jobId") or payload.get("job_id")
+                preview_only = bool(payload.get("previewOnly", payload.get("preview_only", False)))
+                return vid, (str(job_id) if job_id else None), preview_only
+        except (json.JSONDecodeError, TypeError, ValueError):
+            pass
+    return text, None, False
+
+
+def _preview_job_redis_key(job_id: str) -> str:
+    return f"{PREVIEW_JOB_KEY_PREFIX}{job_id}"
+
+
+def _preview_job_note(r, job_id: str | None, field: str) -> dict | None:
+    """Increment a job counter and return {total,done,failed,remaining}."""
+    if not r or not job_id:
+        return None
+    key = _preview_job_redis_key(job_id)
+    try:
+        r.hincrby(key, field, 1)
+        data = r.hgetall(key) or {}
+    except Exception:  # noqa: BLE001
+        return None
+
+    decoded = {}
+    for k, v in data.items():
+        kk = k.decode() if isinstance(k, bytes) else k
+        vv = v.decode() if isinstance(v, bytes) else v
+        try:
+            decoded[kk] = int(vv)
+        except (TypeError, ValueError):
+            decoded[kk] = 0
+
+    total = decoded.get("total", 0)
+    done = decoded.get("done", 0)
+    failed = decoded.get("failed", 0)
+    return {
+        "total": total,
+        "done": done,
+        "failed": failed,
+        "remaining": max(0, total - done - failed),
+    }
+
+
+def _preview_job_maybe_progress(r, job_id: str | None, stats: dict | None):
+    if not job_id or not stats:
+        return
+    finished = stats["done"] + stats["failed"]
+    total = stats["total"]
+    if finished == total and total > 0:
+        _event("info", "preview_backfill_done", jobId=job_id, **stats)
+        return
+    if finished == 1 or finished % PREVIEW_PROGRESS_EVERY == 0:
+        _event("info", "preview_backfill_progress", jobId=job_id, **stats)
+
+
+def _redis_client():
+    import redis as redis_lib
+    return redis_lib.from_url(os.environ.get("REDIS_URL", "redis://localhost:6379"))
+
+
+def seed_preview_backfill_queue(conn, r) -> tuple[str, int]:
+    """
+    Enqueue every READY video with a preview + source under one jobId.
+    Returns (job_id, enqueued_count). Prints jobId for terminal copy/paste.
+    """
+    job_id = f"preview-backfill-{time.strftime('%Y%m%d-%H%M%S')}"
+    ids = db.list_videos_for_preview_backfill(conn)
+    key = _preview_job_redis_key(job_id)
+    pipe = r.pipeline()
+    pipe.delete(key)
+    pipe.hset(key, mapping={"total": len(ids), "done": 0, "failed": 0})
+    pipe.expire(key, 60 * 60 * 24 * 14)  # keep counters two weeks
+    for vid in ids:
+        pipe.rpush(
+            PREVIEW_QUEUE_KEY,
+            json.dumps({"videoId": vid, "jobId": job_id, "previewOnly": True}),
+        )
+    pipe.execute()
+    _event("info", "preview_backfill_start", jobId=job_id, total=len(ids))
+    print(job_id, flush=True)
+    return job_id, len(ids)
+
+
+def process_regenerate_preview(
+    conn,
+    video_id: str,
+    job_id: str | None = None,
+    preview_only: bool = False,
+):
+    """
+    Rebuild hover preview (v4). Admin regenerations also refresh storyboard/thumb
+    unless preview_only=True (catalog backfill — HLS windows, preview MP4 only).
+    """
+    # Allow queue payload to be passed as the first positional string.
+    if isinstance(video_id, str) and (video_id.startswith("{") or "\n" in video_id):
+        video_id, job_id, preview_only = _parse_preview_queue_item(video_id)
+
+    log_ctx = {"videoId": video_id}
+    if job_id:
+        log_ctx["jobId"] = job_id
+
     v = db.load_video_media(conn, video_id)
     if not v:
-        _event("warning", "preview_regen_not_found", videoId=video_id)
+        _event("warning", "preview_regen_not_found", **log_ctx)
+        r = None
+        try:
+            r = _redis_client()
+        except Exception:  # noqa: BLE001
+            pass
+        stats = _preview_job_note(r, job_id, "failed")
+        _preview_job_maybe_progress(r, job_id, stats)
         return
 
     site_id = v["siteId"]
     duration = v.get("durationSec") or 0
-    _event("info", "preview_regen_start", videoId=video_id, durationSec=duration,
-           previewVersion=v.get("previewVersion"))
+    hls_key = v.get("s3HlsMasterKey")
+    if duration <= 0 and storage.configured() and hls_key:
+        probed = storage.hls_playlist_duration(hls_key)
+        if probed and probed > 0:
+            duration = int(probed)
+    compiled = (
+        v.get("sourceSite") == "VideoEditor"
+        or str(v.get("sourceUrl") or "").startswith("editor-compile://")
+    )
+    # Catalog backfill is always preview-only; admin single-id keeps full media refresh
+    # unless explicitly flagged. Compiled ads keep thumb re-cut when not preview_only.
+    _event(
+        "info",
+        "preview_regen_start",
+        **log_ctx,
+        durationSec=duration,
+        previewVersion=v.get("previewVersion"),
+        previewOnly=preview_only,
+        targetVersion=media.PREVIEW_VERSION,
+    )
 
     tmp_dir = tempfile.mkdtemp(prefix="preview_regen_")
+    r = None
+    counted = False
+    success = False
     try:
-        video_path = os.path.join(tmp_dir, "video.mp4")
-        if not _resolve_source_video(conn, video_id, site_id, v.get("s3VideoKey"), video_path,
-                                     v.get("s3HlsMasterKey")):
-            _event("warning", "preview_regen_no_source", videoId=video_id)
-            return
-
-        if duration <= 0:
-            duration = media.probe_duration(video_path)
+        try:
+            r = _redis_client()
+        except Exception:  # noqa: BLE001
+            r = None
 
         preview = os.path.join(tmp_dir, "preview.mp4")
-        thumb = os.path.join(tmp_dir, "thumbnail.jpg")
-        sprite = os.path.join(tmp_dir, "storyboard.jpg")
-        vtt = os.path.join(tmp_dir, "storyboard.vtt")
+        made = False
+        source_mode = "none"
+        thumb = None
+        sprite = None
+        vtt = None
+        storyboard_ok = False
 
-        compiled = (
-            v.get("sourceSite") == "VideoEditor"
-            or str(v.get("sourceUrl") or "").startswith("editor-compile://")
-        )
-        thumb_at = 8 if compiled else 5
+        # Prefer HLS window fetch — no full-video download.
+        if storage.configured() and hls_key and duration > 0:
+            times = media.preview_sample_times(duration)
+            hls_work = os.path.join(tmp_dir, "hls_windows")
+            os.makedirs(hls_work, exist_ok=True)
+            clips = storage.fetch_hls_time_windows(
+                hls_key, times, media.PREVIEW_SEGMENT_SEC, hls_work
+            )
+            if clips and media.assemble_preview_clips(clips, preview):
+                made = True
+                source_mode = "hls_windows"
 
-        if not media.make_preview(video_path, preview, duration=duration, force=True):
-            _event("warning", "preview_regen_failed", videoId=video_id, stage="make_preview")
-            return
-
-        media.make_thumbnail(video_path, thumb, "", at_sec=thumb_at)
-        storyboard_ok = media.make_storyboard(video_path, sprite, vtt, duration, force=True)
+        if not made:
+            video_path = os.path.join(tmp_dir, "video.mp4")
+            if not _resolve_source_video(
+                conn, video_id, site_id, v.get("s3VideoKey"), video_path, hls_key
+            ):
+                _event("warning", "preview_regen_no_source", **log_ctx)
+                stats = _preview_job_note(r, job_id, "failed")
+                counted = True
+                _preview_job_maybe_progress(r, job_id, stats)
+                return
+            if duration <= 0:
+                duration = media.probe_duration(video_path)
+            if not media.make_preview(video_path, preview, duration=duration, force=True):
+                _event("warning", "preview_regen_failed", **log_ctx, stage="make_preview")
+                stats = _preview_job_note(r, job_id, "failed")
+                counted = True
+                _preview_job_maybe_progress(r, job_id, stats)
+                return
+            made = True
+            source_mode = "full_source"
+            if not preview_only:
+                thumb = os.path.join(tmp_dir, "thumbnail.jpg")
+                sprite = os.path.join(tmp_dir, "storyboard.jpg")
+                vtt = os.path.join(tmp_dir, "storyboard.vtt")
+                thumb_at = 8 if compiled else 5
+                media.make_thumbnail(video_path, thumb, "", at_sec=thumb_at)
+                storyboard_ok = media.make_storyboard(
+                    video_path, sprite, vtt, duration, force=True
+                )
+        elif not preview_only:
+            # HLS preview built; still need full source for storyboard/thumb (admin regen).
+            video_path = os.path.join(tmp_dir, "video.mp4")
+            if _resolve_source_video(
+                conn, video_id, site_id, v.get("s3VideoKey"), video_path, hls_key
+            ):
+                if duration <= 0:
+                    duration = media.probe_duration(video_path)
+                thumb = os.path.join(tmp_dir, "thumbnail.jpg")
+                sprite = os.path.join(tmp_dir, "storyboard.jpg")
+                vtt = os.path.join(tmp_dir, "storyboard.vtt")
+                thumb_at = 8 if compiled else 5
+                media.make_thumbnail(video_path, thumb, "", at_sec=thumb_at)
+                storyboard_ok = media.make_storyboard(
+                    video_path, sprite, vtt, duration, force=True
+                )
 
         preview_key = v.get("s3PreviewKey")
         storyboard_key = v.get("s3StoryboardKey")
         vtt_key = v.get("s3StoryboardVttKey")
-        thumb_key = v.get("s3ThumbKey")
+        thumb_key = v.get("s3ThumbKey") if not preview_only else None
 
         if storage.configured():
             preview_key = storage.upload(
                 preview, storage.key_preview(site_id, video_id), "video/mp4"
             ) or preview_key
-            if os.path.exists(thumb):
+            if not preview_only and thumb and os.path.exists(thumb):
                 thumb_key = storage.upload(
                     thumb, storage.key_thumb(site_id, video_id), "image/jpeg"
                 ) or thumb_key
-            if storyboard_ok:
+            if not preview_only and storyboard_ok and sprite and vtt:
                 storyboard_key = storage.upload(
                     sprite, storage.key_storyboard(site_id, video_id), "image/jpeg"
                 ) or storyboard_key
@@ -1129,30 +1318,57 @@ def process_regenerate_preview(conn, video_id: str):
             local_dir = os.path.join(ROOT, "downloads", video_id)
             os.makedirs(local_dir, exist_ok=True)
             shutil.copy(preview, os.path.join(local_dir, "preview.mp4"))
-            if os.path.exists(thumb):
+            if not preview_only and thumb and os.path.exists(thumb):
                 shutil.copy(thumb, os.path.join(local_dir, "thumbnail.jpg"))
-            if storyboard_ok:
+            if not preview_only and storyboard_ok and sprite and vtt:
                 shutil.copy(sprite, os.path.join(local_dir, "storyboard.jpg"))
                 shutil.copy(vtt, os.path.join(local_dir, "storyboard.vtt"))
             preview_key = preview_key or f"local:{video_id}/preview.mp4"
 
-        preview_version = 3 if compiled else media.PREVIEW_VERSION
+        # Compiled ads keep version 3 so thumb-at-8s logic stays distinct;
+        # catalog / normal videos use PREVIEW_VERSION (4).
+        if compiled and not preview_only:
+            preview_version = 3
+        else:
+            preview_version = media.PREVIEW_VERSION
+
         db.update_video_preview_media(
             conn,
             video_id,
             s3_preview_key=preview_key,
-            s3_storyboard_key=storyboard_key if storyboard_ok else v.get("s3StoryboardKey"),
-            s3_storyboard_vtt_key=vtt_key if storyboard_ok else v.get("s3StoryboardVttKey"),
+            s3_storyboard_key=(
+                storyboard_key if (not preview_only and storyboard_ok) else v.get("s3StoryboardKey")
+            ),
+            s3_storyboard_vtt_key=(
+                vtt_key if (not preview_only and storyboard_ok) else v.get("s3StoryboardVttKey")
+            ),
             preview_version=preview_version,
-            s3_thumb_key=thumb_key,
+            s3_thumb_key=thumb_key if not preview_only else None,
         )
-        _event("info", "preview_regen_done", videoId=video_id, previewVersion=preview_version,
-               storyboard=storyboard_ok, thumb=bool(thumb_key))
+        success = True
+        _event(
+            "info",
+            "preview_regen_done",
+            **log_ctx,
+            previewVersion=preview_version,
+            storyboard=(not preview_only and storyboard_ok),
+            thumb=bool(thumb_key) if not preview_only else False,
+            sourceMode=source_mode,
+        )
     except Exception as e:
-        _event("warning", "preview_regen_failed", videoId=video_id, reason=str(e)[:500],
-               errorType=type(e).__name__, traceback=traceback.format_exc()[-800:])
+        _event(
+            "warning",
+            "preview_regen_failed",
+            **log_ctx,
+            reason=str(e)[:500],
+            errorType=type(e).__name__,
+            traceback=traceback.format_exc()[-800:],
+        )
     finally:
         shutil.rmtree(tmp_dir, ignore_errors=True)
+        if not counted:
+            stats = _preview_job_note(r, job_id, "done" if success else "failed")
+            _preview_job_maybe_progress(r, job_id, stats)
 
 
 def process_redownload(conn, video_id: str):
@@ -1860,6 +2076,11 @@ def main():
         help="Seconds between TPDB requests during backfill (default 0.4)",
     )
     parser.add_argument(
+        "--seed-preview-backfill",
+        action="store_true",
+        help="Enqueue ALL READY previews under one jobId (preview-only HLS regen); prints jobId",
+    )
+    parser.add_argument(
         "--seed-hls-backfill",
         action="store_true",
         help="Enqueue all catalog videos missing HLS (respects HLS_BACKFILL_ENABLED)",
@@ -1903,6 +2124,13 @@ def main():
         import redis as redis_lib
         r = redis_lib.from_url(os.environ.get("REDIS_URL", "redis://localhost:6379"))
         process_hls_backfill(conn, args.hls_backfill, r)
+        return
+
+    if args.seed_preview_backfill:
+        import redis as redis_lib
+        r = redis_lib.from_url(os.environ.get("REDIS_URL", "redis://localhost:6379"))
+        job_id, n = seed_preview_backfill_queue(conn, r)
+        log.info(_j({"event": "preview_backfill_seeded", "jobId": job_id, "total": n}))
         return
 
     if args.seed_hls_backfill or args.seed_hls_backfill_force:

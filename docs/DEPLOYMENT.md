@@ -286,6 +286,24 @@ automatic — nothing else to configure.
   docker compose run --rm migrate      # apply any new migrations
   ```
 - **Logs:** `docker compose logs -f web worker nginx`
+- **Preview backfill (v4 even-spaced montages, all catalog previews):**
+  ```bash
+  # After deploying a new worker image:
+  docker compose exec worker python worker.py --seed-preview-backfill
+  # prints jobId, e.g. preview-backfill-20261120-1800 — copy it
+  JOB=preview-backfill-YYYYMMDD-HHMMSS
+
+  # Live follow
+  docker compose logs -f worker --no-log-prefix 2>&1 | grep --line-buffered "$JOB"
+
+  # Progress / failures
+  docker compose logs worker --since 48h --no-log-prefix 2>&1 \
+    | grep "$JOB" \
+    | grep -E 'preview_backfill_progress|preview_regen_failed|preview_backfill_done'
+
+  # Redis counters (total / done / failed)
+  docker compose exec redis redis-cli HGETALL preview:job:$JOB
+  ```
 - **Restart one service:** `docker compose restart web`
 - **New domain / site:** create Site in Admin (or `node scripts/create-site.mjs`),
   DNS A records, then `./scripts/provision-site.sh example.com` and reload Caddy.

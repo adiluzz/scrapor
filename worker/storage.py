@@ -121,6 +121,160 @@ def delete(key) -> bool:
     return True
 
 
+def _parse_hls_timeline(body: str) -> tuple[list[tuple[float, float, str]], float] | None:
+    """
+    Parse a VOD media playlist into [(start, end, name), ...] and total duration.
+    Rejects playlists with path separators in segment URIs.
+    """
+    if not body.startswith("#EXTM3U"):
+        return None
+    lines = [l.strip() for l in body.splitlines() if l.strip()]
+    entries: list[tuple[float, float, str]] = []
+    t = 0.0
+    pending_dur: float | None = None
+    for line in lines:
+        if line.startswith("#EXTINF:"):
+            try:
+                pending_dur = float(line[len("#EXTINF:"):].split(",", 1)[0])
+            except ValueError:
+                return None
+            continue
+        if line.startswith("#"):
+            continue
+        if "/" in line or ".." in line:
+            return None
+        if pending_dur is None:
+            return None
+        entries.append((t, t + pending_dur, line))
+        t += pending_dur
+        pending_dur = None
+    if not entries:
+        return None
+    return entries, t
+
+
+def _hls_segment_indices_for_window(
+    entries: list[tuple[float, float, str]], start: float, end: float
+) -> list[int]:
+    """Indices of segments overlapping [start, end], plus one neighbor on each side."""
+    idxs: list[int] = []
+    for i, (s, e, _) in enumerate(entries):
+        if e > start and s < end:
+            idxs.append(i)
+    if not idxs:
+        # Fall back to the segment containing the midpoint.
+        mid = (start + end) / 2
+        for i, (s, e, _) in enumerate(entries):
+            if s <= mid < e or (i == len(entries) - 1 and mid >= s):
+                idxs = [i]
+                break
+    if not idxs:
+        return []
+    lo = max(0, idxs[0] - 1)
+    hi = min(len(entries) - 1, idxs[-1] + 1)
+    return list(range(lo, hi + 1))
+
+
+def hls_playlist_duration(master_key: str) -> float | None:
+    """Sum of #EXTINF on the media playlist, or None if unreadable."""
+    if not master_key:
+        return None
+    try:
+        body = s3().get_object(Bucket=_BUCKET, Key=master_key)["Body"].read().decode("utf-8")
+    except Exception:
+        return None
+    parsed = _parse_hls_timeline(body)
+    if not parsed:
+        return None
+    return float(parsed[1])
+
+
+def fetch_hls_time_windows(
+    master_key: str,
+    midpoints: list[float],
+    clip_sec: float,
+    work_dir: str,
+    workers: int = 8,
+) -> list[str] | None:
+    """
+    Download only the HLS .ts segments covering each midpoint and extract a
+    short mute clip per window. Returns local mp4 paths (same order as midpoints)
+    or None if the playlist / downloads fail.
+    """
+    if not master_key or not midpoints:
+        return None
+    import subprocess
+    from concurrent.futures import ThreadPoolExecutor
+
+    try:
+        body = s3().get_object(Bucket=_BUCKET, Key=master_key)["Body"].read().decode("utf-8")
+    except Exception:
+        return None
+    parsed = _parse_hls_timeline(body)
+    if not parsed:
+        return None
+    entries, _total = parsed
+    prefix = master_key.rsplit("/", 1)[0] + "/"
+    os.makedirs(work_dir, exist_ok=True)
+
+    needed: set[str] = set()
+    window_plan: list[tuple[float, list[int]]] = []
+    half = max(0.05, clip_sec / 2)
+    for mid in midpoints:
+        start = max(0.0, mid - half)
+        end = mid + half
+        idxs = _hls_segment_indices_for_window(entries, start, end)
+        if not idxs:
+            return None
+        window_plan.append((mid, idxs))
+        for i in idxs:
+            needed.add(entries[i][2])
+
+    try:
+        with ThreadPoolExecutor(max_workers=max(1, workers)) as ex:
+            list(
+                ex.map(
+                    lambda n: s3().download_file(_BUCKET, prefix + n, os.path.join(work_dir, n)),
+                    sorted(needed),
+                )
+            )
+    except Exception:
+        return None
+
+    clips: list[str] = []
+    for wi, (mid, idxs) in enumerate(window_plan):
+        names = [entries[i][2] for i in idxs]
+        win_start = entries[idxs[0]][0]
+        local_start = max(0.0, mid - half - win_start)
+        playlist = os.path.join(work_dir, f"win_{wi:02d}.m3u8")
+        with open(playlist, "w", encoding="utf-8") as f:
+            f.write("#EXTM3U\n#EXT-X-VERSION:3\n#EXT-X-TARGETDURATION:6\n")
+            f.write("#EXT-X-MEDIA-SEQUENCE:0\n#EXT-X-PLAYLIST-TYPE:VOD\n")
+            for i in idxs:
+                s, e, name = entries[i]
+                f.write(f"#EXTINF:{e - s:.3f},\n{name}\n")
+            f.write("#EXT-X-ENDLIST\n")
+        clip_path = os.path.join(work_dir, f"preview_hls_{wi:02d}.mp4")
+        cmd = [
+            "ffmpeg", "-y", "-loglevel", "error",
+            "-allowed_extensions", "ALL",
+            "-i", playlist,
+            "-ss", f"{local_start:.3f}",
+            "-t", str(clip_sec),
+            "-an", "-c:v", "libx264", "-crf", "28", "-preset", "veryfast",
+            "-vf", "scale=480:-2:flags=lanczos",
+            "-movflags", "+faststart", clip_path,
+        ]
+        try:
+            r = subprocess.run(cmd, capture_output=True, timeout=180, check=False)
+        except Exception:
+            return None
+        if r.returncode != 0 or not os.path.exists(clip_path) or os.path.getsize(clip_path) < 500:
+            return None
+        clips.append(clip_path)
+    return clips
+
+
 def download_hls_as_mp4(master_key, dest_path, workers=16) -> bool:
     """Download HLS segments and remux (stream copy) into one faststart MP4."""
     if not master_key:

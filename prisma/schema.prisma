@@ -235,7 +235,7 @@ model Video {
   s3VideoKey         String?
   s3ThumbKey         String? // static jpg
   s3PreviewKey       String? // hover mp4
-  previewVersion     Int?    // 1=legacy montage, 2=scene-capped montage; null=legacy
+  previewVersion     Int?    // 1=legacy, 2=scene, 3=compiled-ad, 4=even-spaced duration-scaled; null=legacy
   s3StoryboardKey    String? // sprite sheet for scrubber thumbnails
   s3StoryboardVttKey String? // WebVTT mapping timecodes -> sprite
   s3HlsMasterKey     String? // VOD HLS master playlist (segments under hls/)

@@ -229,7 +229,13 @@ export default function AdminVideoEditor({ videoId }: { videoId: string }) {
             {" "}
             Hover preview:{" "}
             <span className="text-zinc-400">
-              {form.previewVersion === 2 ? "v2 (scene montage)" : "legacy"}
+              {form.previewVersion === 4
+                ? "v4 (even-spaced)"
+                : form.previewVersion === 3
+                  ? "v3 (compiled)"
+                  : form.previewVersion === 2
+                    ? "v2 (scene montage)"
+                    : "legacy"}
             </span>
           </>
         )}

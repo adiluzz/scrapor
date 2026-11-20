@@ -1145,11 +1145,13 @@ def _redis_client():
 def seed_preview_backfill_queue(conn, r) -> tuple[str, int]:
     """
     Enqueue every READY video with a preview + source under one jobId.
+    Clears any leftover preview:queue items first so a re-seed is clean.
     Returns (job_id, enqueued_count). Prints jobId for terminal copy/paste.
     """
     job_id = f"preview-backfill-{time.strftime('%Y%m%d-%H%M%S')}"
     ids = db.list_videos_for_preview_backfill(conn)
     key = _preview_job_redis_key(job_id)
+    cleared = int(r.delete(PREVIEW_QUEUE_KEY) or 0)
     pipe = r.pipeline()
     pipe.delete(key)
     pipe.hset(key, mapping={"total": len(ids), "done": 0, "failed": 0})
@@ -1160,7 +1162,13 @@ def seed_preview_backfill_queue(conn, r) -> tuple[str, int]:
             json.dumps({"videoId": vid, "jobId": job_id, "previewOnly": True}),
         )
     pipe.execute()
-    _event("info", "preview_backfill_start", jobId=job_id, total=len(ids))
+    _event(
+        "info",
+        "preview_backfill_start",
+        jobId=job_id,
+        total=len(ids),
+        clearedQueue=bool(cleared),
+    )
     print(job_id, flush=True)
     return job_id, len(ids)
 
@@ -2176,6 +2184,8 @@ def main():
     # simply stops popping that queue instead of blocking on it.
     hls_busy = threading.Event()
     hls_seed_busy = threading.Event()
+    # Preview regen is ffmpeg-heavy; run one at a time on the 2-vCPU host.
+    preview_busy = threading.Event()
 
     def _seed_hls_in_background(label: str):
         if hls_seed_busy.is_set():
@@ -2200,6 +2210,14 @@ def main():
 
         _run_background("hls-backfill", _job, on_done=hls_busy.clear)
 
+    def _preview_in_background(payload: str):
+        preview_busy.set()
+
+        def _job(job_conn):
+            process_regenerate_preview(job_conn, payload)
+
+        _run_background("preview", _job, on_done=preview_busy.clear)
+
     if HLS_BACKFILL_ENABLED:
         _seed_hls_in_background("startup")
 
@@ -2223,6 +2241,8 @@ def main():
             keys = list(queue_priority)
             if hls_busy.is_set():
                 keys = [k for k in keys if k != HLS_BACKFILL_QUEUE_KEY]
+            if preview_busy.is_set():
+                keys = [k for k in keys if k != PREVIEW_QUEUE_KEY]
             # Leave queued scrape runs on the list until a slot frees, so they
             # start when the running one finishes instead of all at once.
             if _scrape_slots_full():
@@ -2256,7 +2276,7 @@ def main():
             elif queue == PORNSTAR_TPDB_QUEUE_KEY:
                 _run_background("pornstar-tpdb", process_pornstar_tpdb, job_id)
             elif queue == PREVIEW_QUEUE_KEY:
-                _run_background("preview", process_regenerate_preview, job_id)
+                _preview_in_background(job_id)
             elif queue == REDOWNLOAD_QUEUE_KEY:
                 _run_background("redownload", process_redownload, job_id)
             elif queue == CREATOR_QUEUE_KEY:

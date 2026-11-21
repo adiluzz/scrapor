@@ -26,7 +26,8 @@ export async function POST(request: Request) {
 
   const site = await getCurrentSite();
 
-  if (user.role === "CREATOR") {
+  const existingProfile = await prisma.creatorProfile.findUnique({ where: { userId: user.userId } });
+  if (existingProfile || user.role === "CREATOR") {
     return NextResponse.json({ error: "You are already a creator" }, { status: 409 });
   }
   const pending = await prisma.creatorApplication.findFirst({

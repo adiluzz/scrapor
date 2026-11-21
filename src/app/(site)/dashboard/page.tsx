@@ -25,7 +25,8 @@ export default async function DashboardPage() {
     prisma.user.findUnique({ where: { id: user.id } }),
   ]);
 
-  const isCreator = user.role === "CREATOR" && profile;
+  // Prefer DB role/profile: JWT can stay stale after admin approval until re-login.
+  const isCreator = Boolean(profile) && (dbUser?.role === "CREATOR" || dbUser?.role === "ADMIN");
 
   return (
     <div className="mx-auto max-w-3xl">

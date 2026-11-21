@@ -81,5 +81,7 @@ export default auth((req) => {
 });
 
 export const config = {
-  matcher: ["/((?!_next/static|_next/image|favicon.ico).*)"],
+  // Skip creator video uploads so middleware/proxy does not buffer/truncate the
+  // multi-GB body (default proxyClientMaxBodySize is 10MB). Auth runs in-route.
+  matcher: ["/((?!_next/static|_next/image|favicon.ico|api/creator/videos).*)"],
 };

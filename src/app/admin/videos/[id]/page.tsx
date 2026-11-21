@@ -15,6 +15,7 @@ const videoInclude = {
   pornstars: { include: { pornstar: true } },
   tags: { include: { tag: true } },
   heatmap: true,
+  creator: { select: { id: true, displayName: true, slug: true } },
   sites: {
     include: {
       site: { select: { id: true, name: true, domain: true, slug: true, primaryColor: true } },
@@ -93,6 +94,9 @@ export default async function AdminVideoDetail({
         {video.viewCount.toLocaleString()} views
         {video.durationSec ? ` · ${formatDuration(video.durationSec)}` : ""}
         {video.sourceSite ? ` · ${video.sourceSite}` : ""}
+        {video.creator
+          ? ` · uploaded by ${video.creator.displayName} (@${video.creator.slug})`
+          : ""}
       </p>
 
       {video.sites.length > 0 && (

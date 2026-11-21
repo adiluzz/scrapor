@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import type { ApiKeyType } from "@prisma/client";
+import { prisma } from "@/lib/db";
 import { getCurrentUser } from "@/lib/session";
 import { getCurrentSiteId } from "@/lib/site";
 import { authenticateApiKey, extractApiKey } from "@/lib/api-key-auth";
@@ -130,14 +131,31 @@ export async function guardCreator(
   const httpMethod = (method || request.method).toUpperCase();
 
   const user = await getCurrentUser();
-  if (user && (user.role === "CREATOR" || user.role === "ADMIN")) {
-    return {
-      kind: "session",
-      userId: user.id,
-      siteId: user.siteId,
-      role: user.role,
-      email: user.email || "",
-    };
+  if (user) {
+    // JWT role can stay stale after admin approval — prefer DB role/profile.
+    const [dbUser, profile] = await Promise.all([
+      prisma.user.findUnique({
+        where: { id: user.id },
+        select: { role: true, siteId: true },
+      }),
+      prisma.creatorProfile.findUnique({
+        where: { userId: user.id },
+        select: { id: true },
+      }),
+    ]);
+    const role = dbUser?.role ?? user.role;
+    const siteId = dbUser?.siteId ?? user.siteId;
+    if (role === "CREATOR" || role === "ADMIN" || profile) {
+      return {
+        kind: "session",
+        userId: user.id,
+        siteId,
+        role: role === "ADMIN" ? "ADMIN" : "CREATOR",
+        email: user.email || "",
+      };
+    }
+    // Logged in but not a creator — don't fall through to API-key 401.
+    return forbidden();
   }
 
   const authResult = await authenticateApiKey(request, ["FULL_ACCESS"]);

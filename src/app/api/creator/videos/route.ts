@@ -37,8 +37,9 @@ function sizeGuard(max: number) {
  * on the shared volume, create a PENDING Video row, and enqueue it for the
  * worker to transcode + generate thumbnail/preview/storyboard and upload to S3.
  *
- * Metadata is passed as query params (title, description, tags, durationSec) so
- * the body is the raw file and can be streamed to disk without buffering.
+ * Metadata is passed as query params (title, description, tags, pornstars,
+ * durationSec) so the body is the raw file and can be streamed to disk without
+ * buffering.
  */
 export async function POST(request: Request) {
   const auth = await guardCreator(request, "POST");
@@ -65,6 +66,11 @@ export async function POST(request: Request) {
     .map((t) => t.trim())
     .filter(Boolean)
     .slice(0, 30);
+  const pornstars = (searchParams.get("pornstars") || "")
+    .split(",")
+    .map((p) => p.trim())
+    .filter(Boolean)
+    .slice(0, 20);
   const durationRaw = parseInt(searchParams.get("durationSec") || "", 10);
   const durationSec = Number.isFinite(durationRaw) && durationRaw > 0 ? durationRaw : null;
 
@@ -95,17 +101,19 @@ export async function POST(request: Request) {
   }
 
   // 2. Create the PENDING video row (unique sourceUrl → always a fresh row).
+  // Source attribution: sourceSite="Creator" + creatorId + sourceUrl with slug.
   const uploadId = crypto.randomUUID();
   const video = await upsertVideoWithMedia({
     siteId: publishSiteId,
-    sourceUrl: `upload://${creator.id}/${uploadId}`,
+    sourceUrl: `creator://${creator.slug}/${uploadId}`,
     title,
     description,
     durationSec,
-    sourceSite: "creator-upload",
+    sourceSite: "Creator",
     creatorId: creator.id,
     status: "PENDING",
     tags,
+    pornstars,
   });
 
   // 3. Move the uploaded file under the video id (same volume → atomic rename)

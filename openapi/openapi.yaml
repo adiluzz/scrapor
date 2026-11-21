@@ -385,11 +385,24 @@ paths:
         - name: tags
           in: query
           schema: { type: string }
+        - name: pornstars
+          in: query
+          description: Comma-separated pornstar names
+          schema: { type: string }
         - name: durationSec
           in: query
           schema: { type: integer }
       responses:
         "200": { description: Upload accepted }
+        "403": { description: Creator profile required }
+
+  /api/creator/pornstars:
+    get:
+      tags: [creator]
+      summary: List pornstar names for creator upload picker
+      description: Site-scoped names for the logged-in creator's site.
+      responses:
+        "200": { description: Pornstar name list }
         "403": { description: Creator profile required }
 
   /api/admin/scrape-runs:

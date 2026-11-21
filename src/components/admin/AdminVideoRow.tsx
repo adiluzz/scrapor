@@ -61,7 +61,7 @@ export default function AdminVideoRow({
             className="w-full rounded border border-zinc-700 bg-zinc-950 px-2 py-1 text-white"
           />
         ) : (
-          <a href={`/admin/videos/${video.slug}`} className="text-zinc-200 hover:text-white">
+          <a href={`/admin/videos/${video.id}`} className="text-zinc-200 hover:text-white">
             {video.title}
           </a>
         )}

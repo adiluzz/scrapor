@@ -115,7 +115,7 @@ export default async function AdminVideosPage({
       <AdminVideoViewToggle q={q} page={page} view={view} siteId={siteId} orphans={orphans} />
 
       {view === "grid" ? (
-        <VideoGrid videos={cards} hrefPrefix="/admin/videos" />
+        <VideoGrid videos={cards} hrefPrefix="/admin/videos" hrefBy="id" />
       ) : (
         <div className="overflow-x-auto rounded-xl border border-zinc-800">
           <table className="w-full min-w-[720px] text-left text-sm">

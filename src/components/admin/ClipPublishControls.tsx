@@ -10,7 +10,6 @@ type PublishedSite = { id: string; name: string; domain: string };
 export default function ClipPublishControls({
   detectionId,
   videoId,
-  videoSlug,
   canPublish,
   videoStatus,
   publishedSites,
@@ -20,7 +19,6 @@ export default function ClipPublishControls({
 }: {
   detectionId: string;
   videoId: string;
-  videoSlug?: string | null;
   canPublish: boolean;
   videoStatus: string | null;
   publishedSites: PublishedSite[];
@@ -131,14 +129,12 @@ export default function ClipPublishControls({
         </button>
       </div>
 
-      {videoSlug ? (
-        <Link
-          href={`/admin/videos/${videoSlug}`}
-          className="inline-block text-[10px] text-zinc-500 underline hover:text-zinc-300"
-        >
-          Open in Videos admin
-        </Link>
-      ) : null}
+      <Link
+        href={`/admin/videos/${videoId}`}
+        className="inline-block text-[10px] text-zinc-500 underline hover:text-zinc-300"
+      >
+        Open in Videos admin
+      </Link>
 
       {error && <p className="text-[10px] text-red-400">{error}</p>}
     </div>

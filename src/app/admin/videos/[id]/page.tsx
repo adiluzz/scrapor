@@ -11,6 +11,34 @@ import TagBadge from "@/components/site/TagBadge";
 
 export const dynamic = "force-dynamic";
 
+const videoInclude = {
+  pornstars: { include: { pornstar: true } },
+  tags: { include: { tag: true } },
+  heatmap: true,
+  sites: {
+    include: {
+      site: { select: { id: true, name: true, domain: true, slug: true, primaryColor: true } },
+    },
+  },
+} as const;
+
+/**
+ * Resolve by video id (preferred — globally unique). Fall back to slug for old
+ * bookmarks. Slugs are only unique per storage siteId, so id links are required
+ * when an original and a compiled ad clip share a title/slug across sites.
+ */
+async function findAdminVideo(idOrSlug: string) {
+  const byId = await prisma.video.findUnique({
+    where: { id: idOrSlug },
+    include: videoInclude,
+  });
+  if (byId) return byId;
+  return prisma.video.findFirst({
+    where: { slug: idOrSlug },
+    include: videoInclude,
+  });
+}
+
 /**
  * Admin video detail / preview. Shows any video regardless of status or
  * soft-delete; playback uses admin-only routes that bypass CDN/ad gates.
@@ -18,21 +46,13 @@ export const dynamic = "force-dynamic";
 export default async function AdminVideoDetail({
   params,
 }: {
-  params: Promise<{ slug: string }>;
+  params: Promise<{ id: string }>;
 }) {
   await requireAdmin();
-  const { slug } = await params;
+  const { id: idOrSlug } = await params;
 
   const [video, allSites] = await Promise.all([
-    prisma.video.findFirst({
-      where: { slug },
-      include: {
-        pornstars: { include: { pornstar: true } },
-        tags: { include: { tag: true } },
-        heatmap: true,
-        sites: { include: { site: { select: { id: true, name: true, domain: true, slug: true, primaryColor: true } } } },
-      },
-    }),
+    findAdminVideo(idOrSlug),
     prisma.site.findMany({
       orderBy: [{ networkOrder: "asc" }, { name: "asc" }],
       select: { id: true, name: true, domain: true, slug: true, primaryColor: true },

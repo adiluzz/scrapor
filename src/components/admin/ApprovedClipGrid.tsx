@@ -8,7 +8,6 @@ export type ApprovedClip = DetectionClip & {
   runId?: string;
   siteId?: string;
   siteName?: string;
-  videoSlug?: string | null;
   canPublishToSite?: boolean;
   videoStatus?: string | null;
   publishedSites?: Array<{ id: string; name: string; domain: string }>;
@@ -91,7 +90,6 @@ export default function ApprovedClipGrid({
                 <ClipPublishControls
                   detectionId={clip.id}
                   videoId={clip.videoId}
-                  videoSlug={clip.videoSlug}
                   canPublish={Boolean(clip.canPublishToSite)}
                   videoStatus={clip.videoStatus ?? null}
                   publishedSites={clip.publishedSites ?? []}

@@ -113,7 +113,6 @@ async function serializeClips(items: DetectionRow[]) {
             sourceSite: true,
             status: true,
             s3VideoKey: true,
-            slug: true,
             sites: {
               include: { site: { select: { id: true, name: true, domain: true } } },
             },
@@ -144,7 +143,6 @@ async function serializeClips(items: DetectionRow[]) {
       feedback: d.feedback,
       canPublishToSite,
       videoStatus: video?.status ?? null,
-      videoSlug: video?.slug ?? null,
       publishedSites,
     };
   });

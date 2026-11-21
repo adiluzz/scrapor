@@ -520,12 +520,12 @@ export default function AdminPornstarDetail({
           <p className="text-sm text-zinc-500">No videos linked to this pornstar.</p>
         ) : (
           <div className="space-y-4">
-            <VideoGrid videos={videos} hrefPrefix="/admin/videos" />
+            <VideoGrid videos={videos} hrefPrefix="/admin/videos" hrefBy="id" />
             <ul className="divide-y divide-zinc-800 rounded-xl border border-zinc-800">
               {videos.map((v) => (
                 <li key={v.linkId} className="space-y-2 px-4 py-3 text-sm">
                   <div className="flex flex-wrap items-center justify-between gap-2">
-                    <Link href={`/admin/videos/${v.slug}`} className="text-zinc-200 hover:text-white">
+                    <Link href={`/admin/videos/${v.id}`} className="text-zinc-200 hover:text-white">
                       {v.title}
                     </Link>
                     <button

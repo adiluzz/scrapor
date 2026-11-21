@@ -175,6 +175,7 @@ function buildItems({
 export default function VideoGrid({
   videos,
   hrefPrefix = "/videos",
+  hrefBy = "slug",
   adTileZoneId,
   adTileInsClass,
   juicyTileZoneId,
@@ -184,6 +185,8 @@ export default function VideoGrid({
 }: {
   videos: VideoCardData[];
   hrefPrefix?: string;
+  /** Admin uses id — slugs are only unique per storage site. */
+  hrefBy?: "slug" | "id";
   adTileZoneId?: string | null;
   adTileInsClass?: string | null;
   /** @deprecated ignored — placement is column-aligned */
@@ -299,7 +302,7 @@ export default function VideoGrid({
           <Card
             key={v.id}
             v={v}
-            href={`${hrefPrefix}/${v.slug}`}
+            href={`${hrefPrefix}/${hrefBy === "id" ? v.id : v.slug}`}
             playing={playingId === v.id}
             onEnter={() => !isTouch && setPlayingId(v.id)}
             onLeave={() =>

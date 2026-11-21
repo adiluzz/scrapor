@@ -135,7 +135,7 @@ export default async function RunDetailPage({ params }: { params: Promise<{ id: 
           ) : (
             run.videos.map((v) => (
               <li key={v.id} className="px-4 py-3 text-sm">
-                <Link href={`/admin/videos/${v.slug}`} className="text-zinc-200 hover:text-white">
+                <Link href={`/admin/videos/${v.id}`} className="text-zinc-200 hover:text-white">
                   {v.title}
                 </Link>
                 <span className="ml-2 text-zinc-600">· {v.sourceSite}</span>

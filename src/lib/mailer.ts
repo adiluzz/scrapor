@@ -106,6 +106,46 @@ export async function sendCreatorApplicationReceived(
   });
 }
 
+/** Approval email for a creator on a specific site (shared dashboard, per-site publishing). */
+export async function sendCreatorApplicationApproved(opts: {
+  to: string;
+  displayName: string;
+  siteDomain: string;
+  brandName: string;
+  dashboardUrl: string;
+  reviewNote?: string | null;
+  from?: string;
+}) {
+  const adminEmail = `admin@${opts.siteDomain}`;
+  const noteHtml = opts.reviewNote
+    ? `<p style="color:#a1a1aa">Note from the team: ${opts.reviewNote}</p>`
+    : "";
+  const noteText = opts.reviewNote ? `\n\nNote from the team: ${opts.reviewNote}` : "";
+  return sendMail({
+    to: opts.to,
+    subject: `Welcome, creator — you're approved on ${opts.brandName}`,
+    html: wrap(
+      "Welcome, creator",
+      `<p>Hi ${opts.displayName},</p>
+       <p>Congratulations! Your creator application for <strong>${opts.brandName}</strong>
+       (${opts.siteDomain}) was approved.</p>
+       <p>You can use the shared creator dashboard to upload videos for this site:
+       <a href="${opts.dashboardUrl}" style="color:#f472b6">${opts.dashboardUrl}</a></p>
+       <p>Welcome creator. If you are having any trouble with our creator dashboard,
+       please help us to make it better and contact
+       <a href="mailto:${adminEmail}" style="color:#f472b6">${adminEmail}</a>.</p>
+       ${noteHtml}`,
+      opts.brandName
+    ),
+    text:
+      `Welcome, creator. You're approved on ${opts.brandName} (${opts.siteDomain}). ` +
+      `Dashboard: ${opts.dashboardUrl}\n\n` +
+      `Welcome creator. If you are having any trouble with our creator dashboard. ` +
+      `Please help us to make it better and contact ${adminEmail}.${noteText}`,
+    from: opts.from,
+  });
+}
+
 export async function sendAdminNewApplication(opts: {
   applicantEmail: string;
   displayName: string;

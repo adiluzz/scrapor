@@ -8,15 +8,28 @@ export default function ApplicationActions({ id }: { id: string }) {
   const [busy, setBusy] = useState(false);
   const [note, setNote] = useState("");
 
+  const [error, setError] = useState<string | null>(null);
+
   async function act(action: "approve" | "reject") {
     setBusy(true);
-    await fetch(`/api/admin/applications/${id}`, {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ action, reviewNote: note || undefined }),
-    });
-    setBusy(false);
-    router.refresh();
+    setError(null);
+    try {
+      const res = await fetch(`/api/admin/applications/${id}`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ action, reviewNote: note || undefined }),
+      });
+      const body = (await res.json().catch(() => ({}))) as { error?: string };
+      if (!res.ok) {
+        setError(body.error || `Failed (${res.status})`);
+        return;
+      }
+      router.refresh();
+    } catch {
+      setError("Network error");
+    } finally {
+      setBusy(false);
+    }
   }
 
   return (
@@ -24,9 +37,10 @@ export default function ApplicationActions({ id }: { id: string }) {
       <input
         value={note}
         onChange={(e) => setNote(e.target.value)}
-        placeholder="Note (optional)"
+        placeholder="Extra note (optional)"
         className="w-full rounded border border-zinc-700 bg-zinc-950 px-2 py-1 text-xs text-white sm:w-48"
       />
+      {error && <p className="max-w-48 text-xs text-red-400">{error}</p>}
       <div className="flex gap-2">
         <button disabled={busy} onClick={() => act("approve")}
           className="rounded bg-emerald-600 px-3 py-1 text-xs text-white hover:bg-emerald-500">Approve</button>

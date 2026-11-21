@@ -51,6 +51,9 @@ export async function POST(request: Request) {
   const creator = await prisma.creatorProfile.findUnique({ where: { userId: user.userId } });
   if (!creator) return NextResponse.json({ error: "No creator profile" }, { status: 400 });
 
+  // Shared dashboard; publish on the creator's profile site (the site they applied from).
+  const publishSiteId = creator.siteId;
+
   const { searchParams } = new URL(request.url);
   const title = (searchParams.get("title") || "").trim();
   if (title.length < 2 || title.length > 200) {
@@ -94,7 +97,7 @@ export async function POST(request: Request) {
   // 2. Create the PENDING video row (unique sourceUrl → always a fresh row).
   const uploadId = crypto.randomUUID();
   const video = await upsertVideoWithMedia({
-    siteId: user.siteId,
+    siteId: publishSiteId,
     sourceUrl: `upload://${creator.id}/${uploadId}`,
     title,
     description,

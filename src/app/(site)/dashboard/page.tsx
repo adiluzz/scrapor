@@ -12,11 +12,15 @@ export default async function DashboardPage() {
   const [profile, application, dbUser] = await Promise.all([
     prisma.creatorProfile.findUnique({
       where: { userId: user.id },
-      include: { videos: { where: { isDeleted: false }, orderBy: { createdAt: "desc" }, take: 24 } },
+      include: {
+        site: { select: { name: true, domain: true } },
+        videos: { where: { isDeleted: false }, orderBy: { createdAt: "desc" }, take: 24 },
+      },
     }),
     prisma.creatorApplication.findFirst({
       where: { userId: user.id },
       orderBy: { createdAt: "desc" },
+      include: { site: { select: { name: true, domain: true } } },
     }),
     prisma.user.findUnique({ where: { id: user.id } }),
   ]);
@@ -31,8 +35,20 @@ export default async function DashboardPage() {
       {isCreator ? (
         <div className="space-y-8">
           <div className="rounded-xl border border-emerald-500/30 bg-emerald-500/10 p-4 text-emerald-300">
-            You&apos;re a creator!{" "}
-            <Link href={`/creators/${profile!.slug}`} className="underline">View your page →</Link>
+            <p>
+              You&apos;re a creator on{" "}
+              <strong className="text-emerald-200">
+                {profile!.site.name} ({profile!.site.domain})
+              </strong>
+              .{" "}
+              <Link href={`/creators/${profile!.slug}`} className="underline">
+                View your page →
+              </Link>
+            </p>
+            <p className="mt-2 text-sm text-emerald-400/80">
+              This shared dashboard works across our network sites; uploads publish on{" "}
+              {profile!.site.name}.
+            </p>
           </div>
           <CreatorUpload />
           <section>
@@ -44,7 +60,9 @@ export default async function DashboardPage() {
                 {profile!.videos.map((v) => (
                   <li key={v.id} className="flex items-center gap-2 px-4 py-3 text-sm text-zinc-300">
                     {v.status === "READY" ? (
-                      <Link href={`/videos/${v.slug}`} className="hover:text-white">{v.title}</Link>
+                      <Link href={`/videos/${v.slug}`} className="hover:text-white">
+                        {v.title}
+                      </Link>
                     ) : (
                       <span className="text-zinc-400">{v.title}</span>
                     )}
@@ -65,7 +83,11 @@ export default async function DashboardPage() {
         </div>
       ) : application?.status === "PENDING" ? (
         <div className="rounded-xl border border-yellow-500/30 bg-yellow-500/10 p-6 text-yellow-300">
-          Your creator application for <strong>{application.displayName}</strong> is under review.
+          Your creator application for <strong>{application.displayName}</strong> on{" "}
+          <strong>
+            {application.site.name} ({application.site.domain})
+          </strong>{" "}
+          is under review.
         </div>
       ) : application?.status === "REJECTED" ? (
         <div className="space-y-6">

@@ -12,7 +12,6 @@ import {
 } from "@/lib/seo";
 import Header from "@/components/site/Header";
 import Footer from "@/components/site/Footer";
-import AgeGate from "@/components/site/AgeGate";
 import ConsentModeDefault from "@/components/site/ConsentModeDefault";
 import CookieConsent from "@/components/site/CookieConsent";
 import GoogleAnalytics from "@/components/site/GoogleAnalytics";
@@ -124,8 +123,10 @@ export default async function SiteLayout({ children }: { children: React.ReactNo
           juicyEnabled={site.adsJuicyEnabled}
         />
       )}
-      {!ageVerified && <AgeGate siteName={site.name} />}
-      <CookieConsent siteName={site.name} initiallyBlocked={ageVerified && !analyticsAccepted} />
+      <CookieConsent
+        siteName={site.name}
+        initiallyBlocked={!ageVerified || !analyticsAccepted}
+      />
     </div>
   );
 }

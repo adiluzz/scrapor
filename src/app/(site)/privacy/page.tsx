@@ -94,11 +94,12 @@ export default async function PrivacyPage() {
 
       <h3>Analytics cookies (required to view the site)</h3>
       <p>
-        Viewing {site.name} requires accepting analytics cookies. If you click{" "}
-        <strong>Accept analytics</strong>, we load <strong>Google Analytics 4</strong> (Google
-        Ireland Limited / Google LLC). If you click <strong>Decline and leave</strong>, you are
-        sent away and Google Analytics is not loaded. Google Analytics uses cookies and similar
-        identifiers to collect information about how visitors use the site, such as:
+        Viewing {site.name} requires confirming you are 18 or older and accepting analytics
+        cookies. One button does both: if you click <strong>I am 18 or older — Enter</strong>, we
+        load <strong>Google Analytics 4</strong> (Google Ireland Limited / Google LLC). If you
+        click <strong>Leave</strong>, you are sent away and Google Analytics is not loaded. Google
+        Analytics uses cookies and similar identifiers to collect information about how visitors
+        use the site, such as:
       </p>
       <ul>
         <li>Pages visited and time spent on pages</li>
@@ -109,9 +110,9 @@ export default async function PrivacyPage() {
       </ul>
       <p>
         We configure Google Analytics with IP anonymisation and with Google advertising signals
-        disabled. Analytics scripts are <strong>not loaded</strong> until both conditions are met:
-        (1) you have passed the age gate, and (2) you have accepted analytics cookies. The site
-        stays hidden until you accept.
+        disabled. Analytics scripts are <strong>not loaded</strong> until you enter through that
+        dialog, which records both your age confirmation and analytics consent. The site stays
+        hidden until you do.
       </p>
       <p>
         Google may process data on servers outside your country, including the United States. Google
@@ -217,9 +218,9 @@ export default async function PrivacyPage() {
         processing. Withdrawing analytics consent means you can no longer view the site.
       </p>
       <p>
-        Use <strong>Decline and leave</strong> on the consent dialog, or open{" "}
-        <strong>Cookie settings</strong> in the site footer and decline, to withdraw analytics
-        consent and leave. To exercise other rights, email{" "}
+        Use <strong>Leave</strong> on the entry dialog, or open <strong>Cookie settings</strong> in
+        the site footer and choose Leave, to withdraw analytics consent and leave. To exercise
+        other rights, email{" "}
         <a href={`mailto:${contactEmail}`}>{contactEmail}</a>. You may also lodge a complaint with
         your local data-protection authority.
       </p>

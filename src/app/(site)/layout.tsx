@@ -70,6 +70,7 @@ export async function generateMetadata(): Promise<Metadata> {
 export default async function SiteLayout({ children }: { children: React.ReactNode }) {
   const [jar, site] = await Promise.all([cookies(), getCurrentSite()]);
   const ageVerified = jar.get("age_verified")?.value === "1";
+  const analyticsAccepted = jar.get("cookie_consent")?.value === "analytics";
   // Prefer per-site GA4 id; env is a legacy single-property fallback only.
   const gaId =
     site.gaMeasurementId?.trim() ||
@@ -124,7 +125,7 @@ export default async function SiteLayout({ children }: { children: React.ReactNo
         />
       )}
       {!ageVerified && <AgeGate siteName={site.name} />}
-      <CookieConsent siteName={site.name} />
+      <CookieConsent siteName={site.name} initiallyBlocked={ageVerified && !analyticsAccepted} />
     </div>
   );
 }

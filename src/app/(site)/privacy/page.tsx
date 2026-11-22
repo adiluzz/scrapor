@@ -83,8 +83,8 @@ export default async function PrivacyPage() {
           one year).
         </li>
         <li>
-          <strong>cookie_consent</strong> — stores your cookie preference (necessary only, or
-          analytics accepted).
+          <strong>cookie_consent</strong> — stores that you accepted analytics cookies. Accepting
+          analytics is required to view the site.
         </li>
         <li>
           <strong>Authentication cookies</strong> — session tokens used when you log in or sign up
@@ -92,12 +92,13 @@ export default async function PrivacyPage() {
         </li>
       </ul>
 
-      <h3>Analytics cookies (optional)</h3>
+      <h3>Analytics cookies (required to view the site)</h3>
       <p>
-        If you click <strong>Accept analytics</strong> on our cookie banner, we load{" "}
-        <strong>Google Analytics 4</strong> (Google Ireland Limited / Google LLC). Google Analytics
-        uses cookies and similar identifiers to collect information about how visitors use the site,
-        such as:
+        Viewing {site.name} requires accepting analytics cookies. If you click{" "}
+        <strong>Accept analytics</strong>, we load <strong>Google Analytics 4</strong> (Google
+        Ireland Limited / Google LLC). If you click <strong>Decline and leave</strong>, you are
+        sent away and Google Analytics is not loaded. Google Analytics uses cookies and similar
+        identifiers to collect information about how visitors use the site, such as:
       </p>
       <ul>
         <li>Pages visited and time spent on pages</li>
@@ -109,8 +110,8 @@ export default async function PrivacyPage() {
       <p>
         We configure Google Analytics with IP anonymisation and with Google advertising signals
         disabled. Analytics scripts are <strong>not loaded</strong> until both conditions are met:
-        (1) you have passed the age gate, and (2) you have accepted analytics cookies. If you choose{" "}
-        <strong>Necessary only</strong>, Google Analytics is not loaded.
+        (1) you have passed the age gate, and (2) you have accepted analytics cookies. The site
+        stays hidden until you accept.
       </p>
       <p>
         Google may process data on servers outside your country, including the United States. Google
@@ -153,8 +154,8 @@ export default async function PrivacyPage() {
       <p>Where GDPR applies, we rely on:</p>
       <ul>
         <li>
-          <strong>Consent</strong> — for optional analytics cookies and, where required, for certain
-          marketing technologies.
+          <strong>Consent</strong> — for analytics cookies, which are required to access the site,
+          and, where required, for certain marketing technologies.
         </li>
         <li>
           <strong>Legitimate interests</strong> — to secure the service, prevent abuse, and operate
@@ -213,11 +214,12 @@ export default async function PrivacyPage() {
         Depending on your location, you may have the right to access, rectify, erase, restrict, or
         object to processing of your personal data, and to data portability. Where processing is
         based on consent, you may withdraw consent at any time without affecting prior lawful
-        processing.
+        processing. Withdrawing analytics consent means you can no longer view the site.
       </p>
       <p>
-        To change cookie preferences, use <strong>Cookie settings</strong> in the site footer. To
-        exercise other rights, email{" "}
+        Use <strong>Decline and leave</strong> on the consent dialog, or open{" "}
+        <strong>Cookie settings</strong> in the site footer and decline, to withdraw analytics
+        consent and leave. To exercise other rights, email{" "}
         <a href={`mailto:${contactEmail}`}>{contactEmail}</a>. You may also lodge a complaint with
         your local data-protection authority.
       </p>

@@ -5,115 +5,122 @@ import { useCallback, useEffect, useState } from "react";
 import {
   AGE_VERIFIED_EVENT,
   COOKIE_CONSENT_COOKIE,
-  COOKIE_CONSENT_EVENT,
   getCookieConsentChoice,
   hasAgeVerifiedCookie,
+  hasAnalyticsConsent,
   setCookieConsentChoice,
   updateGoogleConsent,
-  type CookieConsentChoice,
 } from "@/lib/consent";
 
 type Props = {
   siteName: string;
-  /** When true, force the banner open (e.g. footer "Cookie settings" link). */
+  /**
+   * Server already knows this visitor is 18+ and has not accepted analytics,
+   * so the gate is in the first paint and the site is not visible underneath.
+   */
+  initiallyBlocked?: boolean;
+  /** When true, force the dialog open (footer "Cookie settings"). */
   forceOpen?: boolean;
   onClose?: () => void;
 };
 
 /**
- * GDPR-style cookie banner. Shown only after the age gate cookie is set so
- * consent choices are never collected from visitors who have not confirmed 18+.
+ * Blocks the site until the visitor accepts analytics. Shown only after the
+ * age gate, so the choice is never collected before an 18+ confirmation.
+ * Declining leaves the site.
  */
-export default function CookieConsent({ siteName, forceOpen = false, onClose }: Props) {
-  const [visible, setVisible] = useState(false);
+export default function CookieConsent({
+  siteName,
+  initiallyBlocked = false,
+  forceOpen = false,
+  onClose,
+}: Props) {
+  const [visible, setVisible] = useState(initiallyBlocked || forceOpen);
 
   const refresh = useCallback(() => {
-    if (forceOpen) {
-      setVisible(hasAgeVerifiedCookie());
+    if (!hasAgeVerifiedCookie()) {
+      setVisible(false);
       return;
     }
-    setVisible(hasAgeVerifiedCookie() && getCookieConsentChoice() === null);
+    if (forceOpen) {
+      setVisible(true);
+      return;
+    }
+    setVisible(!hasAnalyticsConsent());
   }, [forceOpen]);
 
   useEffect(() => {
     refresh();
     window.addEventListener(AGE_VERIFIED_EVENT, refresh);
-    window.addEventListener(COOKIE_CONSENT_EVENT, refresh);
-    return () => {
-      window.removeEventListener(AGE_VERIFIED_EVENT, refresh);
-      window.removeEventListener(COOKIE_CONSENT_EVENT, refresh);
-    };
+    return () => window.removeEventListener(AGE_VERIFIED_EVENT, refresh);
   }, [refresh]);
 
-  function choose(choice: CookieConsentChoice) {
-    setCookieConsentChoice(choice);
-    updateGoogleConsent(choice === "analytics");
+  useEffect(() => {
+    if (!visible) return;
+    const previous = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.body.style.overflow = previous;
+    };
+  }, [visible]);
+
+  function accept() {
+    setCookieConsentChoice("analytics");
+    updateGoogleConsent(true);
     setVisible(false);
     onClose?.();
   }
 
+  function decline() {
+    document.cookie = `${COOKIE_CONSENT_COOKIE}=; path=/; max-age=0; SameSite=Lax`;
+    updateGoogleConsent(false);
+    window.location.href = "https://www.google.com";
+  }
+
   if (!visible) return null;
+
+  const alreadyAccepted = getCookieConsentChoice() === "analytics";
 
   return (
     <div
       role="dialog"
-      aria-label="Cookie consent"
-      aria-live="polite"
-      className="fixed inset-x-0 bottom-0 z-[99999] border-t border-zinc-800 bg-zinc-900/95 px-4 pb-[max(1rem,env(safe-area-inset-bottom))] pt-4 shadow-2xl backdrop-blur sm:px-6 sm:pb-[max(1.5rem,env(safe-area-inset-bottom))] sm:pt-6"
+      aria-modal="true"
+      aria-label="Analytics consent"
+      className="fixed inset-0 z-[99999] flex items-center justify-center overflow-y-auto bg-black p-4"
     >
-      <div className="mx-auto flex max-w-7xl flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
-        <div className="max-w-3xl text-sm leading-relaxed text-zinc-300">
-          <p className="font-semibold text-white">Cookies on {siteName}</p>
-          <p className="mt-2">
-            We use strictly necessary cookies to remember your age verification and account session.
-            With your permission we also use Google Analytics to understand how the site is used.
-            See our{" "}
-            <Link href="/privacy" className="text-brand-400 underline hover:text-brand-300">
-              Privacy Policy
-            </Link>{" "}
-            for details, including what data is collected and your rights.
-          </p>
-        </div>
-        <div className="flex shrink-0 flex-col gap-2 sm:flex-row sm:items-center">
+      <div className="my-auto w-full max-w-md rounded-2xl border border-zinc-800 bg-zinc-900 p-5 text-center shadow-2xl sm:p-8 max-h-[min(90dvh,40rem)] overflow-y-auto">
+        <h2 className="text-xl font-bold text-white sm:text-2xl">Analytics cookies</h2>
+        <p className="mt-4 text-sm leading-relaxed text-zinc-400">
+          {siteName} uses analytics cookies (Google Analytics) to understand how the site is used.
+          Accepting analytics is required to view the site. If you decline, you will leave.
+        </p>
+        <p className="mt-3 text-sm leading-relaxed text-zinc-400">
+          See our{" "}
+          <Link href="/privacy" className="text-brand-400 underline hover:text-brand-300">
+            Privacy Policy
+          </Link>{" "}
+          for what is collected and your rights.
+        </p>
+        {forceOpen && alreadyAccepted && (
+          <p className="mt-3 text-xs text-zinc-500">Current choice: Analytics accepted</p>
+        )}
+        <div className="mt-6 flex flex-col gap-3">
           <button
             type="button"
-            onClick={() => choose("essential")}
-            className="rounded-full border border-zinc-700 px-5 py-2.5 text-sm font-medium text-zinc-200 transition hover:border-zinc-500 hover:bg-zinc-800"
-          >
-            Necessary only
-          </button>
-          <button
-            type="button"
-            onClick={() => choose("analytics")}
-            className="rounded-full bg-brand-600 px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-brand-500"
+            onClick={accept}
+            className="rounded-full bg-brand-600 px-6 py-3 font-semibold text-white transition hover:bg-brand-500"
           >
             Accept analytics
           </button>
-        </div>
-      </div>
-      {forceOpen && getCookieConsentChoice() && (
-        <p className="mx-auto mt-3 max-w-7xl text-xs text-zinc-500">
-          Current choice:{" "}
-          <span className="text-zinc-400">{readChoiceLabel(getCookieConsentChoice()!)}</span>
-          {" · "}
           <button
             type="button"
-            className="underline hover:text-zinc-300"
-            onClick={() => {
-              document.cookie = `${COOKIE_CONSENT_COOKIE}=; path=/; max-age=0; SameSite=Lax`;
-              window.dispatchEvent(new CustomEvent(COOKIE_CONSENT_EVENT, { detail: { choice: null } }));
-              updateGoogleConsent(false);
-              refresh();
-            }}
+            onClick={decline}
+            className="rounded-full bg-zinc-800 px-6 py-3 font-medium text-zinc-300 transition hover:bg-zinc-700"
           >
-            Reset choice
+            Decline and leave
           </button>
-        </p>
-      )}
+        </div>
+      </div>
     </div>
   );
-}
-
-function readChoiceLabel(choice: CookieConsentChoice): string {
-  return choice === "analytics" ? "Analytics accepted" : "Necessary cookies only";
 }

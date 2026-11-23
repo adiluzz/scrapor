@@ -1,23 +1,23 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
+import { siteContactEmail } from "@/lib/legal-contact";
 import { getCurrentSite } from "@/lib/site";
 import { buildOpenGraph, keywordsMeta, pageTitleMeta } from "@/lib/seo";
 import StudioFrame from "@/components/studio/StudioFrame";
-
-const CONTACT_EMAIL = "contact@sharlila.com";
 
 export async function generateMetadata(): Promise<Metadata> {
   const site = await getCurrentSite();
   if (site.kind !== "STUDIO") {
     return { title: "Contact" };
   }
+  const contactEmail = siteContactEmail(site.domain);
   const ogTitle = `Contact · ${site.name}`;
-  const description = `Casting, licensing, and collaborations with ${site.name}. ${CONTACT_EMAIL}`;
+  const description = `Casting, licensing, and collaborations with ${site.name}. ${contactEmail}`;
   return {
     title: pageTitleMeta(ogTitle, site.name),
     description,
-    keywords: keywordsMeta(site, ["contact", CONTACT_EMAIL, "casting"]),
+    keywords: keywordsMeta(site, ["contact", contactEmail, "casting"]),
     alternates: { canonical: "/contact" },
     openGraph: buildOpenGraph({
       title: ogTitle,
@@ -31,6 +31,7 @@ export async function generateMetadata(): Promise<Metadata> {
 export default async function ContactPage() {
   const site = await getCurrentSite();
   if (site.kind !== "STUDIO") notFound();
+  const contactEmail = siteContactEmail(site.domain);
 
   return (
     <StudioFrame>
@@ -40,10 +41,10 @@ export default async function ContactPage() {
         Casting, licensing, press, and collaborations go through the studio — not the tubes.
       </p>
       <a
-        href={`mailto:${CONTACT_EMAIL}`}
+        href={`mailto:${contactEmail}`}
         className="mt-10 block font-display text-3xl text-brand-300 hover:text-brand-200 sm:text-4xl"
       >
-        {CONTACT_EMAIL}
+        {contactEmail}
       </a>
       <div className="mt-16 grid gap-6 sm:grid-cols-2">
         <article className="border border-white/10 bg-white/[0.03] p-6">

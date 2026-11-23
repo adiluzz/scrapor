@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import LegalPageShell from "@/components/site/LegalPageShell";
+import { legalContactEmail } from "@/lib/legal-contact";
 import { getCurrentSite } from "@/lib/site";
 
 export async function generateMetadata(): Promise<Metadata> {
@@ -13,10 +14,7 @@ export async function generateMetadata(): Promise<Metadata> {
 
 export default async function PrivacyPage() {
   const site = await getCurrentSite();
-  const contactEmail =
-    process.env.SMTP_USER?.replace(/^.*<([^>]+)>.*$/, "$1") ||
-    process.env.SMTP_USER ||
-    `office@${site.domain}`;
+  const contactEmail = legalContactEmail(site.domain);
 
   return (
     <LegalPageShell title="Privacy Policy" siteName={site.name}>

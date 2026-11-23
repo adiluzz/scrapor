@@ -1,11 +1,12 @@
+/** Address shown on the site so visitors can write to that site. */
+export function siteContactEmail(domain: string): string {
+  const host = domain.trim().toLowerCase().replace(/^www\./, "");
+  return `admin@${host}`;
+}
+
 /** Contact email for legal notices (DMCA, 2257, privacy). */
 export function legalContactEmail(domain: string): string {
-  return (
-    process.env.LEGAL_CONTACT_EMAIL ||
-    process.env.SMTP_USER?.replace(/^.*<([^>]+)>.*$/, "$1") ||
-    process.env.SMTP_USER ||
-    `office@${domain}`
-  );
+  return siteContactEmail(domain);
 }
 
 /** Custodian of Records name for 18 U.S.C. § 2257 (falls back to site operator). */

@@ -7,6 +7,7 @@ import JsonLd from "@/components/site/JsonLd";
 import { prisma } from "@/lib/db";
 import { getCurrentSite } from "@/lib/site";
 import { pornstarHasVideosOnSite, pornstarSlugsWithVerifiedPissSwallowTag } from "@/lib/pornstar-sites";
+import { publicOnSite } from "@/lib/publication";
 import {
   GOLDEN_DROP_ICON,
   PISS_SWALLOWER_PORNSTAR_LABEL,
@@ -73,7 +74,7 @@ export default async function PornstarsPage({
                 video: {
                   isDeleted: false,
                   status: "READY",
-                  sites: { some: { siteId } },
+                  sites: publicOnSite(siteId),
                 },
               },
             },

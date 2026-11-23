@@ -111,6 +111,7 @@ export default async function AdminVideoDetail({
                 style={{ backgroundColor: vs.site.primaryColor }}
               />
               {vs.site.name}
+              {vs.suspended ? <span className="text-amber-400">suspended</span> : null}
             </span>
           ))}
         </div>

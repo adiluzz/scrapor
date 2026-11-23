@@ -3,6 +3,7 @@ import { prisma } from "@/lib/db";
 import { openAdSession } from "@/lib/ad-session";
 import { guardApiRoute } from "@/lib/admin-guard";
 import { getCurrentSite } from "@/lib/site";
+import { isPubliclyPublished } from "@/lib/publication";
 
 /**
  * Open a server-side ad session before playback. Returns the VAST tag URL (if
@@ -14,10 +15,13 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
   if (auth instanceof NextResponse) return auth;
 
   const { id } = await params;
-  const video = await prisma.video.findFirst({ where: { id, isDeleted: false } });
+  const video = await prisma.video.findFirst({ where: { id, isDeleted: false, status: "READY" } });
   if (!video) return NextResponse.json({ error: "Not found" }, { status: 404 });
 
   const site = await getCurrentSite();
+  if (!(await isPubliclyPublished(video.id, site.id))) {
+    return NextResponse.json({ error: "Not found" }, { status: 404 });
+  }
   const vastTagUrl = site.vastTagUrl || "";
   const vastTagUrlBackup = site.vastTagUrlBackup || "";
   const adRequired = Boolean(vastTagUrl || vastTagUrlBackup);

@@ -1,5 +1,6 @@
 import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/db";
+import { publicOnSite } from "@/lib/publication";
 import { thumbUrl, gridCardPreview } from "@/lib/media";
 import type { VideoCardPreviewData } from "@/components/site/VideoCardPreview";
 import { formatDuration } from "@/lib/videos";
@@ -59,7 +60,7 @@ export function buildWhere(
   extra?: Prisma.VideoWhereInput
 ): Prisma.VideoWhereInput {
   const where: Prisma.VideoWhereInput = {
-    sites: { some: { siteId } },
+    sites: publicOnSite(siteId),
     isDeleted: false,
     status: "READY",
     ...extra,

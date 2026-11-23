@@ -34,6 +34,7 @@ function Card({
   onLeave,
   register,
   href,
+  badge,
 }: {
   v: VideoCardData;
   playing: boolean;
@@ -41,6 +42,7 @@ function Card({
   onLeave: () => void;
   register: (el: HTMLElement | null) => void;
   href: string;
+  badge?: string;
 }) {
   const hasPreview = Boolean(v.preview.previewMp4 || v.preview.previewSprite);
 
@@ -66,6 +68,11 @@ function Card({
         {v.durationLabel && (
           <span className="absolute bottom-1.5 right-1.5 rounded bg-black/80 px-1.5 py-0.5 text-[11px] text-white">
             {v.durationLabel}
+          </span>
+        )}
+        {badge && (
+          <span className="absolute bottom-1.5 left-1.5 rounded bg-amber-500/90 px-1.5 py-0.5 text-[11px] font-medium text-black">
+            {badge}
           </span>
         )}
       </div>
@@ -182,6 +189,9 @@ export default function VideoGrid({
   juicyTileEnabled = true,
   midBanner = null,
   midAfterRows = 2,
+  selectedIds,
+  onToggleSelect,
+  badges,
 }: {
   videos: VideoCardData[];
   hrefPrefix?: string;
@@ -197,6 +207,9 @@ export default function VideoGrid({
   juicyTilePositions?: number[];
   midBanner?: ReactNode;
   midAfterRows?: number;
+  selectedIds?: ReadonlySet<string>;
+  onToggleSelect?: (id: string) => void;
+  badges?: Record<string, string>;
 }) {
   const [playingId, setPlayingId] = useState<string | null>(null);
   const [isTouch, setIsTouch] = useState(false);
@@ -298,23 +311,38 @@ export default function VideoGrid({
           );
         }
         const v = item.v;
+        const badge = badges?.[v.id];
         return (
-          <Card
-            key={v.id}
-            v={v}
-            href={`${hrefPrefix}/${hrefBy === "id" ? v.id : v.slug}`}
-            playing={playingId === v.id}
-            onEnter={() => !isTouch && setPlayingId(v.id)}
-            onLeave={() =>
-              !isTouch && setPlayingId((p) => (p === v.id ? null : p))
-            }
-            register={(el) => {
-              if (el) {
-                el.dataset.vid = v.id;
-                els.current.set(v.id, el);
-              } else els.current.delete(v.id);
-            }}
-          />
+          <div key={v.id} className={`relative h-full w-full ${badge ? "opacity-70" : ""}`}>
+            {onToggleSelect && (
+              <label className="absolute left-2 top-2 z-20 flex h-7 w-7 cursor-pointer items-center justify-center rounded bg-black/70">
+                <input
+                  type="checkbox"
+                  checked={selectedIds?.has(v.id) ?? false}
+                  aria-label={`Select ${v.title}`}
+                  onChange={() => onToggleSelect(v.id)}
+                  onClick={(e) => e.stopPropagation()}
+                  className="h-4 w-4 accent-brand-500"
+                />
+              </label>
+            )}
+            <Card
+              v={v}
+              badge={badge}
+              href={`${hrefPrefix}/${hrefBy === "id" ? v.id : v.slug}`}
+              playing={playingId === v.id}
+              onEnter={() => !isTouch && setPlayingId(v.id)}
+              onLeave={() =>
+                !isTouch && setPlayingId((p) => (p === v.id ? null : p))
+              }
+              register={(el) => {
+                if (el) {
+                  el.dataset.vid = v.id;
+                  els.current.set(v.id, el);
+                } else els.current.delete(v.id);
+              }}
+            />
+          </div>
         );
       })}
     </div>

@@ -6,6 +6,7 @@ import { getClientIp } from "@/lib/media";
 import { getCurrentSite } from "@/lib/site";
 import { headers } from "next/headers";
 import { guardApiRoute } from "@/lib/admin-guard";
+import { isPubliclyPublished } from "@/lib/publication";
 
 /**
  * Hand the VAST tags to the player. Fetching them from this server makes every
@@ -21,15 +22,19 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
   const body = await request.json().catch(() => ({}));
   const adSessionId = typeof body.adSessionId === "string" ? body.adSessionId : "";
 
-  const video = await prisma.video.findFirst({ where: { id, isDeleted: false } });
+  const video = await prisma.video.findFirst({ where: { id, isDeleted: false, status: "READY" } });
   if (!video) return NextResponse.json({ error: "Not found" }, { status: 404 });
+
+  const site = await getCurrentSite();
+  if (!(await isPubliclyPublished(video.id, site.id))) {
+    return NextResponse.json({ error: "Not found" }, { status: 404 });
+  }
 
   const session = adSessionId ? await getAdSession(adSessionId) : null;
   if (!session || session.videoId !== video.id || session.consumed) {
     return NextResponse.json({ error: "Invalid ad session" }, { status: 403 });
   }
 
-  const site = await getCurrentSite();
   const primary = site.vastTagUrl || "";
   const backup = site.vastTagUrlBackup || "";
   if (!primary && !backup) return NextResponse.json({ ad: null });

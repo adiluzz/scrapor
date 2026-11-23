@@ -136,15 +136,19 @@ model SiteRedditCredentials {
 }
 
 // Published membership: a video can appear on multiple sites.
+// Suspending keeps the row (slug + URL) but the public page returns 404.
 model VideoSite {
-  videoId   String
-  siteId    String
-  createdAt DateTime @default(now())
-  video     Video    @relation(fields: [videoId], references: [id], onDelete: Cascade)
-  site      Site     @relation(fields: [siteId], references: [id], onDelete: Cascade)
+  videoId     String
+  siteId      String
+  suspended   Boolean  @default(false)
+  suspendedAt DateTime?
+  createdAt   DateTime @default(now())
+  video       Video    @relation(fields: [videoId], references: [id], onDelete: Cascade)
+  site        Site     @relation(fields: [siteId], references: [id], onDelete: Cascade)
 
   @@id([videoId, siteId])
   @@index([siteId])
+  @@index([siteId, suspended])
 }
 
 // Which managed websites a scrape run publishes new videos to.

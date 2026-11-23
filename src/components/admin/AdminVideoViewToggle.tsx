@@ -17,6 +17,7 @@ export default function AdminVideoViewToggle({
   siteId = "",
   orphans = false,
   sort = "newest",
+  suspension = "",
 }: {
   q: string;
   page: number;
@@ -24,12 +25,14 @@ export default function AdminVideoViewToggle({
   siteId?: string;
   orphans?: boolean;
   sort?: AdminVideoSort;
+  suspension?: "" | "visible" | "suspended";
 }) {
   function href(next: { view?: "table" | "grid"; sort?: AdminVideoSort; page?: number }) {
     const qs = new URLSearchParams();
     if (q) qs.set("q", q);
     if (siteId) qs.set("siteId", siteId);
     if (orphans) qs.set("orphans", "1");
+    if (suspension) qs.set("suspension", suspension);
     const nextSort = next.sort ?? sort;
     if (nextSort !== "newest") qs.set("sort", nextSort);
     if (next.page != null) qs.set("page", String(next.page));

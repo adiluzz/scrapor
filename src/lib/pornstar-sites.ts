@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/db";
+import { publicOnSite } from "@/lib/publication";
 import { PISS_SWALLOW_VERIFIED_SLUG } from "@/lib/verified-tags";
 
 export type SiteVideoCount = {
@@ -77,7 +78,7 @@ export function pornstarHasVideosOnSite(siteId: string) {
         video: {
           isDeleted: false,
           status: "READY" as const,
-          sites: { some: { siteId } },
+          sites: publicOnSite(siteId),
         },
       },
     },
@@ -102,7 +103,7 @@ const verifiedPissSwallowVideoWhere = (siteId: string) =>
   ({
     isDeleted: false,
     status: "READY" as const,
-    sites: { some: { siteId } },
+    sites: publicOnSite(siteId),
     tags: { some: { tag: { siteId, slug: PISS_SWALLOW_VERIFIED_SLUG } } },
   }) as const;
 

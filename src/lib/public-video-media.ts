@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/db";
+import { publicOnSite } from "@/lib/publication";
 import { normalizeHost, getSiteByDomain } from "@/lib/site";
 import { isS3Configured, readS3ObjectText, s3Keys } from "@/lib/storage";
 import { isHlsMasterFile, isHlsSegmentFile } from "@/lib/video-sitemap";
@@ -26,7 +27,7 @@ export async function publishedVideoForMedia(request: Request, id: string) {
       id,
       isDeleted: false,
       status: "READY",
-      sites: { some: { siteId } },
+      sites: publicOnSite(siteId),
     },
     select: { id: true, siteId: true, s3HlsMasterKey: true, s3VideoKey: true },
   });

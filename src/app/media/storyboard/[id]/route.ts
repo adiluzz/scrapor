@@ -4,6 +4,7 @@ import { prisma } from "@/lib/db";
 import { getSiteIdForAuth } from "@/lib/site";
 import { isS3Configured, s3, S3_BUCKET, s3Keys } from "@/lib/storage";
 import { guardApiRoute } from "@/lib/admin-guard";
+import { publicOnSite } from "@/lib/publication";
 
 /** Same-origin storyboard sprite for grid hover previews (sprite cycling fallback). */
 export async function GET(
@@ -24,7 +25,7 @@ export async function GET(
       id,
       isDeleted: false,
       status: "READY",
-      OR: [{ siteId }, { sites: { some: { siteId } } }],
+      sites: publicOnSite(siteId),
     },
     select: { id: true, siteId: true, s3StoryboardKey: true },
   });

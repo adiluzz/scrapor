@@ -17,6 +17,7 @@ type SiteRef = {
   name: string;
   slug: string;
   primaryColor: string;
+  suspended: boolean;
 };
 
 type SiteCount = {
@@ -90,11 +91,15 @@ export default function AdminPornstarDetail({
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
   const [tpdbOpen, setTpdbOpen] = useState(false);
+  const [selectedIds, setSelectedIds] = useState<string[]>([]);
+  const [scopeSiteId, setScopeSiteId] = useState("");
+  const [suspendBusy, setSuspendBusy] = useState(false);
 
   useEffect(() => {
     setStar(initialPornstar);
     setImageUrl(initialPornstar.imageUrl);
     setVideos(initialVideos);
+    setSelectedIds([]);
   }, [initialPornstar, initialVideos]);
 
   const inputClass =
@@ -282,6 +287,74 @@ export default function AdminPornstarDetail({
       router.refresh();
     } catch (e) {
       setError(e instanceof Error ? e.message : "Remove failed");
+    }
+  }
+
+  function toggleSelected(id: string) {
+    setSelectedIds((prev) => (prev.includes(id) ? prev.filter((item) => item !== id) : [...prev, id]));
+  }
+
+  async function setSuspension(opts: {
+    suspended: boolean;
+    videoIds?: string[];
+    all?: boolean;
+    siteId?: string;
+  }) {
+    const siteId = opts.siteId ?? (scopeSiteId || undefined);
+    const scopeName =
+      siteId
+        ? star.siteCounts?.find((site) => site.siteId === siteId)?.name ||
+          videos.flatMap((video) => video.sites).find((site) => site.id === siteId)?.name ||
+          "that site"
+        : "every site";
+    const target = opts.all
+      ? `all ${star.videoCount} video${star.videoCount === 1 ? "" : "s"} linked to ${star.name}`
+      : `${opts.videoIds?.length ?? 0} selected video${opts.videoIds?.length === 1 ? "" : "s"}`;
+    const verb = opts.suspended ? "Suspend" : "Unsuspend";
+    if (
+      !confirm(
+        `${verb} ${target} on ${scopeName}? The slug and URL stay. Suspended pages return a 404 with a link to the homepage.`
+      )
+    ) {
+      return;
+    }
+
+    setSuspendBusy(true);
+    setError(null);
+    setSuccess(null);
+    try {
+      const res = await fetch("/api/admin/videos/suspension", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          suspended: opts.suspended,
+          ...(siteId ? { siteId } : {}),
+          ...(opts.all ? { pornstarId: star.id } : { videoIds: opts.videoIds }),
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Update failed");
+      setVideos((prev) =>
+        prev.map((video) => {
+          const affected = opts.all || opts.videoIds?.includes(video.id);
+          if (!affected) return video;
+          return {
+            ...video,
+            sites: video.sites.map((site) =>
+              !siteId || site.id === siteId ? { ...site, suspended: opts.suspended } : site
+            ),
+          };
+        })
+      );
+      setSelectedIds([]);
+      setSuccess(
+        `${opts.suspended ? "Suspended" : "Unsuspended"} ${data.updated} site listing${data.updated === 1 ? "" : "s"}.`
+      );
+      router.refresh();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Update failed");
+    } finally {
+      setSuspendBusy(false);
     }
   }
 
@@ -513,21 +586,114 @@ export default function AdminPornstarDetail({
       </section>
 
       <section>
-        <h2 className="mb-4 text-lg font-semibold text-white">
-          Videos ({videos.length})
-        </h2>
+        <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+          <h2 className="text-lg font-semibold text-white">Videos ({star.videoCount})</h2>
+          {star.videoCount > videos.length && (
+            <p className="text-xs text-zinc-500">
+              Showing the latest {videos.length}. Suspend all still covers every linked video.
+            </p>
+          )}
+        </div>
         {videos.length === 0 ? (
           <p className="text-sm text-zinc-500">No videos linked to this pornstar.</p>
         ) : (
           <div className="space-y-4">
-            <VideoGrid videos={videos} hrefPrefix="/admin/videos" hrefBy="id" />
+            <div className="flex flex-wrap items-center gap-2">
+              <button
+                type="button"
+                disabled={suspendBusy}
+                onClick={() =>
+                  setSelectedIds(
+                    selectedIds.length === videos.length ? [] : videos.map((video) => video.id)
+                  )
+                }
+                className="rounded-lg bg-zinc-800 px-3 py-1.5 text-xs text-zinc-200 hover:bg-zinc-700 disabled:opacity-50"
+              >
+                {selectedIds.length === videos.length ? "Clear shown" : "Select shown"}
+              </button>
+              <label className="text-xs text-zinc-400">
+                Site
+                <select
+                  value={scopeSiteId}
+                  onChange={(e) => setScopeSiteId(e.target.value)}
+                  className="ml-2 rounded-lg border border-zinc-700 bg-zinc-900 px-2 py-1.5 text-xs text-white"
+                >
+                  <option value="">All sites</option>
+                  {(star.siteCounts ?? []).map((site) => (
+                    <option key={site.siteId} value={site.siteId}>
+                      {site.name}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <span className="text-xs text-zinc-500">{selectedIds.length} selected</span>
+              <button
+                type="button"
+                disabled={suspendBusy || selectedIds.length === 0}
+                onClick={() => setSuspension({ suspended: true, videoIds: selectedIds })}
+                className="rounded-lg bg-amber-600 px-3 py-1.5 text-xs text-black hover:bg-amber-500 disabled:opacity-50"
+              >
+                Suspend selected
+              </button>
+              <button
+                type="button"
+                disabled={suspendBusy || selectedIds.length === 0}
+                onClick={() => setSuspension({ suspended: false, videoIds: selectedIds })}
+                className="rounded-lg bg-emerald-700 px-3 py-1.5 text-xs text-white hover:bg-emerald-600 disabled:opacity-50"
+              >
+                Unsuspend selected
+              </button>
+              <button
+                type="button"
+                disabled={suspendBusy || star.videoCount === 0}
+                onClick={() => setSuspension({ suspended: true, all: true })}
+                className="rounded-lg border border-amber-700 px-3 py-1.5 text-xs text-amber-300 hover:bg-amber-950/40 disabled:opacity-50"
+              >
+                Suspend all
+              </button>
+              <button
+                type="button"
+                disabled={suspendBusy || star.videoCount === 0}
+                onClick={() => setSuspension({ suspended: false, all: true })}
+                className="rounded-lg border border-emerald-800 px-3 py-1.5 text-xs text-emerald-300 hover:bg-emerald-950/40 disabled:opacity-50"
+              >
+                Unsuspend all
+              </button>
+            </div>
+            <VideoGrid
+              videos={videos}
+              hrefPrefix="/admin/videos"
+              hrefBy="id"
+              selectedIds={new Set(selectedIds)}
+              onToggleSelect={toggleSelected}
+              badges={Object.fromEntries(
+                videos.flatMap((video) => {
+                  const relevant = scopeSiteId
+                    ? video.sites.filter((site) => site.id === scopeSiteId)
+                    : video.sites;
+                  const suspendedCount = relevant.filter((site) => site.suspended).length;
+                  if (suspendedCount === 0) return [];
+                  const label = suspendedCount === relevant.length ? "Suspended" : "Partial";
+                  return [[video.id, label]];
+                })
+              )}
+            />
             <ul className="divide-y divide-zinc-800 rounded-xl border border-zinc-800">
               {videos.map((v) => (
                 <li key={v.linkId} className="space-y-2 px-4 py-3 text-sm">
                   <div className="flex flex-wrap items-center justify-between gap-2">
-                    <Link href={`/admin/videos/${v.id}`} className="text-zinc-200 hover:text-white">
-                      {v.title}
-                    </Link>
+                    <div className="flex min-w-0 items-center gap-2">
+                      <input
+                        type="checkbox"
+                        checked={selectedIds.includes(v.id)}
+                        aria-label={`Select ${v.title}`}
+                        onChange={() => toggleSelected(v.id)}
+                        className="h-4 w-4 accent-brand-500"
+                      />
+                      <Link href={`/admin/videos/${v.id}`} className="text-zinc-200 hover:text-white">
+                        {v.title}
+                      </Link>
+                    </div>
                     <button
                       type="button"
                       onClick={() => unlinkVideo(v.linkId, v.title)}
@@ -553,6 +719,21 @@ export default function AdminPornstarDetail({
                             style={{ backgroundColor: site.primaryColor }}
                           />
                           {site.name}
+                          {site.suspended ? <span className="text-amber-400">suspended</span> : null}
+                          <button
+                            type="button"
+                            disabled={suspendBusy}
+                            onClick={() =>
+                              setSuspension({
+                                suspended: !site.suspended,
+                                videoIds: [v.id],
+                                siteId: site.id,
+                              })
+                            }
+                            className="px-1.5 py-1 text-zinc-400 hover:bg-zinc-800 hover:text-white disabled:opacity-50"
+                          >
+                            {site.suspended ? "Unsuspend" : "Suspend"}
+                          </button>
                           <button
                             type="button"
                             title={`Remove from ${site.name}`}

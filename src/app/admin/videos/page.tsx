@@ -3,9 +3,9 @@ import { prisma } from "@/lib/db";
 import { requireAdmin } from "@/lib/session";
 import { toCard } from "@/lib/queries";
 import type { Prisma } from "@prisma/client";
-import AdminVideoRow from "@/components/admin/AdminVideoRow";
+import AdminVideoBrowser from "@/components/admin/AdminVideoBrowser";
 import AdminVideoViewToggle from "@/components/admin/AdminVideoViewToggle";
-import VideoGrid from "@/components/site/VideoGrid";
+import { adminVideoListWhere, parseAdminSuspensionFilter } from "@/lib/admin-videos";
 
 export const dynamic = "force-dynamic";
 const PAGE_SIZE = 30;
@@ -42,20 +42,19 @@ export default async function AdminVideosPage({
   const page = Math.max(1, parseInt(param(sp, "page") || "1", 10));
   const view = param(sp, "view") === "grid" ? "grid" : "table";
   const sort = parseSort(param(sp, "sort"));
+  const suspension = parseAdminSuspensionFilter(param(sp, "suspension"));
 
   const sites = await prisma.site.findMany({
     orderBy: [{ networkOrder: "asc" }, { name: "asc" }],
     select: { id: true, name: true, primaryColor: true },
   });
 
-  const where: Prisma.VideoWhereInput = {
-    ...(q ? { title: { contains: q, mode: "insensitive" as const } } : {}),
-    ...(orphans
-      ? { sites: { none: {} } }
-      : siteId
-        ? { sites: { some: { siteId } } }
-        : {}),
-  };
+  const where: Prisma.VideoWhereInput = adminVideoListWhere({
+    q,
+    siteId: orphans ? "" : siteId,
+    orphans,
+    suspension,
+  });
 
   const [videos, total] = await Promise.all([
     prisma.video.findMany({
@@ -78,6 +77,7 @@ export default async function AdminVideosPage({
   if (siteId) filterQs.set("siteId", siteId);
   if (orphans) filterQs.set("orphans", "1");
   if (sort !== "newest") filterQs.set("sort", sort);
+  if (suspension) filterQs.set("suspension", suspension);
   filterQs.set("view", view);
   const sortLink = (next: AdminVideoSort) => {
     const qs = new URLSearchParams(filterQs);
@@ -125,6 +125,18 @@ export default async function AdminVideosPage({
           <input type="checkbox" name="orphans" value="1" defaultChecked={orphans} />
           Orphans only
         </label>
+        <label className="text-sm text-zinc-400">
+          Suspension
+          <select
+            name="suspension"
+            defaultValue={suspension}
+            className="ml-2 rounded-lg border border-zinc-700 bg-zinc-900 px-3 py-2 text-sm text-white focus:border-brand-500 focus:outline-none"
+          >
+            <option value="">Any</option>
+            <option value="visible">Not suspended</option>
+            <option value="suspended">Suspended</option>
+          </select>
+        </label>
         <button
           type="submit"
           className="rounded-lg bg-zinc-800 px-4 py-2 text-sm text-zinc-200 hover:bg-zinc-700"
@@ -140,54 +152,36 @@ export default async function AdminVideosPage({
         siteId={siteId}
         orphans={orphans}
         sort={sort}
+        suspension={suspension}
       />
 
-      {view === "grid" ? (
-        <VideoGrid videos={cards} hrefPrefix="/admin/videos" hrefBy="id" />
-      ) : (
-        <div className="overflow-x-auto rounded-xl border border-zinc-800">
-          <table className="w-full min-w-[720px] text-left text-sm">
-            <thead className="bg-zinc-900 text-zinc-400">
-              <tr>
-                <th className="px-4 py-3">Title</th>
-                <th className="px-4 py-3">Sites</th>
-                <th className="px-4 py-3">Source</th>
-                <th className="px-4 py-3">
-                  <Link
-                    href={sortLink(sort === "views" ? "views-asc" : "views")}
-                    className={`inline-flex items-center gap-1 hover:text-white ${
-                      sort === "views" || sort === "views-asc" ? "text-white" : ""
-                    }`}
-                    title={sort === "views" ? "Show fewest views first" : "Show most views first"}
-                  >
-                    Views
-                    {sort === "views" ? " ↓" : sort === "views-asc" ? " ↑" : ""}
-                  </Link>
-                </th>
-                <th className="px-4 py-3">Status</th>
-                <th className="px-4 py-3" />
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-zinc-800">
-              {videos.length === 0 ? (
-                <tr>
-                  <td colSpan={6} className="px-4 py-8 text-center text-zinc-500">
-                    No videos.
-                  </td>
-                </tr>
-              ) : (
-                videos.map((v) => (
-                  <AdminVideoRow
-                    key={v.id}
-                    video={v}
-                    sites={v.sites.map((vs) => vs.site)}
-                  />
-                ))
-              )}
-            </tbody>
-          </table>
-        </div>
-      )}
+      <AdminVideoBrowser
+        rows={videos.map((video) => ({
+          id: video.id,
+          title: video.title,
+          slug: video.slug,
+          isDeleted: video.isDeleted,
+          viewCount: video.viewCount,
+          sourceSite: video.sourceSite,
+          sites: video.sites.map((membership) => ({
+            id: membership.site.id,
+            name: membership.site.name,
+            primaryColor: membership.site.primaryColor,
+            suspended: membership.suspended,
+          })),
+        }))}
+        cards={cards}
+        view={view}
+        scopeSiteId={orphans ? "" : siteId}
+        scopeSiteName={orphans ? "" : sites.find((site) => site.id === siteId)?.name || ""}
+        total={total}
+        q={q}
+        orphans={orphans}
+        suspension={suspension}
+        viewsSortHref={sortLink(sort === "views" ? "views-asc" : "views")}
+        viewsSortActive={sort === "views" || sort === "views-asc"}
+        viewsSortMark={sort === "views" ? "↓" : sort === "views-asc" ? "↑" : ""}
+      />
 
       <div className="mt-4 flex items-center justify-center gap-3 text-sm">
         {page > 1 && (

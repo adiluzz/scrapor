@@ -17,6 +17,7 @@ import {
   sitemapVideoTitle,
 } from "@/lib/video-sitemap";
 import type { Site } from "@prisma/client";
+import { publicOnSite } from "@/lib/publication";
 
 export const dynamic = "force-dynamic";
 
@@ -118,7 +119,7 @@ async function tagsSitemap(base: string, site: Site): Promise<NextResponse> {
       video: {
         isDeleted: false,
         status: "READY",
-        sites: { some: { siteId: site.id } },
+        sites: publicOnSite(site.id),
       },
     },
   });

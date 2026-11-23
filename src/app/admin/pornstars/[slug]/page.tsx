@@ -58,7 +58,7 @@ export default async function AdminPornstarPage({
 
   const videosWithSites = videoRows.map((v, i) => ({
     ...cards[i],
-    sites: v.sites.map((m) => m.site),
+    sites: v.sites.map((m) => ({ ...m.site, suspended: m.suspended })),
   }));
 
   const initialPornstar = {

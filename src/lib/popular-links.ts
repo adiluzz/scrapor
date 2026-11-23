@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/db";
+import { publicOnSite } from "@/lib/publication";
 
 export type PopularLink = { name: string; slug: string };
 
@@ -14,7 +15,7 @@ export async function listPopularTags(siteId: string, take = 24): Promise<Popula
       video: {
         isDeleted: false,
         status: "READY",
-        sites: { some: { siteId } },
+        sites: publicOnSite(siteId),
       },
     },
     _count: { tagId: true },
@@ -42,7 +43,7 @@ export async function listPopularPornstars(siteId: string, take = 18): Promise<P
       video: {
         isDeleted: false,
         status: "READY",
-        sites: { some: { siteId } },
+        sites: publicOnSite(siteId),
       },
     },
     _count: { pornstarId: true },

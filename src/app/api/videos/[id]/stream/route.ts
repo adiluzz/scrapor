@@ -4,6 +4,7 @@ import { guardApiRoute } from "@/lib/admin-guard";
 import { getSiteIdForAuth } from "@/lib/site";
 import { mintStreamUrl } from "@/lib/cdn";
 import { isS3Configured } from "@/lib/storage";
+import { publicOnSite } from "@/lib/publication";
 
 function requestOrigin(request: Request): string {
   const host = request.headers.get("x-forwarded-host") || request.headers.get("host") || "";
@@ -26,7 +27,7 @@ export async function GET(
   const siteId = await getSiteIdForAuth(auth);
 
   const video = await prisma.video.findFirst({
-    where: { id, siteId, isDeleted: false },
+    where: { id, isDeleted: false, sites: publicOnSite(siteId) },
   });
   if (!video) return NextResponse.json({ error: "Not found" }, { status: 404 });
 

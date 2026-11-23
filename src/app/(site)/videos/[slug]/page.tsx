@@ -34,6 +34,7 @@ async function getVideo(siteId: string, slug: string, includeHidden = false) {
   return prisma.video.findFirst({
     // Public visitors only see live, READY videos. Admins can preview any
     // video (soft-deleted or still processing) via the admin panel link.
+    // Suspension is checked separately: the slug stays, and the page 404s.
     where: {
       slug,
       sites: { some: { siteId } },
@@ -44,8 +45,13 @@ async function getVideo(siteId: string, slug: string, includeHidden = false) {
       tags: { include: { tag: true } },
       categories: { include: { category: true } },
       heatmap: true,
+      sites: { where: { siteId }, select: { suspended: true } },
     },
   });
+}
+
+function isSuspendedOnThisSite(video: { sites: { suspended: boolean }[] }) {
+  return video.sites.some((membership) => membership.suspended);
 }
 
 function isoDuration(sec: number | null): string | undefined {
@@ -63,8 +69,11 @@ export async function generateMetadata({
 }): Promise<Metadata> {
   const { slug } = await params;
   const site = await getCurrentSite();
-  const video = await getVideo(site.id, slug);
-  if (!video) return { title: "Not found" };
+  const video = await getVideo(site.id, slug, true);
+  if (!video || isSuspendedOnThisSite(video)) notFound();
+  if (video.isDeleted || video.status !== "READY") {
+    return { title: "Not found", robots: { index: false, follow: false } };
+  }
   const description = videoPageDescription(video.title, site, video.description, {
     tags: video.tags.map((t) => t.tag.name).join(", "),
     duration: video.durationSec ? formatDuration(video.durationSec) : "",
@@ -98,16 +107,15 @@ export default async function VideoPage({
 }) {
   const { slug } = await params;
   const site = await getCurrentSite();
-  let video = await getVideo(site.id, slug);
+  const video = await getVideo(site.id, slug, true);
+  if (!video || isSuspendedOnThisSite(video)) notFound();
+
   let adminPreview = false;
-  if (!video) {
+  if (video.isDeleted || video.status !== "READY") {
     const user = await getCurrentUser();
-    if (user?.role === "ADMIN") {
-      video = await getVideo(site.id, slug, true);
-      adminPreview = Boolean(video);
-    }
+    if (user?.role !== "ADMIN") notFound();
+    adminPreview = true;
   }
-  if (!video) notFound();
 
   const [poster, storyboard, base] = await Promise.all([
     thumbUrl(video),

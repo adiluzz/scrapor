@@ -6,6 +6,7 @@ import { isS3Configured } from "@/lib/storage";
 import { logger } from "@/lib/logger";
 import { guardApiRoute } from "@/lib/admin-guard";
 import { getCurrentSite } from "@/lib/site";
+import { isPubliclyPublished } from "@/lib/publication";
 
 /**
  * Grant a short-lived signed CDN stream URL — only after the ad session is
@@ -20,15 +21,19 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
   const body = await request.json().catch(() => ({}));
   const { adSessionId, outcome } = body as { adSessionId?: string; outcome?: string };
 
-  const video = await prisma.video.findFirst({ where: { id, isDeleted: false } });
+  const video = await prisma.video.findFirst({ where: { id, isDeleted: false, status: "READY" } });
   if (!video) return NextResponse.json({ error: "Not found" }, { status: 404 });
+
+  const site = await getCurrentSite();
+  if (!(await isPubliclyPublished(video.id, site.id))) {
+    return NextResponse.json({ error: "Not found" }, { status: 404 });
+  }
 
   const session = adSessionId ? await getAdSession(adSessionId) : null;
   if (!session || session.videoId !== video.id || session.consumed) {
     return NextResponse.json({ error: "Invalid ad session" }, { status: 403 });
   }
 
-  const site = await getCurrentSite();
   const minView = site.adMinViewSeconds;
   const elapsed = (Date.now() - session.openedAt) / 1000;
   const adWatched = outcome === "complete" || outcome === "skip";

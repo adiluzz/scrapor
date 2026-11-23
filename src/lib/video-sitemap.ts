@@ -1,4 +1,5 @@
 import type { Prisma } from "@prisma/client";
+import { publicOnSite } from "@/lib/publication";
 
 /** Helpers for Google Video Sitemap XML (video namespace). */
 
@@ -97,7 +98,7 @@ export function rewriteHlsPlaylistToOrigin(
 /** READY videos published on a site that have a full file Google can fetch. */
 export function sitemapPublishedVideoWhere(siteId: string): Prisma.VideoWhereInput {
   return {
-    sites: { some: { siteId } },
+    sites: publicOnSite(siteId),
     isDeleted: false,
     status: "READY",
     OR: [{ s3HlsMasterKey: { not: null } }, { s3VideoKey: { not: null } }],

@@ -13,6 +13,7 @@ import JsonLd from "@/components/site/JsonLd";
 import TagBadge from "@/components/site/TagBadge";
 import TagsVerifiedFilter from "@/components/site/TagsVerifiedFilter";
 import { isVerifiedBadgeTag } from "@/lib/verified-tags";
+import { publicOnSite } from "@/lib/publication";
 
 export const dynamic = "force-dynamic";
 
@@ -55,7 +56,7 @@ export default async function TagsIndexPage({
       video: {
         isDeleted: false,
         status: "READY",
-        sites: { some: { siteId } },
+        sites: publicOnSite(siteId),
       },
     },
     _count: { tagId: true },

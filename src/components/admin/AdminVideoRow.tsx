@@ -7,11 +7,15 @@ type SiteChip = {
   id: string;
   name: string;
   primaryColor: string;
+  suspended?: boolean;
 };
 
 export default function AdminVideoRow({
   video,
   sites = [],
+  filterSiteId = "",
+  selected = false,
+  onToggleSelected,
 }: {
   video: {
     id: string;
@@ -22,6 +26,9 @@ export default function AdminVideoRow({
     sourceSite: string | null;
   };
   sites?: SiteChip[];
+  filterSiteId?: string;
+  selected?: boolean;
+  onToggleSelected?: () => void;
 }) {
   const router = useRouter();
   const [editing, setEditing] = useState(false);
@@ -51,8 +58,24 @@ export default function AdminVideoRow({
     router.refresh();
   }
 
+  const relevant = filterSiteId ? sites.filter((s) => s.id === filterSiteId) : sites;
+  const suspendedCount = relevant.filter((s) => s.suspended).length;
+  const suspension =
+    suspendedCount === 0 ? null : suspendedCount === relevant.length ? "suspended" : "partial";
+
   return (
-    <tr className={video.isDeleted ? "opacity-50" : ""}>
+    <tr className={video.isDeleted || suspension === "suspended" ? "opacity-60" : ""}>
+      {onToggleSelected && (
+        <td className="px-4 py-3">
+          <input
+            type="checkbox"
+            checked={selected}
+            aria-label={`Select ${video.title}`}
+            onChange={onToggleSelected}
+            className="h-4 w-4 accent-brand-500"
+          />
+        </td>
+      )}
       <td className="px-4 py-3">
         {editing ? (
           <input
@@ -81,6 +104,7 @@ export default function AdminVideoRow({
                   style={{ backgroundColor: s.primaryColor }}
                 />
                 {s.name}
+                {s.suspended ? <span className="text-amber-400">suspended</span> : null}
               </span>
             ))}
           </div>
@@ -89,7 +113,16 @@ export default function AdminVideoRow({
       <td className="px-4 py-3 text-zinc-500">{video.sourceSite || "—"}</td>
       <td className="px-4 py-3 text-zinc-400">{video.viewCount}</td>
       <td className="px-4 py-3">
-        {video.isDeleted ? <span className="text-red-400">deleted</span> : <span className="text-emerald-400">live</span>}
+        <div className="flex flex-col gap-1">
+          {video.isDeleted && <span className="text-red-400">deleted</span>}
+          {suspension === "suspended" && <span className="text-amber-400">suspended</span>}
+          {suspension === "partial" && (
+            <span className="text-amber-400" title="Suspended on some sites">
+              partial
+            </span>
+          )}
+          {!video.isDeleted && !suspension && <span className="text-emerald-400">live</span>}
+        </div>
       </td>
       <td className="px-4 py-3 text-right">
         <div className="flex justify-end gap-2">

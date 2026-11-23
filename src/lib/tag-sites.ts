@@ -1,5 +1,6 @@
 import type { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/db";
+import { publicOnSite } from "@/lib/publication";
 
 /**
  * Public-site filter: tag is attached to ≥1 READY video published on this site.
@@ -12,7 +13,7 @@ export function tagHasVideosOnSite(siteId: string): Prisma.TagWhereInput {
         video: {
           isDeleted: false,
           status: "READY",
-          sites: { some: { siteId } },
+          sites: publicOnSite(siteId),
         },
       },
     },

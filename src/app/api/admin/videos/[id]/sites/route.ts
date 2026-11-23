@@ -32,12 +32,26 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
     }
   }
 
+  const existing = await prisma.videoSite.findMany({
+    where: { videoId: id },
+    select: { siteId: true, suspended: true, suspendedAt: true },
+  });
+  const previous = new Map(existing.map((row) => [row.siteId, row]));
+
   await prisma.$transaction([
     prisma.videoSite.deleteMany({ where: { videoId: id } }),
     ...(siteIds.length
       ? [
           prisma.videoSite.createMany({
-            data: siteIds.map((siteId) => ({ videoId: id, siteId })),
+            data: siteIds.map((siteId) => {
+              const prior = previous.get(siteId);
+              return {
+                videoId: id,
+                siteId,
+                suspended: prior?.suspended ?? false,
+                suspendedAt: prior?.suspended ? prior.suspendedAt : null,
+              };
+            }),
           }),
         ]
       : []),
@@ -50,7 +64,7 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
 
   return NextResponse.json({
     ok: true,
-    sites: membership.map((m) => m.site),
+    sites: membership.map((m) => ({ ...m.site, suspended: m.suspended })),
   });
 }
 
@@ -79,6 +93,6 @@ export async function DELETE(request: Request, { params }: { params: Promise<{ i
 
   return NextResponse.json({
     ok: true,
-    sites: membership.map((m) => m.site),
+    sites: membership.map((m) => ({ ...m.site, suspended: m.suspended })),
   });
 }

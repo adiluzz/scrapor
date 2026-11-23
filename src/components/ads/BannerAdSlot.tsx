@@ -19,7 +19,7 @@ export default function BannerAdSlot({
   minHeight = 90,
   width = 300,
   height = 250,
-  label = true,
+  label = false,
   className = "",
   fillTimeoutMs = 6000,
   placement,

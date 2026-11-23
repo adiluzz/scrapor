@@ -657,9 +657,8 @@
 }
 
 .ad-slot-tile-media {
-  position: relative;
-  width: 100%;
-  aspect-ratio: 16 / 9;
+  position: absolute;
+  inset: 0;
   overflow: hidden !important;
   background: #27272a;
 }

@@ -93,7 +93,8 @@ export default function JuicyAdTile({
     const update = () => {
       const { width: w, height: h } = el.getBoundingClientRect();
       if (w <= 0 || h <= 0) return;
-      setScale(Math.max(w / width, h / height));
+      const next = Math.max(w / width, h / height);
+      setScale((prev) => (Math.abs(prev - next) < 0.01 ? prev : next));
     };
 
     update();

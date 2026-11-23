@@ -22,7 +22,7 @@ export default function JuicyFrame({
   return (
     <iframe
       ref={frameRef}
-      title="Advertisement"
+      title=""
       data-juicy-slot="1"
       sandbox={JUICY_SANDBOX}
       srcDoc={juicySlotSrcDoc(zoneId, width, height)}

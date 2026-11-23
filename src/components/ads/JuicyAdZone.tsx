@@ -10,7 +10,7 @@ export default function JuicyAdZone({
   zoneId,
   enabled = true,
   className = "",
-  label = true,
+  label = false,
   width = 300,
   height = 250,
 }: {

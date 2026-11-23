@@ -10,7 +10,7 @@ export default function AdZone({
   zoneId,
   className = "",
   minHeight,
-  label = true,
+  label = false,
   insClass = EXO_INS_CLASS,
   juicyFallbackZoneId,
   exoSecondaryZoneId,

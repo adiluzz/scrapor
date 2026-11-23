@@ -1,26 +1,24 @@
 "use client";
 
 import type { RefObject } from "react";
+import JuicyFrame from "@/components/ads/JuicyFrame";
 import { EXO_INS_CLASS } from "@/lib/exo-click";
 import type { AdWaterfallStep } from "@/lib/use-ad-waterfall";
 
 export function renderWaterfallIns(
   step: AdWaterfallStep | null,
-  insRef: RefObject<HTMLModElement | null>
+  insRef: RefObject<HTMLElement | null>
 ) {
   if (!step) return null;
-  const ref = insRef as RefObject<HTMLModElement>;
 
   if (step.kind === "juicy") {
     return (
-      <ins
-        ref={ref}
-        id={String(step.zoneId)}
-        data-adzone={step.zoneId}
-        data-width={step.width}
-        data-height={step.height}
-        className="ad-slot-fill inline-block max-w-full"
-        style={{ display: "block", width: step.width, height: step.height, maxWidth: "100%" }}
+      <JuicyFrame
+        frameRef={insRef as RefObject<HTMLIFrameElement>}
+        zoneId={step.zoneId}
+        width={step.width}
+        height={step.height}
+        className="ad-slot-fill"
       />
     );
   }
@@ -29,7 +27,7 @@ export function renderWaterfallIns(
   const h = step.height ?? 250;
   return (
     <ins
-      ref={ref}
+      ref={insRef as RefObject<HTMLModElement>}
       className={step.insClass || EXO_INS_CLASS}
       data-zoneid={step.zoneId}
       style={{ display: "block", width: w, height: h, maxWidth: "100%" }}

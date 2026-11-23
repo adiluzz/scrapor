@@ -1,10 +1,10 @@
 "use client";
 
-import { useEffect } from "react";
-import { pushJuicyZone } from "@/lib/juicy-ads";
+import JuicyFrame from "@/components/ads/JuicyFrame";
 
 /**
- * JuicyAds v3 zone — loads jads.js once, renders `<ins>`, queues adzone push.
+ * JuicyAds zone. The network script runs inside JuicyFrame so it cannot
+ * replace nodes in the page React tree.
  */
 export default function JuicyAdZone({
   zoneId,
@@ -21,11 +21,6 @@ export default function JuicyAdZone({
   width?: number;
   height?: number;
 }) {
-  useEffect(() => {
-    if (!enabled || !zoneId) return;
-    pushJuicyZone(zoneId);
-  }, [enabled, zoneId]);
-
   if (!enabled || !zoneId) return null;
 
   return (
@@ -33,14 +28,7 @@ export default function JuicyAdZone({
       {label && (
         <span className="mb-1 text-[10px] uppercase tracking-wide text-zinc-600">Advertisement</span>
       )}
-      <ins
-        id={String(zoneId)}
-        data-adzone={zoneId}
-        data-width={width}
-        data-height={height}
-        className="ad-slot-fill inline-block max-w-full"
-        style={{ display: "block", width, height, maxWidth: "100%" }}
-      />
+      <JuicyFrame zoneId={zoneId} width={width} height={height} className="ad-slot-fill" />
     </div>
   );
 }

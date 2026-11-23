@@ -2,11 +2,12 @@
 
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import InGridAdShell from "@/components/ads/InGridAdShell";
+import JuicyFrame from "@/components/ads/JuicyFrame";
 import { EXO_INS_CLASS, serveExoAds } from "@/lib/exo-click";
 import { watchAdFill } from "@/lib/ad-fill";
 import { trackAdEvent } from "@/lib/ad-events";
 import { adZoneKey, claimZone, releaseZone } from "@/lib/ad-zone-claim";
-import { pushJuicyZone } from "@/lib/juicy-ads";
+import { juicyFillRoot } from "@/lib/juicy-ads";
 
 /**
  * In-grid Exo ad with optional Juicy tile fallback on no-fill.
@@ -31,7 +32,7 @@ export default function AdTile({
   const resolvedClass = insClass || EXO_INS_CLASS;
   const mediaRef = useRef<HTMLDivElement>(null);
   const exoRef = useRef<HTMLModElement>(null);
-  const juicyRef = useRef<HTMLModElement>(null);
+  const juicyRef = useRef<HTMLIFrameElement>(null);
   const [mode, setMode] = useState<"exo" | "juicy" | "hidden">("exo");
   const [scale, setScale] = useState(1);
 
@@ -70,9 +71,8 @@ export default function AdTile({
       trackAdEvent("slot_empty", { placement });
       return;
     }
-    pushJuicyZone(juicyFallbackZoneId);
     let cancelled = false;
-    void watchAdFill(juicyRef.current, { timeoutMs: 8000, minHeight: 40 }).then((empty) => {
+    void watchAdFill(() => juicyFillRoot(juicyRef.current), { timeoutMs: 8000, minHeight: 40 }).then((empty) => {
       if (cancelled) return;
       if (empty) {
         setMode("hidden");
@@ -132,13 +132,11 @@ export default function AdTile({
             />
           )}
           {mode === "juicy" && juicyFallbackZoneId && (
-            <ins
-              ref={juicyRef}
-              id={String(juicyFallbackZoneId)}
-              data-adzone={juicyFallbackZoneId}
-              data-width={width}
-              data-height={height}
-              style={{ display: "block", width, height }}
+            <JuicyFrame
+              frameRef={juicyRef}
+              zoneId={juicyFallbackZoneId}
+              width={width}
+              height={height}
             />
           )}
         </div>

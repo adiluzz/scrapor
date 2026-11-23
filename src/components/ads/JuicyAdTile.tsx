@@ -2,11 +2,12 @@
 
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import InGridAdShell from "@/components/ads/InGridAdShell";
+import JuicyFrame from "@/components/ads/JuicyFrame";
 import { EXO_INS_CLASS, serveExoAds } from "@/lib/exo-click";
 import { watchAdFill } from "@/lib/ad-fill";
 import { trackAdEvent } from "@/lib/ad-events";
 import { adZoneKey, claimZone, releaseZone } from "@/lib/ad-zone-claim";
-import { pushJuicyZone } from "@/lib/juicy-ads";
+import { juicyFillRoot } from "@/lib/juicy-ads";
 
 /**
  * In-grid Juicy ad with optional Exo native tile fallback on no-fill.
@@ -29,7 +30,7 @@ export default function JuicyAdTile({
   placement?: string;
 }) {
   const mediaRef = useRef<HTMLDivElement>(null);
-  const juicyRef = useRef<HTMLModElement>(null);
+  const juicyRef = useRef<HTMLIFrameElement>(null);
   const exoRef = useRef<HTMLModElement>(null);
   const [mode, setMode] = useState<"juicy" | "exo" | "hidden">("juicy");
   const [scale, setScale] = useState(1);
@@ -44,9 +45,8 @@ export default function JuicyAdTile({
       if (!hasExoFallback) trackAdEvent("slot_empty", { placement });
       return;
     }
-    pushJuicyZone(zoneId);
     let cancelled = false;
-    void watchAdFill(juicyRef.current, { timeoutMs: 8000, minHeight: 40 }).then((empty) => {
+    void watchAdFill(() => juicyFillRoot(juicyRef.current), { timeoutMs: 8000, minHeight: 40 }).then((empty) => {
       if (cancelled) return;
       if (empty) {
         setMode(hasExoFallback ? "exo" : "hidden");
@@ -125,14 +125,7 @@ export default function JuicyAdTile({
           }}
         >
           {mode === "juicy" && zoneId && (
-            <ins
-              ref={juicyRef}
-              id={String(zoneId)}
-              data-adzone={zoneId}
-              data-width={width}
-              data-height={height}
-              style={{ display: "block", width, height }}
-            />
+            <JuicyFrame frameRef={juicyRef} zoneId={zoneId} width={width} height={height} />
           )}
           {mode === "exo" && exoFallbackZoneId && (
             <ins

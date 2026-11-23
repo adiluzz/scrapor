@@ -5,7 +5,7 @@ import { watchAdFill } from "@/lib/ad-fill";
 import { trackAdEvent } from "@/lib/ad-events";
 import { adZoneKey, claimZone, releaseZone } from "@/lib/ad-zone-claim";
 import { serveExoAds } from "@/lib/exo-click";
-import { pushJuicyZone } from "@/lib/juicy-ads";
+import { juicyFillRoot } from "@/lib/juicy-ads";
 
 export type AdWaterfallStep =
   | { kind: "juicy"; zoneId: string; width: number; height: number }
@@ -22,7 +22,7 @@ export function useAdWaterfall(
   { timeoutMs = 6000, placement }: { timeoutMs?: number; placement?: string } = {}
 ) {
   const instanceId = useId().replace(/:/g, "");
-  const insRef = useRef<HTMLModElement>(null);
+  const insRef = useRef<HTMLElement>(null);
   const [stepIndex, setStepIndex] = useState(0);
   const [state, setState] = useState<State>(steps.length ? "loading" : "hidden");
   const reportedRef = useRef(false);
@@ -80,13 +80,10 @@ export function useAdWaterfall(
     let cancelled = false;
 
     const run = async () => {
-      if (step.kind === "juicy") {
-        pushJuicyZone(step.zoneId);
-      } else {
-        serveExoAds();
-      }
+      // Juicy loads inside its own frame (see JuicyFrame). Never inject jads.js here.
+      if (step.kind === "exo") serveExoAds();
 
-      const empty = await watchAdFill(() => insRef.current, { timeoutMs });
+      const empty = await watchAdFill(() => juicyFillRoot(insRef.current), { timeoutMs });
       if (cancelled) return;
 
       if (!empty) {

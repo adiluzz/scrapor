@@ -17,6 +17,7 @@ type AdsFields = {
   exoZoneHome: string | null;
   exoZoneUnderPlayer: string | null;
   exoZoneVideoFullscreen: string | null;
+  exoZoneMobileFullscreen: string | null;
   exoZoneGridNative: string | null;
   exoZoneMobileSticky: string | null;
   exoZonePopunder: string | null;
@@ -24,6 +25,7 @@ type AdsFields = {
   exoZoneInvideo: string | null;
   juicyAdsSiteId: string | null;
   juicyAdsZoneBanner: string | null;
+  juicyAdsZoneMid: string | null;
   juicyAdsZoneNative: string | null;
   juicyAdsZoneVidfloat: string | null;
   juicyAdsZoneInvideo: string | null;
@@ -53,6 +55,7 @@ export default function WebsiteAdsForm({
     exoZoneHome: initial.exoZoneHome || "",
     exoZoneUnderPlayer: initial.exoZoneUnderPlayer || "",
     exoZoneVideoFullscreen: initial.exoZoneVideoFullscreen || "",
+    exoZoneMobileFullscreen: initial.exoZoneMobileFullscreen || "",
     exoZoneGridNative: initial.exoZoneGridNative || "",
     exoZoneMobileSticky: initial.exoZoneMobileSticky || "",
     exoZonePopunder: initial.exoZonePopunder || "",
@@ -60,6 +63,7 @@ export default function WebsiteAdsForm({
     exoZoneInvideo: initial.exoZoneInvideo || "",
     juicyAdsSiteId: initial.juicyAdsSiteId || "",
     juicyAdsZoneBanner: initial.juicyAdsZoneBanner || "",
+    juicyAdsZoneMid: initial.juicyAdsZoneMid || "",
     juicyAdsZoneNative: initial.juicyAdsZoneNative || "",
     juicyAdsZoneVidfloat: initial.juicyAdsZoneVidfloat || "",
     juicyAdsZoneInvideo: initial.juicyAdsZoneInvideo || "",
@@ -98,6 +102,7 @@ export default function WebsiteAdsForm({
           exoZoneHome: empty(form.exoZoneHome),
           exoZoneUnderPlayer: empty(form.exoZoneUnderPlayer),
           exoZoneVideoFullscreen: empty(form.exoZoneVideoFullscreen),
+          exoZoneMobileFullscreen: empty(form.exoZoneMobileFullscreen),
           exoZoneGridNative: empty(form.exoZoneGridNative),
           exoZoneMobileSticky: empty(form.exoZoneMobileSticky),
           exoZonePopunder: empty(form.exoZonePopunder),
@@ -105,6 +110,7 @@ export default function WebsiteAdsForm({
           exoZoneInvideo: empty(form.exoZoneInvideo),
           juicyAdsSiteId: empty(form.juicyAdsSiteId),
           juicyAdsZoneBanner: empty(form.juicyAdsZoneBanner),
+          juicyAdsZoneMid: empty(form.juicyAdsZoneMid),
           juicyAdsZoneNative: empty(form.juicyAdsZoneNative),
           juicyAdsZoneVidfloat: empty(form.juicyAdsZoneVidfloat),
           juicyAdsZoneInvideo: empty(form.juicyAdsZoneInvideo),
@@ -215,10 +221,11 @@ export default function WebsiteAdsForm({
           [
             ["exoZoneHome", "Home banner / native"],
             ["exoZoneUnderPlayer", "Under player"],
-            ["exoZoneVideoFullscreen", "Fullpage interstitial"],
+            ["exoZoneVideoFullscreen", "Desktop fullpage interstitial"],
+            ["exoZoneMobileFullscreen", "Mobile fullpage interstitial (phone only)"],
             ["exoZoneGridNative", "In-grid native"],
-            ["exoZoneMidList", "Mid-list native (optional; falls back to grid)"],
-            ["exoZoneInvideo", "In-video Exo fallback (banner over player when Juicy invideo is empty)"],
+            ["exoZoneMidList", "Mid-feed zone (one banner; leave empty until this is a new zone)"],
+            ["exoZoneInvideo", "In-video Exo zone (only used when set; does not reuse the sidebar)"],
             ["exoZoneMobileSticky", "Mobile sticky banner"],
             ["exoZonePopunder", "Popunder (session-capped on first video play)"],
           ] as const
@@ -242,11 +249,11 @@ export default function WebsiteAdsForm({
       <fieldset className="space-y-4 border-t border-zinc-800 pt-4">
         <legend className="text-sm font-medium text-zinc-200">Automatic fallbacks</legend>
         <p className="text-xs leading-relaxed text-zinc-500">
-          Banner slots try Exo first, then Juicy (or the reverse under the player). In-grid tiles
-          cross-fallback between Exo native and Juicy 300×250. In-video overlay tries Juicy invideo,
-          then Exo in-video zone (or under-player / home). Empty slots hide after ~6s so
-          &ldquo;new ad slot&rdquo; placeholders do not stay visible. VAST pre-roll already
-          waterfalls primary → backup → skip to content.
+          Banner slots try Exo first, then Juicy (or the reverse under the player). A zone already
+          on the page is not requested again. The mid-feed is a single banner and only renders when
+          its own zone is set. In-video uses the Juicy invideo zone, then the Exo in-video zone when
+          that field is set. Empty slots hide after ~6s. Pre-roll tries the backup tag when the
+          primary is empty or the creative fails to play.
         </p>
       </fieldset>
 
@@ -270,6 +277,16 @@ export default function WebsiteAdsForm({
           <input
             value={form.juicyAdsZoneBanner}
             onChange={(e) => set("juicyAdsZoneBanner", e.target.value)}
+            className={inputClass}
+          />
+        </label>
+        <label className="block space-y-1.5">
+          <span className="text-sm text-zinc-400">
+            JuicyAds mid-feed zone ID (a second 300×250, not the sidebar banner)
+          </span>
+          <input
+            value={form.juicyAdsZoneMid}
+            onChange={(e) => set("juicyAdsZoneMid", e.target.value)}
             className={inputClass}
           />
         </label>

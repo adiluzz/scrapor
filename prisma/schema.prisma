@@ -74,6 +74,8 @@ model Site {
   exoZoneHome             String?
   exoZoneUnderPlayer      String?
   exoZoneVideoFullscreen  String?
+  /// Exo mobile fullpage interstitial. Embed uses zone type 33, desktop field stays type 35.
+  exoZoneMobileFullscreen String?
   exoZoneGridNative       String?
   exoZoneMobileSticky     String?
   exoZonePopunder         String?
@@ -82,6 +84,8 @@ model Site {
   exoZoneInvideo          String?
   juicyAdsSiteId          String?
   juicyAdsZoneBanner      String?
+  /// Second Juicy 300x250 used only by the mid-feed row, never the sidebar banner.
+  juicyAdsZoneMid         String?
   juicyAdsZoneNative      String?
   /// Juicy 300x250 zone rendered in the dismissible floating corner container (video pages, desktop).
   juicyAdsZoneVidfloat    String?

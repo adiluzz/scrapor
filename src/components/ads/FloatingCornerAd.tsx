@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { EXO_INS_CLASS } from "@/lib/exo-click";
 import { buildCornerAdSteps } from "@/lib/ad-waterfall-steps";
 import { renderWaterfallIns } from "@/lib/render-waterfall-ins";
@@ -24,6 +24,15 @@ export default function FloatingCornerAd({
   exoInsClass?: string | null;
 }) {
   const [dismissed, setDismissed] = useState(false);
+  const [desktop, setDesktop] = useState(false);
+
+  useEffect(() => {
+    const mq = window.matchMedia("(min-width: 1024px)");
+    const apply = () => setDesktop(mq.matches);
+    apply();
+    mq.addEventListener("change", apply);
+    return () => mq.removeEventListener("change", apply);
+  }, []);
 
   const steps = buildCornerAdSteps({
     juicyZoneId: zoneId,
@@ -32,9 +41,9 @@ export default function FloatingCornerAd({
     exoInsClass,
   });
 
-  const { instanceId, insRef, step, filled, hidden, stepIndex } = useAdWaterfall(
-    enabled && !dismissed ? steps : [],
-    { timeoutMs: 6000 }
+  const { insRef, step, filled, hidden, stepIndex } = useAdWaterfall(
+    enabled && !dismissed && desktop ? steps : [],
+    { timeoutMs: 6000, placement: "corner" }
   );
 
   if (!enabled || dismissed || hidden || steps.length === 0) return null;
@@ -60,7 +69,7 @@ export default function FloatingCornerAd({
           </button>
         )}
         <div className="ad-slot" key={`${stepIndex}-${step?.kind}-${step?.zoneId}`}>
-          {renderWaterfallIns(step, insRef, instanceId)}
+          {renderWaterfallIns(step, insRef)}
         </div>
       </div>
     </div>

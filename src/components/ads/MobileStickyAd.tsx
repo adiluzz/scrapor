@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { EXO_INS_CLASS } from "@/lib/exo-click";
 import { buildBannerAdSteps } from "@/lib/ad-waterfall-steps";
 import { renderWaterfallIns } from "@/lib/render-waterfall-ins";
@@ -21,6 +21,15 @@ export default function MobileStickyAd({
   juicyEnabled?: boolean;
 }) {
   const [dismissed, setDismissed] = useState(false);
+  const [phone, setPhone] = useState(false);
+
+  useEffect(() => {
+    const mq = window.matchMedia("(max-width: 639px)");
+    const apply = () => setPhone(mq.matches);
+    apply();
+    mq.addEventListener("change", apply);
+    return () => mq.removeEventListener("change", apply);
+  }, []);
 
   const steps = buildBannerAdSteps({
     exoZoneId: zoneId,
@@ -32,9 +41,9 @@ export default function MobileStickyAd({
     height: 50,
   });
 
-  const { instanceId, insRef, step, filled, hidden, stepIndex } = useAdWaterfall(
-    dismissed ? [] : steps,
-    { timeoutMs: 6000 }
+  const { insRef, step, filled, hidden, stepIndex } = useAdWaterfall(
+    dismissed || !phone ? [] : steps,
+    { timeoutMs: 6000, placement: "mobile_sticky" }
   );
 
   if (dismissed || hidden || steps.length === 0) return null;
@@ -60,7 +69,7 @@ export default function MobileStickyAd({
       )}
       <div className="ad-slot mx-auto w-full max-w-full overflow-hidden">
         <div key={`${stepIndex}-${step?.kind}-${step?.zoneId}`}>
-          {renderWaterfallIns(step, insRef, instanceId)}
+          {renderWaterfallIns(step, insRef)}
         </div>
       </div>
     </div>

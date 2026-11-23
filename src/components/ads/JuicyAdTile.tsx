@@ -1,9 +1,11 @@
 "use client";
 
-import { useEffect, useId, useLayoutEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import InGridAdShell from "@/components/ads/InGridAdShell";
 import { EXO_INS_CLASS, serveExoAds } from "@/lib/exo-click";
 import { watchAdFill } from "@/lib/ad-fill";
+import { trackAdEvent } from "@/lib/ad-events";
+import { adZoneKey, claimZone, releaseZone } from "@/lib/ad-zone-claim";
 import { pushJuicyZone } from "@/lib/juicy-ads";
 
 /**
@@ -16,6 +18,7 @@ export default function JuicyAdTile({
   height = 250,
   exoFallbackZoneId,
   exoInsClass = EXO_INS_CLASS,
+  placement = "grid_tile",
 }: {
   zoneId?: string | null;
   enabled?: boolean;
@@ -23,8 +26,8 @@ export default function JuicyAdTile({
   height?: number;
   exoFallbackZoneId?: string | null;
   exoInsClass?: string | null;
+  placement?: string;
 }) {
-  const instanceId = useId().replace(/:/g, "");
   const mediaRef = useRef<HTMLDivElement>(null);
   const juicyRef = useRef<HTMLModElement>(null);
   const exoRef = useRef<HTMLModElement>(null);
@@ -34,30 +37,54 @@ export default function JuicyAdTile({
   const hasExoFallback = Boolean(exoFallbackZoneId);
 
   useEffect(() => {
-    if (!enabled || !zoneId) return;
+    if (!enabled || !zoneId || mode !== "juicy") return;
+    const key = adZoneKey("juicy", zoneId);
+    if (!claimZone(key)) {
+      setMode(hasExoFallback ? "exo" : "hidden");
+      if (!hasExoFallback) trackAdEvent("slot_empty", { placement });
+      return;
+    }
     pushJuicyZone(zoneId);
     let cancelled = false;
     void watchAdFill(juicyRef.current, { timeoutMs: 8000, minHeight: 40 }).then((empty) => {
       if (cancelled) return;
-      if (empty) setMode(hasExoFallback ? "exo" : "hidden");
+      if (empty) {
+        setMode(hasExoFallback ? "exo" : "hidden");
+        if (!hasExoFallback) trackAdEvent("slot_empty", { placement });
+      } else {
+        trackAdEvent("slot_filled", { placement, network: "juicy", zone_id: zoneId });
+      }
     });
     return () => {
       cancelled = true;
+      releaseZone(key);
     };
-  }, [enabled, zoneId, hasExoFallback]);
+  }, [enabled, zoneId, hasExoFallback, mode, placement]);
 
   useEffect(() => {
     if (mode !== "exo" || !exoFallbackZoneId) return;
+    const key = adZoneKey("exo", exoFallbackZoneId);
+    if (!claimZone(key)) {
+      setMode("hidden");
+      trackAdEvent("slot_empty", { placement });
+      return;
+    }
     serveExoAds();
     let cancelled = false;
     void watchAdFill(exoRef.current, { timeoutMs: 8000, minHeight: 40 }).then((empty) => {
       if (cancelled) return;
-      if (empty) setMode("hidden");
+      if (empty) {
+        setMode("hidden");
+        trackAdEvent("slot_empty", { placement });
+      } else {
+        trackAdEvent("slot_filled", { placement, network: "exo", zone_id: exoFallbackZoneId });
+      }
     });
     return () => {
       cancelled = true;
+      releaseZone(key);
     };
-  }, [mode, exoFallbackZoneId]);
+  }, [mode, exoFallbackZoneId, placement]);
 
   useLayoutEffect(() => {
     const el = mediaRef.current;
@@ -100,7 +127,7 @@ export default function JuicyAdTile({
           {mode === "juicy" && zoneId && (
             <ins
               ref={juicyRef}
-              id={`juicy-tile-${zoneId}-${instanceId}`}
+              id={String(zoneId)}
               data-adzone={zoneId}
               data-width={width}
               data-height={height}

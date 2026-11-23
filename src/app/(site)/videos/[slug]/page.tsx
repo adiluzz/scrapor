@@ -8,7 +8,7 @@ import { formatDuration } from "@/lib/videos";
 import { getCurrentUser } from "@/lib/session";
 import { listVideos } from "@/lib/queries";
 import VideoPlayer from "@/components/player/VideoPlayer";
-import VideoGrid from "@/components/site/VideoGrid";
+import VideoGridWithNativeAd from "@/components/ads/VideoGridWithNativeAd";
 import JsonLd from "@/components/site/JsonLd";
 import {
   breadcrumbJsonLd,
@@ -143,6 +143,7 @@ export default async function VideoPage({
         <>
           <ExoFullscreenOverlay
             zoneId={site.exoZoneVideoFullscreen}
+            mobileZoneId={site.exoZoneMobileFullscreen}
             insClass={site.exoInsClass}
           />
           <ExoPopunder
@@ -153,8 +154,6 @@ export default async function VideoPage({
           <FloatingCornerAd
             zoneId={site.juicyAdsZoneVidfloat}
             enabled={site.adsJuicyEnabled}
-            exoFallbackZoneId={site.exoZoneUnderPlayer ?? site.exoZoneHome}
-            juicyBannerZoneId={site.juicyAdsZoneBanner}
             exoInsClass={site.exoInsClass}
           />
         </>
@@ -203,17 +202,7 @@ export default async function VideoPage({
               storyboard={storyboard}
               heatmap={heatmap}
               invideoZoneId={site.adsJuicyEnabled && !adminPreview ? site.juicyAdsZoneInvideo : null}
-              invideoExoFallbackZoneId={
-                !adminPreview
-                  ? site.exoZoneInvideo ?? site.exoZoneUnderPlayer ?? site.exoZoneHome
-                  : null
-              }
-              invideoJuicyBannerZoneId={
-                !adminPreview && site.adsJuicyEnabled ? site.juicyAdsZoneBanner : null
-              }
-              invideoExoBannerZoneId={
-                !adminPreview ? site.exoZoneUnderPlayer ?? site.exoZoneHome : null
-              }
+              invideoExoFallbackZoneId={!adminPreview ? site.exoZoneInvideo : null}
               invideoExoInsClass={site.exoInsClass}
             />
 
@@ -293,6 +282,7 @@ export default async function VideoPage({
                 juicyEnabled={site.adsJuicyEnabled}
                 preferJuicy={site.adsJuicyEnabled}
                 minHeight={250}
+                placement="video_sidebar"
               />
             </div>
           </aside>
@@ -302,7 +292,7 @@ export default async function VideoPage({
       {related.length > 0 && (
         <section className="mx-auto w-full">
           <h2 className="mb-3 text-lg font-semibold text-zinc-200">Related videos</h2>
-          <VideoGrid videos={related} />
+          <VideoGridWithNativeAd videos={related} site={site} showMid={false} />
         </section>
       )}
     </div>

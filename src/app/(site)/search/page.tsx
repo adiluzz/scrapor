@@ -9,6 +9,7 @@ import {
   searchPageTitle,
 } from "@/lib/seo";
 import VideoGridWithNativeAd from "@/components/ads/VideoGridWithNativeAd";
+import PageWithSidebarAd from "@/components/ads/PageWithSidebarAd";
 import Filters from "@/components/site/Filters";
 import Pagination from "@/components/site/Pagination";
 
@@ -68,6 +69,7 @@ export default async function SearchPage({
   const { videos, total, totalPages } = await listVideos(siteId, params);
 
   return (
+    <PageWithSidebarAd site={site}>
     <>
       <div className="mb-5 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <h1 className="text-xl font-semibold text-zinc-100">
@@ -85,5 +87,6 @@ export default async function SearchPage({
       <VideoGridWithNativeAd videos={videos} site={site} />
       <Pagination page={params.page} totalPages={totalPages} />
     </>
+    </PageWithSidebarAd>
   );
 }

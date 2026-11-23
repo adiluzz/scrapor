@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useId } from "react";
+import { useEffect } from "react";
 import { pushJuicyZone } from "@/lib/juicy-ads";
 
 /**
@@ -21,8 +21,6 @@ export default function JuicyAdZone({
   width?: number;
   height?: number;
 }) {
-  const instanceId = useId().replace(/:/g, "");
-
   useEffect(() => {
     if (!enabled || !zoneId) return;
     pushJuicyZone(zoneId);
@@ -36,7 +34,7 @@ export default function JuicyAdZone({
         <span className="mb-1 text-[10px] uppercase tracking-wide text-zinc-600">Advertisement</span>
       )}
       <ins
-        id={`juicy-${zoneId}-${instanceId}`}
+        id={String(zoneId)}
         data-adzone={zoneId}
         data-width={width}
         data-height={height}

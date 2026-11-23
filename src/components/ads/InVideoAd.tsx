@@ -39,8 +39,9 @@ export default function InVideoAd({
     invideoHeight: height,
   });
 
-  const { instanceId, insRef, step, filled, hidden, stepIndex } = useAdWaterfall(steps, {
+  const { insRef, step, filled, hidden, stepIndex } = useAdWaterfall(steps, {
     timeoutMs: 5500,
+    placement: "invideo",
   });
 
   useEffect(() => {
@@ -69,7 +70,7 @@ export default function InVideoAd({
         </button>
       )}
       <div className="ad-slot" key={`${stepIndex}-${step?.kind}-${step?.zoneId}`}>
-        {renderWaterfallIns(step, insRef, instanceId)}
+        {renderWaterfallIns(step, insRef)}
       </div>
     </div>
   );

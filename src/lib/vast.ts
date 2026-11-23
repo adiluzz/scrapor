@@ -1,9 +1,36 @@
+export const VAST_TRACKING_EVENTS = [
+  "start",
+  "firstQuartile",
+  "midpoint",
+  "thirdQuartile",
+  "complete",
+  "skip",
+  "error",
+] as const;
+
+export type VastTrackingEvent = (typeof VAST_TRACKING_EVENTS)[number];
+export type VastTracking = Record<VastTrackingEvent, string[]>;
+
+export function emptyVastTracking(): VastTracking {
+  return {
+    start: [],
+    firstQuartile: [],
+    midpoint: [],
+    thirdQuartile: [],
+    complete: [],
+    skip: [],
+    error: [],
+  };
+}
+
 export type VastAd = {
   mediaUrl: string;
   skipOffsetSec: number | null;
   duration: number | null;
   clickThrough: string | null;
+  clickTracking: string[];
   impressionUrls: string[];
+  tracking: VastTracking;
 };
 
 export type VastFetchOptions = {
@@ -57,23 +84,44 @@ function block(xml: string, tag: string): string | null {
   return m?.[0] || null;
 }
 
+function collectTracking(xml: string): VastTracking {
+  const out = emptyVastTracking();
+  const re = /<Tracking\b([^>]*)>(?:<!\[CDATA\[([\s\S]*?)\]\]>|([^<]*))<\/Tracking>/gi;
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(xml))) {
+    const event = m[1].match(/\bevent="([^"]+)"/i)?.[1];
+    const url = (m[2] || m[3] || "").trim();
+    if (!url || !event || !(event in out)) continue;
+    out[event as VastTrackingEvent].push(url);
+  }
+  return out;
+}
+
+function mergeTracking(into: VastTracking, extra: VastTracking) {
+  for (const event of VAST_TRACKING_EVENTS) into[event].push(...extra[event]);
+}
+
 type ParsedVast = {
   ad: VastAd | null;
   wrapperUrl: string | null;
   impressionUrls: string[];
+  clickTracking: string[];
+  tracking: VastTracking;
 };
 
 /** Parse one VAST XML document (inline or wrapper). Works in Node and browser. */
 export function parseVastXml(xml: string): ParsedVast {
   const impressionUrls = tagTexts(xml, "Impression");
+  const clickTracking = tagTexts(xml, "ClickTracking");
+  const tracking = collectTracking(xml);
   const wrapperUrl = tagText(xml, "VASTAdTagURI");
   if (wrapperUrl) {
-    return { ad: null, wrapperUrl, impressionUrls };
+    return { ad: null, wrapperUrl, impressionUrls, clickTracking, tracking };
   }
 
   const linear = block(xml, "Linear");
   if (!linear) {
-    return { ad: null, wrapperUrl: null, impressionUrls };
+    return { ad: null, wrapperUrl: null, impressionUrls, clickTracking, tracking };
   }
 
   const mediaFiles: { url: string; type: string; bitrate: number }[] = [];
@@ -88,7 +136,7 @@ export function parseVastXml(xml: string): ParsedVast {
     mediaFiles.push({ url, type, bitrate });
   }
   if (mediaFiles.length === 0) {
-    return { ad: null, wrapperUrl: null, impressionUrls };
+    return { ad: null, wrapperUrl: null, impressionUrls, clickTracking, tracking };
   }
 
   const pick =
@@ -105,10 +153,14 @@ export function parseVastXml(xml: string): ParsedVast {
       skipOffsetSec: parseTimeToSec(skipRaw),
       duration: parseTimeToSec(durationRaw),
       clickThrough: tagText(xml, "ClickThrough"),
+      clickTracking,
       impressionUrls,
+      tracking,
     },
     wrapperUrl: null,
     impressionUrls,
+    clickTracking,
+    tracking,
   };
 }
 
@@ -125,6 +177,8 @@ export async function resolveVastAd(
   const maxDepth = opts.maxDepth ?? 5;
   let url = tagUrl;
   const collectedImpressions: string[] = [];
+  const collectedClicks: string[] = [];
+  const collectedTracking = emptyVastTracking();
 
   for (let depth = 0; depth < maxDepth; depth++) {
     const controller = new AbortController();
@@ -148,6 +202,8 @@ export async function resolveVastAd(
 
       const parsed = parseVastXml(xml);
       collectedImpressions.push(...parsed.impressionUrls);
+      collectedClicks.push(...parsed.clickTracking);
+      mergeTracking(collectedTracking, parsed.tracking);
 
       if (parsed.wrapperUrl) {
         url = parsed.wrapperUrl;
@@ -155,7 +211,9 @@ export async function resolveVastAd(
       }
       if (!parsed.ad) return null;
 
-      parsed.ad.impressionUrls = [...new Set([...collectedImpressions, ...parsed.ad.impressionUrls])];
+      parsed.ad.impressionUrls = [...new Set(collectedImpressions)];
+      parsed.ad.clickTracking = [...new Set(collectedClicks)];
+      parsed.ad.tracking = collectedTracking;
       return parsed.ad;
     } catch {
       clearTimeout(timer);
@@ -170,9 +228,13 @@ export async function fetchVastAd(tagUrl: string, timeoutMs = 4000): Promise<Vas
   return resolveVastAd(tagUrl, { timeoutMs });
 }
 
-/** Fire impression pixels (best effort). */
-export function fireImpressions(urls: string[]) {
-  for (const u of urls) {
+/** Fire impression or tracking pixels (best effort). */
+export function fireImpressions(urls: string[], macros?: Record<string, string>) {
+  for (const raw of urls) {
+    let u = raw;
+    if (macros) {
+      for (const [key, value] of Object.entries(macros)) u = u.split(key).join(value);
+    }
     try {
       new Image().src = u;
     } catch {

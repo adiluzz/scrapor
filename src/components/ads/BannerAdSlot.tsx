@@ -22,6 +22,7 @@ export default function BannerAdSlot({
   label = true,
   className = "",
   fillTimeoutMs = 6000,
+  placement,
 }: {
   exoZoneId?: string | null;
   juicyZoneId?: string | null;
@@ -35,6 +36,7 @@ export default function BannerAdSlot({
   label?: boolean;
   className?: string;
   fillTimeoutMs?: number;
+  placement?: string;
 }) {
   const steps = buildBannerAdSteps({
     exoZoneId,
@@ -47,8 +49,9 @@ export default function BannerAdSlot({
     height: Math.max(height, minHeight),
   });
 
-  const { instanceId, insRef, step, filled, hidden, stepIndex } = useAdWaterfall(steps, {
+  const { insRef, step, filled, hidden, stepIndex } = useAdWaterfall(steps, {
     timeoutMs: fillTimeoutMs,
+    placement,
   });
 
   if (steps.length === 0 || hidden) return null;
@@ -62,7 +65,7 @@ export default function BannerAdSlot({
         <span className="mb-1 text-[10px] uppercase tracking-wide text-zinc-600">Advertisement</span>
       )}
       <div key={`${stepIndex}-${step?.kind}-${step?.zoneId}`}>
-        {renderWaterfallIns(step, insRef, instanceId)}
+        {renderWaterfallIns(step, insRef)}
       </div>
     </div>
   );

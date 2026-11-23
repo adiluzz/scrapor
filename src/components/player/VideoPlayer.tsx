@@ -7,7 +7,13 @@ import type Player from "video.js/dist/types/player";
 import Heatmap from "@/components/player/Heatmap";
 import InVideoAd from "@/components/ads/InVideoAd";
 import { CONTENT_STARTED_EVENT, watchCoveringAdOverlay } from "@/lib/exo-click";
-import { fireImpressions, resolveVastAd, type VastAd } from "@/lib/vast";
+import { trackAdEvent } from "@/lib/ad-events";
+import {
+  fireImpressions,
+  resolveVastAd,
+  type VastAd,
+  type VastTrackingEvent,
+} from "@/lib/vast";
 import type { StoryboardCue } from "@/lib/storyboard";
 
 type Storyboard = { sprite: string; cues: StoryboardCue[] } | null;
@@ -15,6 +21,7 @@ type Storyboard = { sprite: string; cues: StoryboardCue[] } | null;
 const BUCKET_SEC = 5;
 const SKIP_SEC = 7;
 const INVIDEO_AD_DELAY_MS = 10_000;
+const VAST_BACKUP_TIMEOUT_MS = 4_000;
 const DOUBLE_TAP_MS = 280;
 const SKIP_FLASH_MS = 700;
 
@@ -318,6 +325,8 @@ export default forwardRef(function VideoPlayer(
   const [controlsVisible, setControlsVisible] = useState(true);
   const [adSkipIn, setAdSkipIn] = useState<number | null>(null);
   const [adCanSkip, setAdCanSkip] = useState(false);
+  const [vastAd, setVastAd] = useState<VastAd | null>(null);
+  const vastAdRef = useRef<VastAd | null>(null);
   const adVideoRef = useRef<HTMLVideoElement>(null);
   const watchedBuckets = useRef<Set<number>>(new Set());
   const lastFlush = useRef(0);
@@ -1107,8 +1116,97 @@ export default forwardRef(function VideoPlayer(
     }
   }
 
+  function openVastClick() {
+    const ad = vastAdRef.current;
+    if (!ad?.clickThrough) return;
+    fireImpressions(ad.clickTracking);
+    trackAdEvent("preroll_click", { video_id: videoId });
+    window.open(ad.clickThrough, "_blank", "noopener,noreferrer");
+  }
+
+  function playVastCreative(ad: VastAd, skipAfter: number): Promise<"complete" | "skip" | "error"> {
+    const adVideo = adVideoRef.current!;
+    vastAdRef.current = ad;
+    setVastAd(ad);
+    fireImpressions(ad.impressionUrls);
+    adVideo.src = ad.mediaUrl;
+    setAdSkipIn(skipAfter);
+    setAdCanSkip(false);
+
+    const fired = new Set<VastTrackingEvent>();
+    const fire = (event: VastTrackingEvent) => {
+      if (fired.has(event)) return;
+      fired.add(event);
+      fireImpressions(
+        ad.tracking[event],
+        event === "error" ? { "[ERRORCODE]": "405" } : undefined
+      );
+      if (event === "start") trackAdEvent("preroll_shown", { video_id: videoId });
+    };
+
+    return new Promise((resolve) => {
+      const tick = setInterval(() => {
+        setAdSkipIn((s) => {
+          if (s === null) return null;
+          if (s <= 1) {
+            setAdCanSkip(true);
+            clearInterval(tick);
+            return 0;
+          }
+          return s - 1;
+        });
+      }, 1000);
+
+      let finished = false;
+      const finish = (outcome: "complete" | "skip" | "error") => {
+        if (finished) return;
+        finished = true;
+        clearInterval(tick);
+        adVideo.onended = null;
+        adVideo.onerror = null;
+        adVideo.ontimeupdate = null;
+        adVideo.onplaying = null;
+        adVideo.pause();
+        resolve(outcome);
+      };
+
+      const onTime = () => {
+        const duration = ad.duration || adVideo.duration;
+        if (!duration || !Number.isFinite(duration) || duration <= 0) return;
+        if (adVideo.currentTime > 0) fire("start");
+        const progress = adVideo.currentTime / duration;
+        if (progress >= 0.25) fire("firstQuartile");
+        if (progress >= 0.5) fire("midpoint");
+        if (progress >= 0.75) fire("thirdQuartile");
+      };
+
+      adVideo.ontimeupdate = onTime;
+      adVideo.onplaying = () => {
+        fire("start");
+      };
+      adVideo.onended = () => {
+        fire("complete");
+        trackAdEvent("preroll_complete", { video_id: videoId });
+        finish("complete");
+      };
+      adVideo.onerror = () => {
+        fire("error");
+        finish("error");
+      };
+      (adVideo as HTMLVideoElement & { _skip?: () => void })._skip = () => {
+        fire("skip");
+        trackAdEvent("preroll_skip", { video_id: videoId });
+        finish("skip");
+      };
+      void adVideo.play().catch(() => {
+        fire("error");
+        finish("error");
+      });
+    });
+  }
+
   async function runAd(adSessionId: string, cfg: { skipSeconds: number; timeoutMs: number }) {
-    let ad: VastAd | null = null;
+    let tags: string[] = [];
     try {
       const res = await fetch(`/api/videos/${videoId}/vast`, {
         method: "POST",
@@ -1117,54 +1215,45 @@ export default forwardRef(function VideoPlayer(
       });
       if (res.ok) {
         const data = await res.json();
-        ad = data.ad ?? null;
-        const tags = [data.clientVastTagUrl, data.clientVastTagUrlBackup].filter(
+        tags = [data.clientVastTagUrl, data.clientVastTagUrlBackup].filter(
           (tag): tag is string => typeof tag === "string" && tag.length > 0
         );
-        for (const tag of tags) {
-          if (ad) break;
-          ad = await resolveVastAd(tag, {
-            timeoutMs: cfg.timeoutMs,
-            browser: true,
-          });
-        }
       }
     } catch {
-      ad = null;
+      tags = [];
     }
-    if (!ad) return grantAndPlay(adSessionId, "noad");
+
+    const loadTag = (index: number) => {
+      const tag = tags[index];
+      if (!tag) return Promise.resolve(null);
+      return resolveVastAd(tag, {
+        timeoutMs: index === 0 ? cfg.timeoutMs : VAST_BACKUP_TIMEOUT_MS,
+        browser: true,
+      });
+    };
+
+    let ad = await loadTag(0);
+    let usedBackup = false;
+    if (!ad && tags[1]) {
+      ad = await loadTag(1);
+      usedBackup = true;
+    }
+    if (!ad) {
+      trackAdEvent("preroll_empty", { video_id: videoId });
+      return grantAndPlay(adSessionId, "noad");
+    }
 
     setStatus("ad");
-    fireImpressions(ad.impressionUrls);
-    const adVideo = adVideoRef.current!;
-    adVideo.src = ad.mediaUrl;
-    const skipAfter = ad.skipOffsetSec ?? cfg.skipSeconds;
-    setAdSkipIn(skipAfter);
-    setAdCanSkip(false);
-
-    const tick = setInterval(() => {
-      setAdSkipIn((s) => {
-        if (s === null) return null;
-        if (s <= 1) { setAdCanSkip(true); clearInterval(tick); return 0; }
-        return s - 1;
-      });
-    }, 1000);
-
-    // Ad sessions are single-use server-side; a second grant would 403 and flip the UI to error.
-    let finished = false;
-    const finish = (outcome: string) => {
-      if (finished) return;
-      finished = true;
-      clearInterval(tick);
-      adVideo.onended = null;
-      adVideo.onerror = null;
-      adVideo.pause();
-      grantAndPlay(adSessionId, outcome);
-    };
-    adVideo.onended = () => finish("complete");
-    adVideo.onerror = () => finish("error");
-    (adVideo as HTMLVideoElement & { _skip?: () => void })._skip = () => finish("skip");
-    await adVideo.play().catch(() => finish("error"));
+    let outcome = await playVastCreative(ad, ad.skipOffsetSec ?? cfg.skipSeconds);
+    if (outcome === "error" && !usedBackup && tags[1]) {
+      const backup = await loadTag(1);
+      if (backup) {
+        outcome = await playVastCreative(backup, backup.skipOffsetSec ?? cfg.skipSeconds);
+      }
+    }
+    vastAdRef.current = null;
+    setVastAd(null);
+    return grantAndPlay(adSessionId, outcome);
   }
 
   async function start() {
@@ -1315,9 +1404,18 @@ export default forwardRef(function VideoPlayer(
 
       <div className={`absolute inset-0 z-20 flex flex-col bg-black ${status === "ad" ? "" : "hidden"}`}>
         <video ref={adVideoRef} className="h-full w-full" playsInline />
-        <div className="absolute bottom-4 right-4">
+        {vastAd?.clickThrough ? (
+          <button
+            type="button"
+            aria-label="Open advertisement"
+            onClick={openVastClick}
+            className="absolute inset-0 z-10 cursor-pointer bg-transparent"
+          />
+        ) : null}
+        <div className="absolute bottom-4 right-4 z-20">
           {adCanSkip ? (
             <button
+              type="button"
               onClick={() => (adVideoRef.current as HTMLVideoElement & { _skip?: () => void })?._skip?.()}
               className="rounded bg-black/80 px-4 py-2 text-sm text-white hover:bg-black"
             >

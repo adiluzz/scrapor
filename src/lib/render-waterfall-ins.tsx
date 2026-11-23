@@ -6,8 +6,7 @@ import type { AdWaterfallStep } from "@/lib/use-ad-waterfall";
 
 export function renderWaterfallIns(
   step: AdWaterfallStep | null,
-  insRef: RefObject<HTMLModElement | null>,
-  instanceId: string
+  insRef: RefObject<HTMLModElement | null>
 ) {
   if (!step) return null;
   const ref = insRef as RefObject<HTMLModElement>;
@@ -16,7 +15,7 @@ export function renderWaterfallIns(
     return (
       <ins
         ref={ref}
-        id={`juicy-${step.zoneId}-${instanceId}-${step.width}x${step.height}`}
+        id={String(step.zoneId)}
         data-adzone={step.zoneId}
         data-width={step.width}
         data-height={step.height}

@@ -12,6 +12,7 @@ import {
   tagPageTitle,
 } from "@/lib/seo";
 import VideoGridWithNativeAd from "@/components/ads/VideoGridWithNativeAd";
+import PageWithSidebarAd from "@/components/ads/PageWithSidebarAd";
 import Filters from "@/components/site/Filters";
 import Pagination from "@/components/site/Pagination";
 import JsonLd from "@/components/site/JsonLd";
@@ -65,6 +66,7 @@ export default async function TagPage({
   const base = await getSiteBaseUrl();
 
   return (
+    <PageWithSidebarAd site={site}>
     <div>
       <JsonLd
         data={{
@@ -92,5 +94,6 @@ export default async function TagPage({
       <VideoGridWithNativeAd videos={videos} site={site} />
       <Pagination page={dp.page} totalPages={totalPages} />
     </div>
+    </PageWithSidebarAd>
   );
 }

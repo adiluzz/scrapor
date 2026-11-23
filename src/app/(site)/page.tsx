@@ -123,6 +123,7 @@ export default async function HomePage({
               insClass={site.exoInsClass}
               juicyFallbackZoneId={site.juicyAdsZoneBanner}
               juicyEnabled={site.adsJuicyEnabled}
+              placement="home_sidebar"
             />
           </div>
         </aside>

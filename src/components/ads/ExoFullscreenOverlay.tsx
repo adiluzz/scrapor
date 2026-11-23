@@ -23,17 +23,33 @@ const SESSION_KEY = "exo_fullscreen_shown";
  */
 export default function ExoFullscreenOverlay({
   zoneId,
+  mobileZoneId,
   insClass,
 }: {
   zoneId?: string | null;
+  /** Exo mobile fullpage zone. Requested with zone type 33, only on a phone-width viewport. */
+  mobileZoneId?: string | null;
   insClass?: string | null;
 }) {
-  const resolvedClass = exoInsClassFor(
-    EXO_ZONE_TYPE.DESKTOP_FULLPAGE,
-    insClass
+  const [phone, setPhone] = useState(
+    () => typeof window !== "undefined" && window.matchMedia("(max-width: 639px)").matches
   );
   const [enabled, setEnabled] = useState(false);
   const [contentStarted, setContentStarted] = useState(false);
+
+  useEffect(() => {
+    const mq = window.matchMedia("(max-width: 639px)");
+    const apply = () => setPhone(mq.matches);
+    apply();
+    mq.addEventListener("change", apply);
+    return () => mq.removeEventListener("change", apply);
+  }, []);
+
+  const activeZoneId = phone ? mobileZoneId : zoneId;
+  const resolvedClass = exoInsClassFor(
+    phone ? EXO_ZONE_TYPE.MOBILE_FULLPAGE : EXO_ZONE_TYPE.DESKTOP_FULLPAGE,
+    insClass
+  );
 
   useEffect(() => {
     const onContent = () => setContentStarted(true);
@@ -42,7 +58,7 @@ export default function ExoFullscreenOverlay({
   }, []);
 
   useEffect(() => {
-    if (!zoneId || !contentStarted) return;
+    if (!activeZoneId || !contentStarted) return;
     try {
       if (sessionStorage.getItem(SESSION_KEY) === "1") {
         setEnabled(false);
@@ -53,7 +69,7 @@ export default function ExoFullscreenOverlay({
     }
     setEnabled(true);
 
-    const eventName = `creativeDisplayed-${zoneId}`;
+    const eventName = `creativeDisplayed-${activeZoneId}`;
     const onShown = () => {
       try {
         sessionStorage.setItem(SESSION_KEY, "1");
@@ -65,15 +81,15 @@ export default function ExoFullscreenOverlay({
     document.addEventListener(eventName, onShown);
     serveExoAds();
     return () => document.removeEventListener(eventName, onShown);
-  }, [zoneId, contentStarted]);
+  }, [activeZoneId, contentStarted]);
 
-  if (!zoneId || !enabled) return null;
+  if (!activeZoneId || !enabled) return null;
 
   // No extra data-* attrs: AdProvider forwards every data-* into custom_targeting.
   return (
     <ins
       className={`${resolvedClass} exo-click-trigger`}
-      data-zoneid={zoneId}
+      data-zoneid={activeZoneId}
       aria-hidden="true"
     />
   );

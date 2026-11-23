@@ -5,6 +5,7 @@ import { getCurrentSite } from "@/lib/site";
 import { listVideos, parseDiscoveryParams } from "@/lib/queries";
 import { pornstarHasVerifiedPissSwallowTag, pornstarHasVideosOnSite } from "@/lib/pornstar-sites";
 import VideoGridWithNativeAd from "@/components/ads/VideoGridWithNativeAd";
+import PageWithSidebarAd from "@/components/ads/PageWithSidebarAd";
 import Filters from "@/components/site/Filters";
 import Pagination from "@/components/site/Pagination";
 import InPageSearch from "@/components/site/InPageSearch";
@@ -90,6 +91,7 @@ export default async function PornstarPage({
   const base = await getSiteBaseUrl();
 
   return (
+    <PageWithSidebarAd site={site}>
     <div>
       <JsonLd
         data={{
@@ -136,5 +138,6 @@ export default async function PornstarPage({
       <VideoGridWithNativeAd videos={videos} site={site} />
       <Pagination page={dp.page} totalPages={totalPages} />
     </div>
+    </PageWithSidebarAd>
   );
 }

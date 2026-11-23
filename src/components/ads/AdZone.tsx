@@ -16,6 +16,7 @@ export default function AdZone({
   exoSecondaryZoneId,
   juicyEnabled = true,
   preferJuicy = false,
+  placement,
 }: {
   zoneId?: string | null;
   className?: string;
@@ -27,6 +28,7 @@ export default function AdZone({
   exoSecondaryZoneId?: string | null;
   juicyEnabled?: boolean;
   preferJuicy?: boolean;
+  placement?: string;
 }) {
   if (!zoneId && !(juicyEnabled && juicyFallbackZoneId)) return null;
 
@@ -41,6 +43,7 @@ export default function AdZone({
       minHeight={minHeight ?? 90}
       label={label}
       className={className}
+      placement={placement}
     />
   );
 }

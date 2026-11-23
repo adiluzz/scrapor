@@ -73,6 +73,7 @@ const patchSchema = z.object({
   exoZoneHome: z.string().max(120).nullable().optional(),
   exoZoneUnderPlayer: z.string().max(120).nullable().optional(),
   exoZoneVideoFullscreen: z.string().max(120).nullable().optional(),
+  exoZoneMobileFullscreen: z.string().max(120).nullable().optional(),
   exoZoneGridNative: z.string().max(120).nullable().optional(),
   exoZoneMobileSticky: z.string().max(120).nullable().optional(),
   exoZonePopunder: z.string().max(120).nullable().optional(),
@@ -80,6 +81,7 @@ const patchSchema = z.object({
   exoZoneInvideo: z.string().max(120).nullable().optional(),
   juicyAdsSiteId: z.string().max(120).nullable().optional(),
   juicyAdsZoneBanner: z.string().max(120).nullable().optional(),
+  juicyAdsZoneMid: z.string().max(120).nullable().optional(),
   juicyAdsZoneNative: z.string().max(120).nullable().optional(),
   juicyAdsZoneVidfloat: z.string().max(120).nullable().optional(),
   juicyAdsZoneInvideo: z.string().max(120).nullable().optional(),
@@ -200,6 +202,8 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
       exoZoneUnderPlayer: d.exoZoneUnderPlayer === undefined ? undefined : d.exoZoneUnderPlayer,
       exoZoneVideoFullscreen:
         d.exoZoneVideoFullscreen === undefined ? undefined : d.exoZoneVideoFullscreen,
+      exoZoneMobileFullscreen:
+        d.exoZoneMobileFullscreen === undefined ? undefined : d.exoZoneMobileFullscreen,
       exoZoneGridNative: d.exoZoneGridNative === undefined ? undefined : d.exoZoneGridNative,
       exoZoneMobileSticky: d.exoZoneMobileSticky === undefined ? undefined : d.exoZoneMobileSticky,
       exoZonePopunder: d.exoZonePopunder === undefined ? undefined : d.exoZonePopunder,
@@ -207,6 +211,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
       exoZoneInvideo: d.exoZoneInvideo === undefined ? undefined : d.exoZoneInvideo,
       juicyAdsSiteId: d.juicyAdsSiteId === undefined ? undefined : d.juicyAdsSiteId,
       juicyAdsZoneBanner: d.juicyAdsZoneBanner === undefined ? undefined : d.juicyAdsZoneBanner,
+      juicyAdsZoneMid: d.juicyAdsZoneMid === undefined ? undefined : d.juicyAdsZoneMid,
       juicyAdsZoneNative: d.juicyAdsZoneNative === undefined ? undefined : d.juicyAdsZoneNative,
       juicyAdsZoneVidfloat:
         d.juicyAdsZoneVidfloat === undefined ? undefined : d.juicyAdsZoneVidfloat,

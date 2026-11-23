@@ -11,89 +11,61 @@ type SiteAds = {
   exoZoneUnderPlayer?: string | null;
   juicyAdsZoneNative?: string | null;
   juicyAdsZoneBanner?: string | null;
+  juicyAdsZoneMid?: string | null;
   adsJuicyEnabled?: boolean;
 };
 
-/**
- * Mid-feed strip: three side-by-side banners, each with Exo → Juicy fallback.
- */
+/** One mid-feed banner. A dedicated zone is required so the in-grid tile is not requested again. */
 function MidBannerRow({
   midZone,
-  secondaryExo,
   juicyBanner,
   juicyOn,
   insClass,
 }: {
   midZone: string;
-  secondaryExo?: string | null;
   juicyBanner?: string | null;
   juicyOn: boolean;
   insClass?: string | null;
 }) {
-  const exoB = secondaryExo && secondaryExo !== midZone ? secondaryExo : midZone;
-
   return (
-    <div className="my-1 w-full">
-      <p className="mb-2 text-center text-[10px] uppercase tracking-wide text-zinc-600">
-        Advertisement
-      </p>
-      <div className="grid grid-cols-1 items-start justify-items-center gap-3 sm:grid-cols-3">
-        <AdZone
-          zoneId={midZone}
-          insClass={insClass}
-          minHeight={90}
-          label={false}
-          juicyFallbackZoneId={juicyBanner}
-          juicyEnabled={juicyOn}
-        />
-        <AdZone
-          zoneId={exoB}
-          insClass={insClass}
-          minHeight={90}
-          label={false}
-          juicyFallbackZoneId={juicyBanner}
-          juicyEnabled={juicyOn}
-        />
-        <AdZone
-          zoneId={midZone}
-          insClass={insClass}
-          minHeight={90}
-          label={false}
-          juicyFallbackZoneId={juicyBanner}
-          juicyEnabled={juicyOn}
-          preferJuicy={juicyOn && Boolean(juicyBanner)}
-        />
-      </div>
+    <div className="my-1 flex w-full justify-center">
+      <AdZone
+        zoneId={midZone}
+        insClass={insClass}
+        minHeight={90}
+        label
+        juicyFallbackZoneId={juicyBanner}
+        juicyEnabled={juicyOn && Boolean(juicyBanner)}
+        placement="mid_feed"
+      />
     </div>
   );
 }
 
 /**
- * Video grid with in-feed 3-banner mid row + card-sized Exo/Juicy tiles.
+ * Video grid with one optional mid-feed banner and card-sized Exo/Juicy tiles.
  */
 export default function VideoGridWithNativeAd({
   videos,
   site,
+  showMid = true,
 }: {
   videos: VideoCardData[];
   site: SiteAds;
+  /** Related grids already sit beside a sidebar, so they keep the tile only. */
+  showMid?: boolean;
 }) {
-  const midZone = site.exoZoneMidList || site.exoZoneGridNative;
-  const showMid = Boolean(midZone) && videos.length >= 6;
+  const midZone = showMid ? site.exoZoneMidList : null;
+  const showMidRow = Boolean(midZone) && videos.length >= 6;
   const juicyOn = site.adsJuicyEnabled !== false;
   const juicyTileZone = site.juicyAdsZoneNative;
   const tileZone = site.exoZoneGridNative;
 
   const midBanner =
-    showMid && midZone ? (
+    showMidRow && midZone ? (
       <MidBannerRow
         midZone={midZone}
-        secondaryExo={
-          site.exoZoneMidList && site.exoZoneGridNative
-            ? site.exoZoneGridNative
-            : null
-        }
-        juicyBanner={site.juicyAdsZoneBanner}
+        juicyBanner={site.juicyAdsZoneMid}
         juicyOn={juicyOn}
         insClass={site.exoInsClass}
       />

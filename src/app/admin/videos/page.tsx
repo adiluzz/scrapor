@@ -11,10 +11,22 @@ export const dynamic = "force-dynamic";
 const PAGE_SIZE = 30;
 
 type SearchParams = Record<string, string | string[] | undefined>;
+type AdminVideoSort = "newest" | "views" | "views-asc";
 
 function param(sp: SearchParams, key: string): string {
   const v = sp[key];
   return (Array.isArray(v) ? v[0] : v) || "";
+}
+
+function parseSort(raw: string): AdminVideoSort {
+  if (raw === "views" || raw === "views-asc") return raw;
+  return "newest";
+}
+
+function videoOrderBy(sort: AdminVideoSort): Prisma.VideoOrderByWithRelationInput[] {
+  if (sort === "views") return [{ viewCount: "desc" }, { createdAt: "desc" }];
+  if (sort === "views-asc") return [{ viewCount: "asc" }, { createdAt: "desc" }];
+  return [{ createdAt: "desc" }];
 }
 
 export default async function AdminVideosPage({
@@ -29,6 +41,7 @@ export default async function AdminVideosPage({
   const orphans = param(sp, "orphans") === "1";
   const page = Math.max(1, parseInt(param(sp, "page") || "1", 10));
   const view = param(sp, "view") === "grid" ? "grid" : "table";
+  const sort = parseSort(param(sp, "sort"));
 
   const sites = await prisma.site.findMany({
     orderBy: [{ networkOrder: "asc" }, { name: "asc" }],
@@ -47,7 +60,7 @@ export default async function AdminVideosPage({
   const [videos, total] = await Promise.all([
     prisma.video.findMany({
       where,
-      orderBy: { createdAt: "desc" },
+      orderBy: videoOrderBy(sort),
       skip: (page - 1) * PAGE_SIZE,
       take: PAGE_SIZE,
       include: {
@@ -64,7 +77,14 @@ export default async function AdminVideosPage({
   if (q) filterQs.set("q", q);
   if (siteId) filterQs.set("siteId", siteId);
   if (orphans) filterQs.set("orphans", "1");
+  if (sort !== "newest") filterQs.set("sort", sort);
   filterQs.set("view", view);
+  const sortLink = (next: AdminVideoSort) => {
+    const qs = new URLSearchParams(filterQs);
+    if (next === "newest") qs.delete("sort");
+    else qs.set("sort", next);
+    return `/admin/videos?${qs.toString()}`;
+  };
   const pageLink = (p: number) => {
     const qs = new URLSearchParams(filterQs);
     qs.set("page", String(p));
@@ -79,6 +99,7 @@ export default async function AdminVideosPage({
 
       <form className="mb-4 flex flex-wrap items-end gap-3" action="/admin/videos">
         <input type="hidden" name="view" value={view} />
+        {sort !== "newest" && <input type="hidden" name="sort" value={sort} />}
         <input
           name="q"
           defaultValue={q}
@@ -112,7 +133,14 @@ export default async function AdminVideosPage({
         </button>
       </form>
 
-      <AdminVideoViewToggle q={q} page={page} view={view} siteId={siteId} orphans={orphans} />
+      <AdminVideoViewToggle
+        q={q}
+        page={page}
+        view={view}
+        siteId={siteId}
+        orphans={orphans}
+        sort={sort}
+      />
 
       {view === "grid" ? (
         <VideoGrid videos={cards} hrefPrefix="/admin/videos" hrefBy="id" />
@@ -124,7 +152,18 @@ export default async function AdminVideosPage({
                 <th className="px-4 py-3">Title</th>
                 <th className="px-4 py-3">Sites</th>
                 <th className="px-4 py-3">Source</th>
-                <th className="px-4 py-3">Views</th>
+                <th className="px-4 py-3">
+                  <Link
+                    href={sortLink(sort === "views" ? "views-asc" : "views")}
+                    className={`inline-flex items-center gap-1 hover:text-white ${
+                      sort === "views" || sort === "views-asc" ? "text-white" : ""
+                    }`}
+                    title={sort === "views" ? "Show fewest views first" : "Show most views first"}
+                  >
+                    Views
+                    {sort === "views" ? " ↓" : sort === "views-asc" ? " ↑" : ""}
+                  </Link>
+                </th>
                 <th className="px-4 py-3">Status</th>
                 <th className="px-4 py-3" />
               </tr>

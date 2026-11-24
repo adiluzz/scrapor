@@ -1,6 +1,10 @@
+/** Monitored studio inbox. Legal pages and the contact form on sharlila.com use this address. */
+export const SHARLILA_CONTACT_EMAIL = "contact@sharlila.com";
+
 /** Address shown on the site so visitors can write to that site. */
 export function siteContactEmail(domain: string): string {
   const host = domain.trim().toLowerCase().replace(/^www\./, "");
+  if (host === "sharlila.com") return SHARLILA_CONTACT_EMAIL;
   return `admin@${host}`;
 }
 

@@ -100,8 +100,8 @@ export default async function StudioStarPage({
               ))}
             </div>
             <div className="mt-12 flex flex-wrap gap-3">
-              <Link href="/contact" className="studio-cta px-6 py-2.5 text-[11px]">
-                Booking & casting
+              <Link href="/contact?intent=collab" className="studio-cta px-6 py-2.5 text-[11px]">
+                Book a Collab
               </Link>
               <Link href="/team" className="studio-ghost px-6 py-2.5 text-[11px]">
                 Full roster

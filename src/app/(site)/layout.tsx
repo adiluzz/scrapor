@@ -18,6 +18,7 @@ import GoogleAnalytics from "@/components/site/GoogleAnalytics";
 import BrandStyle from "@/components/brand/BrandStyle";
 import MobileStickyAd from "@/components/ads/MobileStickyAd";
 import { listPopularPornstars, listPopularTags } from "@/lib/popular-links";
+import { siteContactEmail } from "@/lib/legal-contact";
 
 const studioDisplay = Cormorant_Garamond({
   subsets: ["latin"],
@@ -112,6 +113,7 @@ export default async function SiteLayout({ children }: { children: React.ReactNo
         siteName={site.name}
         siteId={site.id}
         isStudio={isStudio}
+        contactEmail={isStudio ? siteContactEmail(site.domain) : undefined}
         popularTags={popularTags}
         popularPornstars={popularPornstars}
       />

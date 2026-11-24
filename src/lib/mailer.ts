@@ -31,6 +31,7 @@ export async function sendMail(opts: {
   text?: string;
   /** Override From display, e.g. `FBB Tube <office@…>`. */
   from?: string;
+  replyTo?: string;
   brandName?: string;
 }): Promise<boolean> {
   const tx = getTransport();
@@ -42,6 +43,7 @@ export async function sendMail(opts: {
     await tx.sendMail({
       from: opts.from || FROM,
       to: opts.to,
+      replyTo: opts.replyTo,
       subject: opts.subject,
       html: opts.html,
       text: opts.text,
@@ -169,5 +171,42 @@ export async function sendAdminNewApplication(opts: {
       brand
     ),
     text: `New creator application from ${opts.displayName} (${opts.applicantEmail}) on ${opts.siteDomain}. Review: ${opts.reviewUrl}`,
+  });
+}
+
+function escapeHtml(value: string): string {
+  return value
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
+}
+
+/** Inquiry from the Sharlila contact form, delivered to the monitored studio inbox. */
+export async function sendStudioInquiry(opts: {
+  to: string;
+  name: string;
+  email: string;
+  intentLabel: string;
+  message: string;
+  brandName: string;
+  from?: string;
+}) {
+  const name = escapeHtml(opts.name);
+  const email = escapeHtml(opts.email);
+  const intent = escapeHtml(opts.intentLabel);
+  const message = escapeHtml(opts.message).replace(/\n/g, "<br>");
+  return sendMail({
+    to: opts.to,
+    replyTo: opts.email,
+    from: opts.from,
+    subject: `Studio inquiry: ${opts.intentLabel} — ${opts.name}`,
+    html: wrap(
+      "New studio inquiry",
+      `<p><strong>${name}</strong> (${email}) wrote about <strong>${intent}</strong>.</p>
+       <p>${message}</p>`,
+      opts.brandName
+    ),
+    text: `${opts.name} <${opts.email}>\n${opts.intentLabel}\n\n${opts.message}`,
   });
 }

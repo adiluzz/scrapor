@@ -1,13 +1,16 @@
 import Link from "next/link";
 import CookieSettings from "@/components/site/CookieSettings";
 import { listStudioTeam } from "@/lib/studio-talent";
+import { STUDIO_TUBES } from "@/lib/studio-copy";
 
 export default async function StudioFooter({
   siteName,
   siteId,
+  contactEmail,
 }: {
   siteName: string;
   siteId?: string;
+  contactEmail: string;
 }) {
   const talent = siteId ? (await listStudioTeam(siteId)).slice(0, 8) : [];
 
@@ -17,8 +20,11 @@ export default async function StudioFooter({
         <div className="lg:col-span-4">
           <p className="font-display text-3xl text-white">{siteName}</p>
           <p className="mt-3 max-w-sm text-sm leading-relaxed text-zinc-500">
-            Adult film productions. House talent. A network of specialty sites.
+            An independent adult production house and digital network for creators.
           </p>
+          <a href={`mailto:${contactEmail}`} className="mt-4 inline-block text-sm text-zinc-400 hover:text-white">
+            {contactEmail}
+          </a>
         </div>
         <div className="lg:col-span-3">
           <p className="studio-kicker text-zinc-500">Studio</p>
@@ -43,6 +49,13 @@ export default async function StudioFooter({
                 Our Network
               </Link>
             </li>
+            {STUDIO_TUBES.map((tube) => (
+              <li key={tube.domain}>
+                <a href={tube.href} target="_blank" rel="noopener noreferrer" className="hover:text-white">
+                  {tube.domain}
+                </a>
+              </li>
+            ))}
           </ul>
         </div>
         <div className="lg:col-span-5">

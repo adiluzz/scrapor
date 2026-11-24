@@ -13,7 +13,7 @@ export async function generateMetadata(): Promise<Metadata> {
   const site = await getCurrentSite();
   if (site.kind !== "STUDIO") return { title: "Team" };
   const ogTitle = `Talent · ${site.name}`;
-  const description = `The ${site.name} house roster — original Israeli and international contracted talent.`;
+  const description = `Independent performers collaborating with ${site.name}. Every person on the roster is 18 or older.`;
   return {
     title: pageTitleMeta(ogTitle, site.name),
     description,
@@ -53,8 +53,8 @@ export default async function StudioTeamPage() {
         <p className="studio-kicker text-brand-300/80">The company</p>
         <h1 className="font-display mt-4 text-5xl text-white sm:text-7xl">Talent</h1>
         <p className="mt-5 max-w-2xl text-base leading-relaxed text-zinc-400">
-          A small house roster. Faces the industry has not already spent — signed in Israel
-          and brought in from Europe and North America. Every performer is 18 or older.
+          Independent performers we collaborate with. Everyone on this roster is 18 or older,
+          and every set is PASS/TTS tested with 2257 records on file.
         </p>
         <div className="mt-12">
           <StudioTalentFilter team={team} />

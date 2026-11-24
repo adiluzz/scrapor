@@ -41,11 +41,11 @@ export default function StudioMobileNav() {
               </Link>
             ))}
             <Link
-              href="/contact"
+              href="/contact?intent=collab"
               onClick={() => setOpen(false)}
               className="studio-cta mt-2 inline-flex items-center justify-center px-5 py-2.5 text-[11px]"
             >
-              Work with us
+              Book a Collab
             </Link>
           </nav>
         </div>

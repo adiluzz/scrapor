@@ -211,7 +211,7 @@ async function main() {
     name: "Sharlila",
     kind: "STUDIO",
     slug: "sharlila",
-    tagline: "Cinematic adult productions. House talent. A network of specialty rooms.",
+    tagline: "Built like a feature. Produced for independent creators.",
     logoPath: "/brand/sharlila-lockup.png",
     logoKey: "sharlila-mark",
     primaryColor: "#C4A574",
@@ -220,7 +220,7 @@ async function main() {
     networkOrder: 2,
     seoTitle: "Sharlila Productions — Adult Film Studio",
     seoDescription:
-      "Sharlila is a cinematic adult film studio. Meet the house talent, contact the production office, and explore the specialty network.",
+      "Sharlila Productions is an independent adult production house and digital network. We shoot intimate, cinematic scenes—champagne light, long takes, and genuine chemistry—and distribute creator-owned content across our high-traffic specialty platforms.",
     seoKeywords: JSON.stringify([
       "sharlila",
       "adult studio",

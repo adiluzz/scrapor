@@ -8,19 +8,27 @@ export default function Footer({
   siteName,
   siteId,
   isStudio = false,
+  contactEmail,
   popularTags = [],
   popularPornstars = [],
 }: {
   siteName: string;
   siteId?: string;
   isStudio?: boolean;
+  contactEmail?: string;
   popularTags?: PopularLink[];
   popularPornstars?: PopularLink[];
 }) {
   const showHubs = !isStudio && (popularTags.length > 0 || popularPornstars.length > 0);
 
   if (isStudio) {
-    return <StudioFooter siteName={siteName} siteId={siteId} />;
+    return (
+      <StudioFooter
+        siteName={siteName}
+        siteId={siteId}
+        contactEmail={contactEmail || "contact@sharlila.com"}
+      />
+    );
   }
 
   return (

@@ -22,6 +22,7 @@ import Filters from "@/components/site/Filters";
 import Pagination from "@/components/site/Pagination";
 import StudioHome from "@/components/studio/StudioHome";
 import { listFeaturedStudioTeam } from "@/lib/studio-talent";
+import { STUDIO_SUBCOPY } from "@/lib/studio-copy";
 
 export const dynamic = "force-dynamic";
 
@@ -61,7 +62,7 @@ export async function generateMetadata({
   }
 
   const title = siteHomeTitle(site);
-  const description = siteHomeDescription(site);
+  const description = site.kind === "STUDIO" ? STUDIO_SUBCOPY : siteHomeDescription(site);
   return {
     title,
     description,

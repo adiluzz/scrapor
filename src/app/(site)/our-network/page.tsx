@@ -4,6 +4,7 @@ import { getCurrentSite, listNetworkSites } from "@/lib/site";
 import { buildOpenGraph, keywordsMeta, pageTitleMeta } from "@/lib/seo";
 import { LogoMark } from "@/components/brand/Logo";
 import StudioFrame from "@/components/studio/StudioFrame";
+import { STUDIO_TUBES } from "@/lib/studio-copy";
 
 export async function generateMetadata(): Promise<Metadata> {
   const site = await getCurrentSite();
@@ -51,6 +52,26 @@ export default async function OurNetworkPage() {
         </h1>
         <p className={`mt-4 max-w-xl text-base text-zinc-400 sm:text-lg ${isStudio ? "" : "mx-auto"}`}>
           Specialty sites under one roof — each with its own catalog, brand, and vibe.
+          {isStudio ? (
+            <>
+              {" "}
+              Visit{" "}
+              {STUDIO_TUBES.map((tube, index) => (
+                <span key={tube.domain}>
+                  {index > 0 ? " and " : null}
+                  <a
+                    href={tube.href}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-zinc-200 underline decoration-white/20 underline-offset-4 hover:text-white"
+                  >
+                    {tube.domain}
+                  </a>
+                </span>
+              ))}
+              .
+            </>
+          ) : null}
         </p>
       </section>
 
@@ -95,7 +116,9 @@ export default async function OurNetworkPage() {
                     ) : null}
                   </h2>
                   <p className="mt-1 text-sm text-zinc-400">
-                    {s.tagline || s.seoDescription || s.domain}
+                    {s.domain === "sharlila.com"
+                      ? "Independent adult production house and digital network for creators."
+                      : s.tagline || s.seoDescription || s.domain}
                   </p>
                   <p className="mt-3 text-xs font-medium uppercase tracking-wide" style={{ color: s.primaryColor }}>
                     {s.domain}

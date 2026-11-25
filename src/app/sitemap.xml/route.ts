@@ -17,8 +17,8 @@ const CACHE_HEADER = "public, max-age=3600, s-maxage=21600, stale-while-revalida
  * Sitemap index — points at small per-content-type sitemaps under /sitemaps/
  * instead of one giant file. Videos are chunked (1,000 URLs each, stable
  * chunk membership: ordered by createdAt ascending so old chunks never move).
- * Only READY videos with a full HLS playlist or MP4 are listed — hover
- * previews are not video files.
+ * Only READY videos with a packaged file are listed. Entries point at the
+ * player page, not at a media file.
  */
 export async function GET() {
   const h = await headers();

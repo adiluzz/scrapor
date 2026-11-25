@@ -20,7 +20,7 @@ import {
   videoPageDescription,
   videoPageTitle,
 } from "@/lib/seo";
-import { publicVideoContentUrl, publicVideoThumbnailUrl } from "@/lib/video-sitemap";
+import { publicVideoPlayerUrl, publicVideoThumbnailUrl } from "@/lib/video-sitemap";
 import AdZone from "@/components/ads/AdZone";
 import ExoFullscreenOverlay from "@/components/ads/ExoFullscreenOverlay";
 import ExoPopunder from "@/components/ads/ExoPopunder";
@@ -171,9 +171,9 @@ export default async function VideoPage({
           title: video.title,
           description: video.description,
           thumbnailUrl: publicVideoThumbnailUrl(base, video.id),
-          contentUrl:
+          embedUrl:
             !adminPreview && !video.isDeleted && video.status === "READY"
-              ? publicVideoContentUrl(base, video)
+              ? publicVideoPlayerUrl(base, video.id)
               : null,
           uploadDate: (video.sourceUploadDate || video.createdAt).toISOString(),
           durationIso: isoDuration(video.durationSec),

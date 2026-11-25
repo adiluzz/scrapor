@@ -1,10 +1,9 @@
 import { NextResponse } from "next/server";
 import { existsSync, createReadStream, statSync } from "fs";
 import { join } from "path";
-import { GetObjectCommand } from "@aws-sdk/client-s3";
 import { prisma } from "@/lib/db";
 import { getSiteIdForAuth } from "@/lib/site";
-import { isS3Configured, s3, S3_BUCKET, s3Keys } from "@/lib/storage";
+import { isS3Configured } from "@/lib/storage";
 import { guardApiRoute } from "@/lib/admin-guard";
 import { publicOnSite } from "@/lib/publication";
 
@@ -17,28 +16,6 @@ function parseRange(range: string | null, size: number): { start: number; end: n
   const end = endStr ? parseInt(endStr, 10) : size - 1;
   if (!Number.isFinite(start) || start < 0 || end < start || end >= size) return null;
   return { start, end };
-}
-
-async function streamS3Key(key: string, request: Request): Promise<NextResponse> {
-  const range = request.headers.get("range");
-  const cmd = new GetObjectCommand({
-    Bucket: S3_BUCKET,
-    Key: key,
-    ...(range ? { Range: range } : {}),
-  });
-  const obj = await s3.send(cmd);
-  if (!obj.Body) return NextResponse.json({ error: "Empty object" }, { status: 404 });
-
-  const headers = new Headers({
-    "Content-Type": "video/mp4",
-    "Accept-Ranges": "bytes",
-    "Cache-Control": "public, max-age=3600",
-  });
-  if (obj.ContentLength != null) headers.set("Content-Length", String(obj.ContentLength));
-  if (obj.ContentRange) headers.set("Content-Range", obj.ContentRange);
-
-  const status = range && obj.ContentRange ? 206 : 200;
-  return new NextResponse(obj.Body.transformToWebStream(), { status, headers });
 }
 
 function streamLocalFile(path: string, request: Request): NextResponse {
@@ -73,8 +50,8 @@ function streamLocalFile(path: string, request: Request): NextResponse {
 }
 
 /**
- * Same-origin hover preview for grid cards (legacy + v2 MP4).
- * Streams from S3 with Range support so long legacy montages still play.
+ * Local-dev hover preview only. Production cards use a signed CloudFront URL,
+ * and this route does not proxy S3.
  */
 export async function GET(
   request: Request,
@@ -96,27 +73,20 @@ export async function GET(
       status: "READY",
       sites: publicOnSite(siteId),
     },
-    select: { id: true, siteId: true, s3PreviewKey: true },
+    select: { id: true },
   });
   if (!video) {
     return NextResponse.json({ error: "Not found" }, { status: 404 });
   }
 
+  // Production hover previews are signed CloudFront URLs. Do not proxy the
+  // clip (or a full MP4) through this process.
   if (isS3Configured()) {
-    if (video.s3PreviewKey) {
-      try {
-        return await streamS3Key(s3Keys.preview(video.siteId, video.id), request);
-      } catch {
-        return NextResponse.json({ error: "Preview missing" }, { status: 404 });
-      }
-    }
-    return NextResponse.json({ error: "Preview missing" }, { status: 404 });
+    return NextResponse.json({ error: "Not found" }, { status: 404 });
   }
 
-  for (const name of ["preview.mp4", "video.mp4"]) {
-    const path = join(DOWNLOADS_DIR, id, name);
-    if (existsSync(path)) return streamLocalFile(path, request);
-  }
+  const path = join(DOWNLOADS_DIR, id, "preview.mp4");
+  if (existsSync(path)) return streamLocalFile(path, request);
 
   return NextResponse.json({ error: "Preview missing" }, { status: 404 });
 }

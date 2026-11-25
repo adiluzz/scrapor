@@ -343,7 +343,8 @@ export function videoObjectJsonLd(input: {
   title: string;
   description?: string | null;
   thumbnailUrl?: string | null;
-  contentUrl?: string | null;
+  /** Player page. Not a direct media file — playback bytes come from CloudFront. */
+  embedUrl?: string | null;
   uploadDate: string;
   durationIso?: string;
   pageUrl: string;
@@ -363,7 +364,7 @@ export function videoObjectJsonLd(input: {
       input.description ||
       `Watch ${input.title} on ${input.siteName}.`,
     thumbnailUrl: input.thumbnailUrl || undefined,
-    contentUrl: input.contentUrl || undefined,
+    embedUrl: input.embedUrl || undefined,
     uploadDate: input.uploadDate,
     duration: input.durationIso,
     url: input.pageUrl,

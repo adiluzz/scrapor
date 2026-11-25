@@ -6,11 +6,6 @@ import { publicOnSite } from "@/lib/publication";
 /** Google video sitemap duration must be in seconds, at most 8 hours. */
 const MAX_SITEMAP_DURATION_SEC = 28_800;
 
-/** MPEG-TS segment names produced by the VOD packager (`seg_0000.ts`). */
-const HLS_SEGMENT_FILE = /^seg_\d{1,6}\.ts$/;
-
-export const HLS_MASTER_FILE = "master.m3u8";
-
 export function escapeXml(text: string): string {
   return text
     .replace(/&/g, "&amp;")
@@ -35,67 +30,16 @@ export function publicVideoThumbnailUrl(base: string, videoId: string): string {
   return `${base}/media/thumbnail/${videoId}`;
 }
 
-export type PublicVideoMedia = {
-  id: string;
-  /** Full VOD HLS playlist. Preferred content URL after the HLS cutover. */
-  s3HlsMasterKey?: string | null;
-  /** Progressive MP4, when it has not been purged in favor of HLS. */
-  s3VideoKey?: string | null;
-};
-
 /**
- * Stable crawler URL for the full video file.
- * HLS master when the video has been packaged; otherwise the progressive MP4.
- * Never the hover preview — that clip is a few seconds and fails Google's
- * duration check against the real video.
+ * Stable player URL for video sitemaps. Google accepts this instead of a
+ * direct file URL. The page plays through CloudFront; it does not proxy bytes.
  */
-export function publicVideoContentUrl(base: string, video: PublicVideoMedia): string | null {
+export function publicVideoPlayerUrl(base: string, videoId: string): string {
   const root = base.replace(/\/$/, "");
-  const id = encodeURIComponent(video.id);
-  if (video.s3HlsMasterKey) return `${root}/media/hls/${id}/${HLS_MASTER_FILE}`;
-  if (video.s3VideoKey) return `${root}/media/video/${id}/video.mp4`;
-  return null;
+  return `${root}/embed/${encodeURIComponent(videoId)}`;
 }
 
-export function isHlsSegmentFile(name: string): boolean {
-  return HLS_SEGMENT_FILE.test(name);
-}
-
-export function isHlsMasterFile(name: string): boolean {
-  return name === HLS_MASTER_FILE;
-}
-
-/**
- * Point every segment in a VOD media playlist at a stable same-origin URL.
- * Stored playlists use bare `seg_NNNN.ts` names. Returns null when a media
- * line isn't one of those segments, so we never publish a partial playlist.
- */
-export function rewriteHlsPlaylistToOrigin(
-  playlist: string,
-  origin: string,
-  videoId: string
-): string | null {
-  if (!playlist.startsWith("#EXTM3U") || !playlist.includes("#EXT-X-ENDLIST")) return null;
-  const root = origin.replace(/\/$/, "");
-  const id = encodeURIComponent(videoId);
-  const lines: string[] = [];
-  let segments = 0;
-  for (const line of playlist.split(/\r?\n/)) {
-    const trimmed = line.trim();
-    if (!trimmed || trimmed.startsWith("#")) {
-      lines.push(line);
-      continue;
-    }
-    const name = trimmed.split("?")[0].split("/").pop() || "";
-    if (!isHlsSegmentFile(name)) return null;
-    segments += 1;
-    lines.push(`${root}/media/hls/${id}/${name}`);
-  }
-  if (segments === 0) return null;
-  return lines.join("\n");
-}
-
-/** READY videos published on a site that have a full file Google can fetch. */
+/** READY videos published on a site that have a packaged file. */
 export function sitemapPublishedVideoWhere(siteId: string): Prisma.VideoWhereInput {
   return {
     sites: publicOnSite(siteId),
@@ -114,8 +58,8 @@ export type VideoSitemapEntry = {
   thumbnailUrl: string;
   title: string;
   description: string;
-  /** Direct link to the full video (HLS master or MP4). Must differ from pageUrl. */
-  contentUrl: string;
+  /** Player page for this video. Must differ from pageUrl. Not a media file. */
+  playerUrl: string;
   durationSec?: number | null;
   /** Real source upload date; omitted from the XML when unknown (never fake it with scrape time). */
   publicationDate?: Date | null;
@@ -138,7 +82,7 @@ export function renderVideoSitemapUrl(entry: VideoSitemapEntry): string {
   lines.push(`      <video:thumbnail_loc>${escapeXml(entry.thumbnailUrl)}</video:thumbnail_loc>`);
   lines.push(`      <video:title>${escapeXml(entry.title)}</video:title>`);
   lines.push(`      <video:description>${escapeXml(entry.description)}</video:description>`);
-  lines.push(`      <video:content_loc>${escapeXml(entry.contentUrl)}</video:content_loc>`);
+  lines.push(`      <video:player_loc>${escapeXml(entry.playerUrl)}</video:player_loc>`);
 
   if (
     entry.durationSec &&
@@ -210,8 +154,8 @@ export function renderSitemapIndexXml(
 export const SITEMAP_VIDEO_CHUNK_SIZE = 1000;
 
 /**
- * content_loc switched from hover previews to the full HLS/MP4 file.
+ * Sitemap stopped publishing direct media files and now lists a player URL.
  * Older chunks keep this lastmod so Google refetches them once; newer
  * videos still move the newest chunk's lastmod forward.
  */
-export const SITEMAP_MEDIA_REVISION = new Date("2026-10-18T12:00:00.000Z");
+export const SITEMAP_MEDIA_REVISION = new Date("2026-11-25T07:00:00.000Z");

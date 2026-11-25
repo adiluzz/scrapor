@@ -6,7 +6,7 @@ import { pornstarHasVideosOnSite } from "@/lib/pornstar-sites";
 import { listStudioTeam } from "@/lib/studio-talent";
 import { videoPageDescription } from "@/lib/seo";
 import {
-  publicVideoContentUrl,
+  publicVideoPlayerUrl,
   publicVideoThumbnailUrl,
   renderSitemapXml,
   renderUrlOnlySitemapEntry,
@@ -72,8 +72,6 @@ async function videosSitemap(base: string, site: Site, chunk: number): Promise<N
       sourceUploadDate: true,
       createdAt: true,
       viewCount: true,
-      s3HlsMasterKey: true,
-      s3VideoKey: true,
       tags: { include: { tag: { select: { name: true } } } },
     },
     // Ascending keeps chunk membership stable: new videos only append to the
@@ -86,15 +84,14 @@ async function videosSitemap(base: string, site: Site, chunk: number): Promise<N
 
   const body = videos
     .flatMap((video) => {
-      const contentUrl = publicVideoContentUrl(base, video);
-      if (!contentUrl) return [];
+      const playerUrl = publicVideoPlayerUrl(base, video.id);
       const pageUrl = `${base}/videos/${video.slug}`;
       const fallbackDescription = videoPageDescription(video.title, site, video.description);
       return [
         renderVideoSitemapUrl({
           pageUrl,
           thumbnailUrl: publicVideoThumbnailUrl(base, video.id),
-          contentUrl,
+          playerUrl,
           title: sitemapVideoTitle(video.title),
           description: sitemapVideoDescription(video.description || "", fallbackDescription),
           durationSec: video.durationSec,

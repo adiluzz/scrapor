@@ -3,7 +3,7 @@
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 import TagBadge from "@/components/site/TagBadge";
-import PornstarPicker from "@/components/admin/PornstarPicker";
+import PornstarLinkPicker, { type PornstarLink } from "@/components/admin/PornstarLinkPicker";
 import {
   tagListIncludesVerifiedName,
   toggleVerifiedTagInList,
@@ -46,7 +46,7 @@ export default function AdminVideoEditor({ videoId }: { videoId: string }) {
   const router = useRouter();
   const [form, setForm] = useState<VideoForm | null>(null);
   const [tagsText, setTagsText] = useState("");
-  const [pornstars, setPornstars] = useState<string[]>([]);
+  const [pornstars, setPornstars] = useState<PornstarLink[]>([]);
   const [categoriesText, setCategoriesText] = useState("");
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -55,7 +55,7 @@ export default function AdminVideoEditor({ videoId }: { videoId: string }) {
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
   const [taxonomyTags, setTaxonomyTags] = useState<string[]>([]);
-  const [taxonomyStars, setTaxonomyStars] = useState<string[]>([]);
+  const [taxonomyStars, setTaxonomyStars] = useState<PornstarLink[]>([]);
   const [taxonomyCategories, setTaxonomyCategories] = useState<string[]>([]);
   const [verifiedTagDefs, setVerifiedTagDefs] = useState<VerifiedTagDefinition[]>([]);
   const [sitePrimaryColor, setSitePrimaryColor] = useState<string | null>(null);
@@ -94,10 +94,23 @@ export default function AdminVideoEditor({ videoId }: { videoId: string }) {
         hasVideoSource: Boolean(v.hasVideoSource),
       });
       setTagsText((v.tags ?? []).join(", "));
-      setPornstars(v.pornstars ?? []);
+      setPornstars(
+        (v.pornstarLinks ?? []).map((p: PornstarLink) => ({
+          id: p.id,
+          name: p.name,
+          slug: p.slug,
+        }))
+      );
       setCategoriesText((v.categories ?? []).join(", "));
       setTaxonomyTags((taxData.tags ?? []).map((t: { name: string }) => t.name));
-      setTaxonomyStars((taxData.pornstars ?? []).map((p: { name: string }) => p.name));
+      setTaxonomyStars(
+        (taxData.pornstars ?? []).map((p: PornstarLink) => ({
+          id: p.id,
+          name: p.name,
+          slug: p.slug,
+          videoCount: p.videoCount,
+        }))
+      );
       setTaxonomyCategories((taxData.categories ?? []).map((c: { name: string }) => c.name));
       setVerifiedTagDefs(VERIFIED_TAG_DEFINITIONS);
       const fbbSite = (v.sites ?? []).find((s: { domain: string }) => s.domain === "fbbtube.com");
@@ -182,7 +195,9 @@ export default function AdminVideoEditor({ videoId }: { videoId: string }) {
         status: form.status,
         isDeleted: form.isDeleted,
         tags: parseList(tagsText),
-        pornstars,
+        pornstarLinks: pornstars.map((star) =>
+          star.id ? { id: star.id } : { name: star.name }
+        ),
         categories: parseList(categoriesText),
       };
       if (form.sourceUploadDate) {
@@ -428,11 +443,16 @@ export default function AdminVideoEditor({ videoId }: { videoId: string }) {
 
         <div className="block text-sm text-zinc-300 sm:col-span-2">
           <span className="mb-1 block">Pornstars</span>
-          <PornstarPicker
+          <PornstarLinkPicker
             value={pornstars}
             onChange={setPornstars}
             suggestions={taxonomyStars}
           />
+          <p className="mt-2 text-xs text-zinc-600">
+            Saving links the pornstar with that name. The public URL slug is not used to match
+            anyone, and an existing slug is left as it is. A new profile is created only when
+            the name does not exist yet.
+          </p>
         </div>
       </div>
 

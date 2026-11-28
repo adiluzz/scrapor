@@ -276,8 +276,8 @@ model Pornstar {
   id               String          @id @default(cuid())
   siteId           String
   site             Site            @relation(fields: [siteId], references: [id])
-  name             String
-  slug             String
+  name             String // unique per site, case-insensitive; assignment matches this, never the slug
+  slug             String // public URL only. Assignment does not look up or rewrite this.
   bio              String?
   s3Image          String?
   tpdbId           String?

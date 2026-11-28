@@ -9,6 +9,7 @@ export async function GET(request: Request) {
   const url = new URL(request.url);
   const q = (url.searchParams.get("q") || "").trim();
   const siteId = (url.searchParams.get("siteId") || "").trim() || undefined;
+  const pornstarId = (url.searchParams.get("pornstarId") || "").trim() || undefined;
   const limit = Math.min(30, Math.max(1, parseInt(url.searchParams.get("limit") || "20", 10)));
 
   if (q.length < 2) {
@@ -17,11 +18,16 @@ export async function GET(request: Request) {
 
   const videos = await prisma.video.findMany({
     where: {
-      title: { contains: q, mode: "insensitive" },
       isDeleted: false,
-      ...(siteId
-        ? { OR: [{ siteId }, { sites: { some: { siteId } } }] }
-        : {}),
+      AND: [
+        {
+          OR: [
+            { title: { contains: q, mode: "insensitive" } },
+            { slug: { contains: q, mode: "insensitive" } },
+          ],
+        },
+        ...(siteId ? [{ OR: [{ siteId }, { sites: { some: { siteId } } }] }] : []),
+      ],
     },
     orderBy: { viewCount: "desc" },
     take: limit,
@@ -32,8 +38,21 @@ export async function GET(request: Request) {
       durationSec: true,
       status: true,
       isDeleted: true,
+      ...(pornstarId
+        ? { pornstars: { where: { pornstarId }, select: { pornstarId: true } } }
+        : {}),
     },
   });
 
-  return NextResponse.json({ videos });
+  return NextResponse.json({
+    videos: videos.map((video) => {
+      const { pornstars, ...rest } = video as typeof video & {
+        pornstars?: { pornstarId: string }[];
+      };
+      return {
+        ...rest,
+        ...(pornstarId ? { alreadyLinked: (pornstars?.length ?? 0) > 0 } : {}),
+      };
+    }),
+  });
 }

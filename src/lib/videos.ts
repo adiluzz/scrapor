@@ -1,6 +1,7 @@
 import { prisma } from "@/lib/db";
 import { enrichPornstarFromTpdbInBackground } from "@/lib/enrich-pornstar-tpdb";
-import { slugify } from "@/lib/slug";
+import { logger } from "@/lib/logger";
+import { slugify, slugifyUnique } from "@/lib/slug";
 import {
   getVerifiedTagDefinition,
   PISS_SWALLOW_VERIFIED_NAME,
@@ -72,38 +73,154 @@ export async function linkPissSwallowVerifiedTag(siteId: string, videoId: string
   await prisma.videoTag.create({ data: { videoId, tagId: tag.id } }).catch(() => {});
 }
 
+/** Thrown when a name matches more than one stored pornstar. Names are unique. */
+export class AmbiguousPornstarError extends Error {
+  readonly status = 409;
+  constructor(name: string) {
+    super(`More than one pornstar is named "${name}". Names must be unique.`);
+    this.name = "AmbiguousPornstarError";
+  }
+}
+
+function isUniqueConflict(err: unknown): boolean {
+  return (
+    typeof err === "object" &&
+    err !== null &&
+    "code" in err &&
+    (err as { code?: string }).code === "P2002"
+  );
+}
+
+/** A public URL for a new pornstar. Never reads or rewrites an existing slug. */
+async function allocatePornstarSlug(siteId: string, name: string): Promise<string> {
+  const base = slugify(name) || "pornstar";
+  for (const slug of [base, slugifyUnique(name), slugifyUnique(name)]) {
+    const taken = await prisma.pornstar.findUnique({
+      where: { siteId_slug: { siteId, slug } },
+      select: { id: true },
+    });
+    if (!taken) return slug;
+  }
+  return slugifyUnique(name);
+}
+
+/**
+ * Link a pornstar by name only. The slug is not consulted.
+ * An existing name is reused and its slug is left unchanged.
+ * A profile is created only when that name does not exist yet.
+ */
+async function resolvePornstarByName(
+  siteId: string,
+  name: string,
+  onAmbiguous: "throw" | "skip"
+): Promise<{ id: string; created: boolean } | null> {
+  const named = await prisma.pornstar.findMany({
+    where: { siteId, name: { equals: name, mode: "insensitive" } },
+    select: { id: true },
+  });
+  if (named.length === 1) return { id: named[0].id, created: false };
+  if (named.length > 1) {
+    if (onAmbiguous === "throw") throw new AmbiguousPornstarError(name);
+    logger.warn({ siteId, name, count: named.length }, "duplicate pornstar name; skipped");
+    return null;
+  }
+
+  const slug = await allocatePornstarSlug(siteId, name);
+  try {
+    const star = await prisma.pornstar.create({ data: { siteId, slug, name } });
+    return { id: star.id, created: true };
+  } catch (err) {
+    if (!isUniqueConflict(err)) throw err;
+    const existing = await prisma.pornstar.findFirst({
+      where: { siteId, name: { equals: name, mode: "insensitive" } },
+      select: { id: true },
+    });
+    if (existing) return { id: existing.id, created: false };
+    const retrySlug = await allocatePornstarSlug(siteId, name);
+    const star = await prisma.pornstar.create({ data: { siteId, slug: retrySlug, name } });
+    return { id: star.id, created: true };
+  }
+}
+
 /** Upsert a Pornstar for a site and link it to a video. */
 export async function linkPornstars(siteId: string, videoId: string, names: string[]) {
   for (const raw of names) {
     const name = raw.trim();
     if (!name) continue;
-    const slug = slugify(name);
-    if (!slug) continue;
-    const existing = await prisma.pornstar.findUnique({
-      where: { siteId_slug: { siteId, slug } },
-      select: { id: true },
-    });
-    let starId: string;
-    let created = false;
-    if (existing) {
-      await prisma.pornstar.update({
-        where: { id: existing.id },
-        data: { name },
-      });
-      starId = existing.id;
-    } else {
-      const star = await prisma.pornstar.create({
-        data: { siteId, slug, name },
-      });
-      starId = star.id;
-      created = true;
-    }
+    const resolved = await resolvePornstarByName(siteId, name, "skip");
+    if (!resolved) continue;
     await prisma.videoPornstar
-      .create({ data: { videoId, pornstarId: starId } })
+      .create({ data: { videoId, pornstarId: resolved.id } })
       .catch(() => {});
-    // Auto-enrich new pornstars from ThePornDB (profile + image).
-    if (created) enrichPornstarFromTpdbInBackground(starId);
+    if (resolved.created) enrichPornstarFromTpdbInBackground(resolved.id);
   }
+}
+
+export type PornstarLinkInput = { id?: string; name?: string };
+
+/**
+ * Replace a video's pornstar links.
+ * Existing profiles are linked by id. A name creates a profile only when that
+ * name is not already stored on the site.
+ */
+export async function replaceVideoPornstars(
+  siteId: string,
+  videoId: string,
+  links: PornstarLinkInput[]
+): Promise<void> {
+  const starIds: string[] = [];
+  for (const link of links) {
+    const id = link.id?.trim();
+    if (id) {
+      const star = await prisma.pornstar.findUnique({
+        where: { id },
+        select: { id: true },
+      });
+      if (!star) throw new Error("Pornstar not found");
+      starIds.push(star.id);
+      continue;
+    }
+    const name = link.name?.trim();
+    if (!name) continue;
+    const resolved = await resolvePornstarByName(siteId, name, "throw");
+    if (resolved) {
+      starIds.push(resolved.id);
+      if (resolved.created) enrichPornstarFromTpdbInBackground(resolved.id);
+    }
+  }
+
+  const unique = [...new Set(starIds)];
+  await prisma.$transaction([
+    prisma.videoPornstar.deleteMany({ where: { videoId } }),
+    ...(unique.length
+      ? [
+          prisma.videoPornstar.createMany({
+            data: unique.map((pornstarId) => ({ videoId, pornstarId })),
+          }),
+        ]
+      : []),
+  ]);
+}
+
+/** Link one existing pornstar to many videos. Does not create a pornstar. */
+export async function linkPornstarToVideos(pornstarId: string, videoIds: string[]) {
+  const ids = [...new Set(videoIds.map((id) => id.trim()).filter(Boolean))];
+  const videos = await prisma.video.findMany({
+    where: { id: { in: ids } },
+    select: { id: true },
+  });
+  const foundIds = videos.map((video) => video.id);
+  const created = foundIds.length
+    ? await prisma.videoPornstar.createMany({
+        data: foundIds.map((videoId) => ({ videoId, pornstarId })),
+        skipDuplicates: true,
+      })
+    : { count: 0 };
+  return {
+    linked: created.count,
+    alreadyLinked: foundIds.length - created.count,
+    missing: ids.length - foundIds.length,
+  };
 }
 
 /** Upsert Tags for a site and link them to a video. */

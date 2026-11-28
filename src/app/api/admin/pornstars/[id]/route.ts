@@ -1,9 +1,11 @@
+import { rm } from "fs/promises";
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { prisma } from "@/lib/db";
 import { guardAdmin } from "@/lib/admin-guard";
-import { pornstarImageUrl } from "@/lib/pornstar-image";
-import { slugify } from "@/lib/slug";
+import { logger } from "@/lib/logger";
+import { localPornstarImagePath, pornstarImageUrl } from "@/lib/pornstar-image";
+import { deleteObject, isS3Configured } from "@/lib/storage";
 
 function serializePornstar(star: {
   id: string;
@@ -119,8 +121,23 @@ export async function PATCH(
   }
   const d = parsed.data;
 
-  let slug = d.slug;
-  if (d.name && !slug) slug = slugify(d.name);
+  const name = d.name?.trim();
+  if (name && name.toLowerCase() !== star.name.trim().toLowerCase()) {
+    const nameClash = await prisma.pornstar.findFirst({
+      where: {
+        siteId: star.siteId,
+        id: { not: id },
+        name: { equals: name, mode: "insensitive" },
+      },
+      select: { id: true },
+    });
+    if (nameClash) {
+      return NextResponse.json({ error: `A pornstar named "${name}" already exists` }, { status: 409 });
+    }
+  }
+
+  // Slug changes only when the editor sends a new slug. Renaming never rewrites it.
+  const slug = d.slug?.trim() || undefined;
   if (slug && slug !== star.slug) {
     const clash = await prisma.pornstar.findUnique({
       where: { siteId_slug: { siteId: star.siteId, slug } },
@@ -133,7 +150,7 @@ export async function PATCH(
   const updated = await prisma.pornstar.update({
     where: { id },
     data: {
-      name: d.name ?? undefined,
+      name: name || undefined,
       slug: slug ?? undefined,
       bio: d.bio === undefined ? undefined : d.bio,
       disambiguation: d.disambiguation === undefined ? undefined : d.disambiguation,
@@ -158,4 +175,40 @@ export async function PATCH(
   });
 
   return NextResponse.json({ ok: true, pornstar: serializePornstar(updated) });
+}
+
+/** Delete the pornstar profile and unlink it from every video. Videos stay. */
+export async function DELETE(
+  request: Request,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  const auth = await guardAdmin(request);
+  if (auth instanceof NextResponse) return auth;
+  const { id } = await params;
+
+  const star = await prisma.pornstar.findUnique({
+    where: { id },
+    select: {
+      id: true,
+      name: true,
+      slug: true,
+      s3Image: true,
+      _count: { select: { videos: true } },
+    },
+  });
+  if (!star) return NextResponse.json({ error: "Not found" }, { status: 404 });
+
+  if (star.s3Image && isS3Configured()) {
+    await deleteObject(star.s3Image).catch((err) => {
+      logger.warn({ err: String(err), pornstarId: star.id }, "pornstar image delete failed");
+    });
+  }
+  await rm(localPornstarImagePath(star.id), { recursive: true, force: true }).catch(() => {});
+
+  await prisma.pornstar.delete({ where: { id: star.id } });
+  logger.info(
+    { pornstarId: star.id, slug: star.slug, unlinked: star._count.videos },
+    "admin deleted pornstar"
+  );
+  return NextResponse.json({ ok: true, unlinked: star._count.videos });
 }

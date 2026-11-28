@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import type { VideoCardData } from "@/lib/queries";
 import VideoGrid from "@/components/site/VideoGrid";
@@ -58,6 +58,43 @@ export default function AdminVideoBrowser({
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [starQuery, setStarQuery] = useState("");
+  const [starHits, setStarHits] = useState<
+    { id: string; name: string; slug: string; videoCount: number }[]
+  >([]);
+  const [pickedStar, setPickedStar] = useState<{
+    id: string;
+    name: string;
+    slug: string;
+    videoCount: number;
+  } | null>(null);
+
+  useEffect(() => {
+    const q = starQuery.trim();
+    if (q.length < 2 || (pickedStar && q === pickedStar.name)) {
+      setStarHits([]);
+      return;
+    }
+    const handle = setTimeout(() => {
+      const params = new URLSearchParams({ q, limit: "8" });
+      fetch(`/api/admin/pornstars?${params}`)
+        .then((res) => res.json())
+        .then((data) => {
+          setStarHits(
+            (data.pornstars ?? []).map(
+              (star: { id: string; name: string; slug: string; videoCount: number }) => ({
+                id: star.id,
+                name: star.name,
+                slug: star.slug,
+                videoCount: star.videoCount ?? 0,
+              })
+            )
+          );
+        })
+        .catch(() => setStarHits([]));
+    }, 250);
+    return () => clearTimeout(handle);
+  }, [starQuery, pickedStar]);
 
   const pageIds = rows.map((row) => row.id);
   const selectedSet = useMemo(() => new Set(selected), [selected]);
@@ -127,6 +164,42 @@ export default function AdminVideoBrowser({
     }
   }
 
+  async function assignPornstar() {
+    if (!pickedStar || selected.length === 0) return;
+    if (
+      !confirm(
+        `Assign ${pickedStar.name} (/${pickedStar.slug}) to ${selected.length} selected video${selected.length === 1 ? "" : "s"}? Other pornstars on those videos stay.`
+      )
+    ) {
+      return;
+    }
+    setBusy(true);
+    setError(null);
+    setMessage(null);
+    try {
+      const res = await fetch(`/api/admin/pornstars/${pickedStar.id}/videos`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ videoIds: selected }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Assign failed");
+      const linked = data.linked ?? 0;
+      const already = data.alreadyLinked ?? 0;
+      setMessage(
+        `Assigned ${pickedStar.name} to ${linked} video${linked === 1 ? "" : "s"}` +
+          (already ? ` (${already} already linked)` : "") +
+          "."
+      );
+      setSelected([]);
+      router.refresh();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Assign failed");
+    } finally {
+      setBusy(false);
+    }
+  }
+
   const allPageSelected = pageIds.length > 0 && pageIds.every((id) => selectedSet.has(id));
 
   return (
@@ -156,6 +229,53 @@ export default function AdminVideoBrowser({
           className="rounded-lg bg-emerald-700 px-3 py-1.5 text-xs text-white hover:bg-emerald-600 disabled:opacity-50"
         >
           Unsuspend selected
+        </button>
+        <div className="relative">
+          <input
+            value={starQuery}
+            onChange={(e) => {
+              setStarQuery(e.target.value);
+              setPickedStar(null);
+            }}
+            placeholder="Assign pornstar…"
+            className="w-44 rounded-lg border border-zinc-700 bg-zinc-950 px-2 py-1.5 text-xs text-white focus:border-brand-500 focus:outline-none"
+          />
+          {pickedStar && (
+            <p className="mt-1 max-w-44 truncate text-[11px] text-zinc-500">
+              /{pickedStar.slug} · {pickedStar.videoCount} video
+              {pickedStar.videoCount === 1 ? "" : "s"}
+            </p>
+          )}
+          {starHits.length > 0 && (
+            <ul className="absolute z-20 mt-1 max-h-56 w-72 overflow-auto rounded-lg border border-zinc-700 bg-zinc-950 py-1 shadow-xl">
+              {starHits.map((star) => (
+                <li key={star.id}>
+                  <button
+                    type="button"
+                    className="block w-full px-3 py-2 text-left text-xs text-zinc-200 hover:bg-zinc-900"
+                    onClick={() => {
+                      setPickedStar(star);
+                      setStarQuery(star.name);
+                      setStarHits([]);
+                    }}
+                  >
+                    {star.name}
+                    <span className="mt-0.5 block text-[11px] text-zinc-500">
+                      /{star.slug} · {star.videoCount} video{star.videoCount === 1 ? "" : "s"}
+                    </span>
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+        <button
+          type="button"
+          disabled={busy || selected.length === 0 || !pickedStar}
+          onClick={assignPornstar}
+          className="rounded-lg bg-brand-600 px-3 py-1.5 text-xs text-white hover:bg-brand-500 disabled:opacity-50"
+        >
+          Assign to selected
         </button>
         <button
           type="button"

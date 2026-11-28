@@ -38,10 +38,12 @@ function PornstarImageEditor({
   star,
   tpdbConfigured,
   onUpdated,
+  onDeleted,
 }: {
   star: PornstarRow;
   tpdbConfigured: boolean;
   onUpdated: (id: string, patch: Partial<PornstarRow>) => void;
+  onDeleted: (id: string) => void;
 }) {
   const [imageUrl, setImageUrl] = useState(star.imageUrl);
   const [busy, setBusy] = useState(false);
@@ -135,6 +137,27 @@ function PornstarImageEditor({
     } catch (e) {
       setError(e instanceof Error ? e.message : "Fetch failed");
     } finally {
+      setBusy(false);
+    }
+  }
+
+  async function deletePornstar() {
+    if (
+      !confirm(
+        `Delete ${star.name} (/pornstars/${star.slug})? This removes the profile and unlinks it from ${star.videoCount} video${star.videoCount === 1 ? "" : "s"}. The videos stay.`
+      )
+    ) {
+      return;
+    }
+    setBusy(true);
+    setError(null);
+    try {
+      const res = await fetch(`/api/admin/pornstars/${star.id}`, { method: "DELETE" });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Delete failed");
+      onDeleted(star.id);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Delete failed");
       setBusy(false);
     }
   }
@@ -258,6 +281,14 @@ function PornstarImageEditor({
                 Remove
               </button>
             )}
+            <button
+              type="button"
+              disabled={busy}
+              onClick={deletePornstar}
+              className="rounded-lg border border-red-900 px-3 py-1.5 text-xs text-red-400 hover:bg-red-950/40 disabled:opacity-50"
+            >
+              Delete pornstar
+            </button>
           </div>
 
           {!tpdbConfigured && (
@@ -358,6 +389,11 @@ export default function AdminPornstars({
     );
   }
 
+  function handleDeleted(id: string) {
+    setRows((prev) => prev.filter((row) => row.id !== id));
+    setTotal((count) => Math.max(0, count - 1));
+  }
+
   const from = total === 0 ? 0 : (page - 1) * pageSize + 1;
   const to = Math.min(page * pageSize, total);
 
@@ -413,6 +449,7 @@ export default function AdminPornstars({
               star={star}
               tpdbConfigured={tpdbConfigured}
               onUpdated={handleUpdated}
+              onDeleted={handleDeleted}
             />
           ))}
         </div>

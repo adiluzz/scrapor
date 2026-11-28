@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import type { VideoCardData } from "@/lib/queries";
 import { pornstarProfileFields, type PornstarProfileData } from "@/lib/pornstar-profile";
+import AssignPornstarVideos from "@/components/admin/AssignPornstarVideos";
 import VideoGrid from "@/components/site/VideoGrid";
 import TpdbImagePicker, {
   type TpdbPickerImage,
@@ -94,6 +95,7 @@ export default function AdminPornstarDetail({
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [scopeSiteId, setScopeSiteId] = useState("");
   const [suspendBusy, setSuspendBusy] = useState(false);
+  const [deleting, setDeleting] = useState(false);
 
   useEffect(() => {
     setStar(initialPornstar);
@@ -290,6 +292,29 @@ export default function AdminPornstarDetail({
     }
   }
 
+  async function deletePornstar() {
+    const count = star.videoCount;
+    if (
+      !confirm(
+        `Delete ${star.name} (/pornstars/${star.slug})? This removes the profile and unlinks it from ${count} video${count === 1 ? "" : "s"}. The videos stay.`
+      )
+    ) {
+      return;
+    }
+    setDeleting(true);
+    setError(null);
+    try {
+      const res = await fetch(`/api/admin/pornstars/${star.id}`, { method: "DELETE" });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Delete failed");
+      router.push("/admin/pornstars");
+      router.refresh();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Delete failed");
+      setDeleting(false);
+    }
+  }
+
   function toggleSelected(id: string) {
     setSelectedIds((prev) => (prev.includes(id) ? prev.filter((item) => item !== id) : [...prev, id]));
   }
@@ -447,6 +472,14 @@ export default function AdminPornstarDetail({
                 Remove image
               </button>
             )}
+            <button
+              type="button"
+              disabled={busy || deleting}
+              onClick={deletePornstar}
+              className="rounded-lg border border-red-900 px-3 py-1.5 text-xs text-red-400 hover:bg-red-950/40 disabled:opacity-50"
+            >
+              {deleting ? "Deleting…" : "Delete pornstar"}
+            </button>
           </div>
 
           {star.tpdbSyncedAt && (
@@ -584,6 +617,18 @@ export default function AdminPornstarDetail({
           {saving ? "Saving…" : "Save changes"}
         </button>
       </section>
+
+      <AssignPornstarVideos
+        pornstarId={star.id}
+        pornstarName={star.name}
+        pornstarSlug={star.slug}
+        onAssigned={(linked) => {
+          if (linked > 0) {
+            setStar((current) => ({ ...current, videoCount: current.videoCount + linked }));
+            router.refresh();
+          }
+        }}
+      />
 
       <section>
         <div className="mb-4 flex flex-wrap items-center justify-between gap-3">

@@ -12,23 +12,14 @@ export async function GET(request: Request) {
       select: { id: true, name: true, slug: true, icon: true },
     }),
     prisma.pornstar.findMany({
-      orderBy: { name: "asc" },
-      select: { id: true, name: true, slug: true },
+      orderBy: [{ name: "asc" }, { slug: "asc" }],
+      select: { id: true, name: true, slug: true, _count: { select: { videos: true } } },
     }),
     prisma.category.findMany({
       orderBy: { name: "asc" },
       select: { id: true, name: true, slug: true },
     }),
   ]);
-
-  // Deduplicate pornstar names for autocomplete (same person may exist per site).
-  const seenStars = new Set<string>();
-  const uniquePornstars = pornstars.filter((p) => {
-    const key = p.name.toLowerCase();
-    if (seenStars.has(key)) return false;
-    seenStars.add(key);
-    return true;
-  });
 
   const seenTags = new Set<string>();
   const uniqueTags = tags.filter((t) => {
@@ -48,7 +39,12 @@ export async function GET(request: Request) {
 
   return NextResponse.json({
     tags: uniqueTags,
-    pornstars: uniquePornstars,
+    pornstars: pornstars.map((star) => ({
+      id: star.id,
+      name: star.name,
+      slug: star.slug,
+      videoCount: star._count.videos,
+    })),
     categories: uniqueCategories,
   });
 }

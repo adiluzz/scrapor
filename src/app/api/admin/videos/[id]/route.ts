@@ -3,7 +3,14 @@ import { z } from "zod";
 import { prisma } from "@/lib/db";
 import { guardAdmin } from "@/lib/admin-guard";
 import { invalidateCdnVideoCache } from "@/lib/cdn-cache";
-import { linkTags, linkPornstars, linkCategories, resolveAdminVideoSlug } from "@/lib/videos";
+import {
+  AmbiguousPornstarError,
+  linkTags,
+  linkPornstars,
+  linkCategories,
+  replaceVideoPornstars,
+  resolveAdminVideoSlug,
+} from "@/lib/videos";
 import { logger } from "@/lib/logger";
 import { hasStoredVideoSource } from "@/lib/video-source";
 
@@ -20,6 +27,14 @@ const patchSchema = z.object({
   sourceUploadDate: z.string().datetime().nullable().optional(),
   tags: z.array(z.string()).optional(),
   pornstars: z.array(z.string()).optional(),
+  pornstarLinks: z
+    .array(
+      z.object({
+        id: z.string().min(1).optional(),
+        name: z.string().min(1).max(200).optional(),
+      })
+    )
+    .optional(),
   categories: z.array(z.string()).optional(),
 });
 
@@ -64,6 +79,11 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
         icon: t.tag.icon,
       })),
       pornstars: video.pornstars.map((p) => p.pornstar.name),
+      pornstarLinks: video.pornstars.map((p) => ({
+        id: p.pornstar.id,
+        name: p.pornstar.name,
+        slug: p.pornstar.slug,
+      })),
       categories: video.categories.map((c) => c.category.name),
       sites: video.sites.map((vs) => vs.site),
     },
@@ -136,7 +156,17 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     await prisma.videoTag.deleteMany({ where: { videoId: id } });
     await linkTags(video.siteId, id, d.tags);
   }
-  if (d.pornstars) {
+  if (d.pornstarLinks) {
+    try {
+      await replaceVideoPornstars(video.siteId, id, d.pornstarLinks);
+    } catch (err) {
+      if (err instanceof AmbiguousPornstarError) {
+        return NextResponse.json({ error: err.message }, { status: 409 });
+      }
+      const message = err instanceof Error ? err.message : "Could not update pornstars";
+      return NextResponse.json({ error: message }, { status: 400 });
+    }
+  } else if (d.pornstars) {
     await prisma.videoPornstar.deleteMany({ where: { videoId: id } });
     await linkPornstars(video.siteId, id, d.pornstars);
   }
